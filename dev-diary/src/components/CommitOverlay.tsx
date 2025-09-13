@@ -132,7 +132,11 @@ export function CommitOverlay({
                         <div className="flex gap-1">
                           {commit.branches.map((branch) => {
                             const cleanBranch = branch.replace("origin/", "");
-                            const isMainBranch = ["main", "master", "develop"].includes(cleanBranch);
+                            const isMainBranch = [
+                              "main",
+                              "master",
+                              "develop",
+                            ].includes(cleanBranch);
                             return (
                               <span
                                 key={branch}
