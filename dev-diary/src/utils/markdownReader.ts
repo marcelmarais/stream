@@ -423,25 +423,47 @@ export async function readMarkdownFileContent(
  * Reads the content of multiple markdown files by their absolute paths.
  * Returns a Map keyed by file path to content. Files that fail to read
  * are omitted from the resulting Map.
+ * Uses a fast Rust-based implementation for optimal performance.
  */
 export async function readMarkdownFilesContentByPaths(
   filePaths: string[],
 ): Promise<Map<string, string>> {
-  const results = await processBatched(filePaths, async (path) => {
-    try {
-      const content = await readTextFile(path);
-      return { path, content } as const;
-    } catch (error) {
-      console.error(`Error reading content of ${path}:`, error);
-      return null;
-    }
-  });
+  try {
+    // Use the fast Rust-based implementation
+    const rustResults: Record<string, string> = await invoke(
+      "read_markdown_files_content",
+      {
+        filePaths,
+      },
+    );
 
-  const map = new Map<string, string>();
-  for (const result of results) {
-    if (result) {
-      map.set(result.path, result.content);
+    // Convert to Map
+    const map = new Map<string, string>();
+    for (const [path, content] of Object.entries(rustResults)) {
+      map.set(path, content);
     }
+
+    return map;
+  } catch (error) {
+    console.error("Error reading markdown files content:", error);
+
+    // Fallback to the original implementation if Rust command fails
+    const results = await processBatched(filePaths, async (path) => {
+      try {
+        const content = await readTextFile(path);
+        return { path, content } as const;
+      } catch (error) {
+        console.error(`Error reading content of ${path}:`, error);
+        return null;
+      }
+    });
+
+    const map = new Map<string, string>();
+    for (const result of results) {
+      if (result) {
+        map.set(result.path, result.content);
+      }
+    }
+    return map;
   }
-  return map;
 }

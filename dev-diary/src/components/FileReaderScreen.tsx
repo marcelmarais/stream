@@ -14,7 +14,7 @@ interface FileReaderScreenProps {
 }
 
 // Configuration for virtualized list
-const PAGE_SIZE = 20; // Files per page
+const PAGE_SIZE = 10; // Files per page
 const MAX_PAGES_IN_MEMORY = 5; // Maximum pages to keep in memory
 
 export function FileReaderScreen({

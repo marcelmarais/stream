@@ -19,6 +19,27 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
+async fn read_markdown_files_content(file_paths: Vec<String>) -> Result<std::collections::HashMap<String, String>, String> {
+    use std::collections::HashMap;
+    
+    let mut results = HashMap::new();
+    
+    for file_path in file_paths {
+        match std::fs::read_to_string(&file_path) {
+            Ok(content) => {
+                results.insert(file_path, content);
+            }
+            Err(e) => {
+                eprintln!("Error reading file {}: {}", file_path, e);
+                // Continue with other files, don't fail the entire operation
+            }
+        }
+    }
+    
+    Ok(results)
+}
+
+#[tauri::command]
 async fn read_markdown_files_metadata(directory_path: String, max_file_size: Option<u64>) -> Result<Vec<MarkdownFileMetadata>, String> {
     let max_size = max_file_size.unwrap_or(10 * 1024 * 1024); // 10MB default
     let mut files = Vec::new();
@@ -130,7 +151,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, read_markdown_files_metadata])
+        .invoke_handler(tauri::generate_handler![greet, read_markdown_files_metadata, read_markdown_files_content])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
