@@ -31,10 +31,6 @@
       "nursery": {
         "useSortedClasses": "error"
       }
-    },
-    "domains": {
-      "next": "recommended",
-      "react": "recommended"
     }
   },
   "assist": {

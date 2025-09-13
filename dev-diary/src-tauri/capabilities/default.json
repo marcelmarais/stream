@@ -11,6 +11,77 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
-    "core:window:allow-start-resize-dragging"
+    "core:window:allow-start-resize-dragging",
+    "dialog:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/Users/**"
+        },
+        {
+          "path": "/home/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/Users/**"
+        },
+        {
+          "path": "/home/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/Users/**"
+        },
+        {
+          "path": "/home/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-stat",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/Users/**"
+        },
+        {
+          "path": "/home/**"
+        }
+      ]
+    },
+    "fs:allow-exists",
+    "store:default"
   ]
 }

@@ -9,12 +9,14 @@ fn greet(name: &str) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let win_builder =
-                WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                    .title("")
-                    .inner_size(800.0, 600.0);
+            let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                .title("")
+                .inner_size(800.0, 600.0);
 
             // set transparent title bar only when building for macOS
             #[cfg(target_os = "macos")]
@@ -25,8 +27,8 @@ pub fn run() {
             // set black background only when building for macOS
             #[cfg(target_os = "macos")]
             {
-                use objc2_app_kit::NSColor;
                 use objc2::runtime::AnyObject;
+                use objc2_app_kit::NSColor;
 
                 let ns_window = window.ns_window().unwrap();
                 unsafe {
