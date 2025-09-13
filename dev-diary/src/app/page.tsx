@@ -1,40 +1,36 @@
 "use client";
 
-import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
-import MarkdownReader from "../components/MarkdownReader";
+import FileReaderScreen from "../components/FileReaderScreen";
+import FolderSelectionScreen from "../components/FolderSelectionScreen";
 
 export default function Home() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [currentScreen, setCurrentScreen] = useState<
+    "folder-selection" | "file-reader"
+  >("folder-selection");
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string>("");
 
-  async function greet() {
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  const handleFolderConfirmed = (folderPath: string) => {
+    setSelectedFolderPath(folderPath);
+    setCurrentScreen("file-reader");
+  };
+
+  const handleBackToFolderSelection = () => {
+    setCurrentScreen("folder-selection");
+  };
 
   return (
-    <div className="grid min-h-screen grid-rows-[20px_1fr_20px] items-center justify-items-center gap-16 bg-black p-8 pb-20 font-sans text-white sm:p-20">
-      <main className="row-start-2 flex flex-col items-center gap-[32px] sm:items-start">
-        <form
-          className="row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            greet();
-          }}
-        >
-          <input
-            id="greet-input"
-            onChange={(e) => setName(e.currentTarget.value)}
-            placeholder="Enter a name..."
-          />
-          <button type="submit">Greet</button>
-        </form>
-        <p>{greetMsg}</p>
+    <div className="min-h-screen bg-gray-100">
+      {currentScreen === "folder-selection" && (
+        <FolderSelectionScreen onFolderConfirmed={handleFolderConfirmed} />
+      )}
 
-        <div className="w-full">
-          <MarkdownReader />
-        </div>
-      </main>
+      {currentScreen === "file-reader" && (
+        <FileReaderScreen
+          folderPath={selectedFolderPath}
+          onBack={handleBackToFolderSelection}
+        />
+      )}
     </div>
   );
 }
