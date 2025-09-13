@@ -1,34 +1,24 @@
+import { invoke } from "@tauri-apps/api/core";
 import { readDir, readTextFile, stat } from "@tauri-apps/plugin-fs";
 
-/**
- * Processes an array of items in batches with limited concurrency
- */
 async function processBatched<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
 ): Promise<R[]> {
   const results: R[] = [];
-  const maxConcurrency = 5;
-  const batchSize = 25;
+  const maxConcurrency = 128;
+  const batchSize = 32;
 
   // Process items in batches
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
 
     // Process batch with concurrency limit
-    const batchResults: R[] = [];
     for (let j = 0; j < batch.length; j += maxConcurrency) {
       const concurrentBatch = batch.slice(j, j + maxConcurrency);
       const promises = concurrentBatch.map(processor);
       const concurrentResults = await Promise.all(promises);
-      batchResults.push(...concurrentResults);
-    }
-
-    results.push(...batchResults);
-
-    // Small delay between batches to prevent system overload
-    if (i + batchSize < items.length) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      results.push(...concurrentResults);
     }
   }
 
@@ -70,6 +60,17 @@ export interface MarkdownFileMetadata {
 }
 
 /**
+ * Rust-side metadata structure (matches Rust struct)
+ */
+interface RustMarkdownFileMetadata {
+  file_path: string;
+  file_name: string;
+  created_at: number; // Unix timestamp in milliseconds
+  modified_at: number; // Unix timestamp in milliseconds
+  size: number;
+}
+
+/**
  * Date range interface for filtering files
  */
 export interface DateRange {
@@ -90,6 +91,7 @@ export interface ReadMarkdownOptions {
 /**
  * Reads metadata for ALL *.md files in a directory (including subdirectories).
  * This function only reads file metadata, not content, and does not filter by date.
+ * Uses a fast Rust-based implementation for optimal performance.
  *
  * @param directoryPath - The path to the directory to search
  * @param options - Additional options for reading files
@@ -103,101 +105,26 @@ export async function readAllMarkdownFilesMetadata(
     maxFileSize = 10 * 1024 * 1024, // 10MB default
   } = options;
 
-  // Helper function to recursively read directories for metadata only
-  async function readDirRecursiveMetadata(
-    dirPath: string,
-  ): Promise<MarkdownFileMetadata[]> {
-    const files: MarkdownFileMetadata[] = [];
+  try {
+    // Use the fast Rust-based implementation
+    const rustMetadata: RustMarkdownFileMetadata[] = await invoke(
+      "read_markdown_files_metadata",
+      {
+        directoryPath,
+        maxFileSize,
+      },
+    );
 
-    try {
-      const entries = await readDir(dirPath);
-
-      // Separate markdown files and directories for parallel processing
-      const markdownEntries = entries.filter(
-        (entry) => entry.isFile && entry.name?.toLowerCase().endsWith(".md"),
-      );
-
-      const directoryEntries = entries.filter((entry) => entry.isDirectory);
-
-      // Get metadata in batches with concurrency limits
-      const metadataResults = await processBatched(
-        markdownEntries,
-        async (entry) => {
-          const fullPath = dirPath.endsWith("/")
-            ? `${dirPath}${entry.name}`
-            : `${dirPath}/${entry.name}`;
-
-          try {
-            const fileMetadata = await stat(fullPath);
-            return {
-              entry,
-              fullPath,
-              metadata: fileMetadata,
-            };
-          } catch (error) {
-            console.error(`Error getting metadata for ${fullPath}:`, error);
-            return null;
-          }
-        },
-      );
-
-      const validMetadata = metadataResults.filter((result) => result !== null);
-
-      // Filter by file size only (no date filtering)
-      const filteredFiles = validMetadata
-        .filter(({ metadata }) => metadata.size <= maxFileSize)
-        .map(({ entry, fullPath, metadata }) => {
-          const createdAt = new Date(
-            metadata.birthtime || metadata.mtime || Date.now(),
-          );
-          const modifiedAt = metadata.mtime
-            ? new Date(metadata.mtime)
-            : createdAt;
-
-          return {
-            filePath: fullPath,
-            fileName: entry.name,
-            createdAt,
-            modifiedAt,
-            size: metadata.size,
-          };
-        });
-
-      files.push(...filteredFiles);
-
-      // Process all subdirectories in parallel
-      const directoryPromises = directoryEntries.map(async (entry) => {
-        const fullPath = dirPath.endsWith("/")
-          ? `${dirPath}${entry.name}`
-          : `${dirPath}/${entry.name}`;
-
-        try {
-          return await readDirRecursiveMetadata(fullPath);
-        } catch (error) {
-          console.error(`Error reading subdirectory ${fullPath}:`, error);
-          return [];
-        }
-      });
-
-      // Wait for all directory processing to complete
-      const directoryResults = await Promise.all(directoryPromises);
-      for (const subFiles of directoryResults) {
-        files.push(...subFiles);
-      }
-    } catch (error) {
-      console.error(`Error reading directory ${dirPath}:`, error);
-    }
+    // Convert Rust metadata to TypeScript format
+    const files: MarkdownFileMetadata[] = rustMetadata.map((rustFile) => ({
+      filePath: rustFile.file_path,
+      fileName: rustFile.file_name,
+      createdAt: new Date(rustFile.created_at),
+      modifiedAt: new Date(rustFile.modified_at),
+      size: rustFile.size,
+    }));
 
     return files;
-  }
-
-  try {
-    const allFiles = await readDirRecursiveMetadata(directoryPath);
-
-    // Sort by creation date (newest first)
-    allFiles.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-    return allFiles;
   } catch (error) {
     console.error(`Error reading directory ${directoryPath}:`, error);
     throw new Error(
