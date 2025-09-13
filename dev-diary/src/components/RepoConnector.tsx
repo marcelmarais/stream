@@ -1,5 +1,6 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
 import { useCallback, useEffect, useState } from "react";
@@ -9,6 +10,12 @@ const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
 export interface RepoMapping {
   markdownDirectory: string;
   codeDirectories: string[];
+}
+
+export interface FetchResult {
+  repo_path: string;
+  success: boolean;
+  message: string;
 }
 
 interface RepoConnectorProps {
@@ -24,6 +31,9 @@ export function RepoConnector({
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingRepo, setIsAddingRepo] = useState(false);
   const [showConnector, setShowConnector] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [fetchResults, setFetchResults] = useState<FetchResult[]>([]);
+  const [showFetchResults, setShowFetchResults] = useState(false);
 
   // Load existing repo mappings for this markdown directory
   useEffect(() => {
@@ -111,6 +121,41 @@ export function RepoConnector({
     await saveRepoMappings([]);
   };
 
+  const handleFetchRepos = async () => {
+    if (connectedRepos.length === 0) return;
+
+    setIsFetching(true);
+    setFetchResults([]);
+    setShowFetchResults(true);
+
+    try {
+      const results: FetchResult[] = await invoke("fetch_repos", {
+        repoPaths: connectedRepos,
+      });
+
+      setFetchResults(results);
+
+      // Auto-hide results after 10 seconds if all successful
+      const allSuccessful = results.every((r) => r.success);
+      if (allSuccessful) {
+        setTimeout(() => {
+          setShowFetchResults(false);
+        }, 10000);
+      }
+    } catch (error) {
+      console.error("Error fetching repositories:", error);
+      setFetchResults([
+        {
+          repo_path: "Error",
+          success: false,
+          message: `Failed to fetch repositories: ${error}`,
+        },
+      ]);
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className={`rounded-lg bg-white p-4 shadow-sm ${className}`}>
@@ -193,15 +238,71 @@ export function RepoConnector({
             </button>
 
             {connectedRepos.length > 0 && (
-              <button
-                type="button"
-                onClick={handleClearAllRepos}
-                className="rounded-md bg-red-500 px-3 py-2 text-sm text-white transition-colors hover:bg-red-600"
-              >
-                Clear All
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleFetchRepos}
+                  disabled={isFetching}
+                  className="flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isFetching ? (
+                    <>
+                      <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent"></div>
+                      Fetching...
+                    </>
+                  ) : (
+                    <>
+                      <span>🔄</span>
+                      Git Fetch All
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearAllRepos}
+                  className="rounded-md bg-red-500 px-3 py-2 text-sm text-white transition-colors hover:bg-red-600"
+                >
+                  Clear All
+                </button>
+              </>
             )}
           </div>
+
+          {/* Fetch Results */}
+          {showFetchResults && fetchResults.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="font-medium text-gray-700 text-sm">
+                  Fetch Results:
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFetchResults(false)}
+                  className="text-gray-500 text-xs hover:text-gray-700"
+                >
+                  Hide
+                </button>
+              </div>
+              <div className="max-h-32 space-y-1 overflow-y-auto">
+                {fetchResults.map((result) => (
+                  <div
+                    key={result.repo_path}
+                    className={`rounded-md border p-2 text-xs ${
+                      result.success
+                        ? "border-green-200 bg-green-50 text-green-800"
+                        : "border-red-200 bg-red-50 text-red-800"
+                    }`}
+                  >
+                    <div className="font-medium">
+                      {result.repo_path.split("/").pop()}
+                    </div>
+                    <div className="mt-1">{result.message}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Connected Repositories List */}
           {connectedRepos.length > 0 && (

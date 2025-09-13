@@ -4,12 +4,20 @@ import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 import {
+  type CommitsByDate,
+  createDateRange,
+  getCommitsForDate,
+  getGitCommitsForRepos,
+  groupCommitsByDate,
+} from "../utils/gitReader";
+import {
   type MarkdownFileMetadata,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
   writeMarkdownFileContent,
 } from "../utils/markdownReader";
-import RepoConnector from "./RepoConnector";
+import CommitOverlay from "./CommitOverlay";
+import RepoConnector, { getConnectedRepos } from "./RepoConnector";
 
 interface FileReaderScreenProps {
   folderPath: string;
@@ -37,6 +45,8 @@ export function FileReaderScreen({
   const [editingContent, setEditingContent] = useState<string>("");
   const [_savingFiles, setSavingFiles] = useState<Set<string>>(new Set());
   const [saveErrors, setSaveErrors] = useState<Map<string, string>>(new Map());
+  const [commitsByDate, setCommitsByDate] = useState<CommitsByDate>({});
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   // Track which pages are currently loaded
   const loadedPagesRef = useRef<Set<number>>(new Set());
@@ -191,6 +201,78 @@ export function FileReaderScreen({
     [getFilesForPage],
   );
 
+  // Load git commits for currently visible files only
+  const loadCommitsForVisibleFiles = useCallback(
+    async (visibleFiles: MarkdownFileMetadata[]) => {
+      if (visibleFiles.length === 0) return;
+
+      try {
+        const connectedRepos = await getConnectedRepos(folderPath);
+        if (connectedRepos.length === 0) return;
+
+        // Get unique dates from visible files
+        const visibleDates = Array.from(
+          new Set(
+            visibleFiles.map(
+              (file) => file.createdAt.toISOString().split("T")[0],
+            ),
+          ),
+        );
+
+        // Only load commits for dates we don't already have
+        const datesToLoad = visibleDates.filter(
+          (dateStr) => !commitsByDate[dateStr],
+        );
+
+        if (datesToLoad.length === 0) return;
+
+        console.log(
+          `Loading commits for ${datesToLoad.length} new dates:`,
+          datesToLoad,
+        );
+
+        // Create date ranges for each date we need
+        const dateRanges = datesToLoad.map((dateStr) => {
+          const date = new Date(dateStr);
+          const startOfDay = new Date(date);
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(date);
+          endOfDay.setHours(23, 59, 59, 999);
+          return createDateRange.custom(startOfDay, endOfDay);
+        });
+
+        // Load commits for each date range
+        const allNewCommits: CommitsByDate = {};
+
+        for (const dateRange of dateRanges) {
+          try {
+            const repoCommits = await getGitCommitsForRepos(
+              connectedRepos,
+              dateRange,
+            );
+            const groupedCommits = groupCommitsByDate(repoCommits);
+
+            // Merge new commits with existing ones
+            Object.assign(allNewCommits, groupedCommits);
+          } catch (error) {
+            console.error(`Error loading commits for date range:`, error);
+          }
+        }
+
+        // Update state with new commits (merge with existing)
+        setCommitsByDate((prev) => ({ ...prev, ...allNewCommits }));
+
+        console.log(
+          `Loaded commits for ${Object.keys(allNewCommits).length} new days`,
+        );
+      } catch (error) {
+        console.error("Error loading commits for visible files:", error);
+        setCommitError(`Failed to load git commits: ${error}`);
+      }
+    },
+    [folderPath, commitsByDate],
+  );
+
   // Load metadata when component mounts
   useEffect(() => {
     const loadMetadata = async () => {
@@ -233,6 +315,15 @@ export function FileReaderScreen({
     loadMetadata();
   }, [folderPath]);
 
+  // Load git commits for initially visible files when metadata is loaded
+  useEffect(() => {
+    if (!isLoadingMetadata && allFilesMetadata.length > 0) {
+      // Load commits for the first page of files
+      const firstPageFiles = allFilesMetadata.slice(0, PAGE_SIZE);
+      loadCommitsForVisibleFiles(firstPageFiles);
+    }
+  }, [isLoadingMetadata, allFilesMetadata, loadCommitsForVisibleFiles]);
+
   // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
     (range: { startIndex: number; endIndex: number }) => {
@@ -252,11 +343,27 @@ export function FileReaderScreen({
         }
       });
 
+      // Load git commits for currently visible files
+      const visibleFiles = allFilesMetadata.slice(
+        range.startIndex,
+        range.endIndex + 1,
+      );
+      if (visibleFiles.length > 0) {
+        loadCommitsForVisibleFiles(visibleFiles);
+      }
+
       // Evict old pages if needed
       const currentPage = Math.floor((startPage + endPage) / 2);
       evictOldPages(currentPage);
     },
-    [getPageForIndex, loadPageContent, loadingPages, evictOldPages],
+    [
+      getPageForIndex,
+      loadPageContent,
+      loadingPages,
+      evictOldPages,
+      allFilesMetadata,
+      loadCommitsForVisibleFiles,
+    ],
   );
 
   // Render individual file item
@@ -270,6 +377,9 @@ export function FileReaderScreen({
       const isEditing = editingFile === file.filePath;
       const saveError = saveErrors.get(file.filePath);
 
+      // Get commits for this file's creation date
+      const fileCommits = getCommitsForDate(commitsByDate, file.createdAt);
+
       return (
         <div className="mx-6 mb-6 rounded-lg bg-white p-6 shadow-md">
           <div className="mb-4 border-gray-200 border-b pb-4">
@@ -278,20 +388,23 @@ export function FileReaderScreen({
                 {file.fileName}
               </h4>
             </div>
-            <div className="mt-2 flex flex-wrap gap-4 text-gray-500 text-sm">
-              <span>
-                Created: {file.createdAt.toLocaleDateString()} at{" "}
-                {file.createdAt.toLocaleTimeString()}
-              </span>
-              <span>Size: {(file.size / 1024).toFixed(1)}KB</span>
-            </div>
-            <div className="mt-1 text-gray-400 text-xs">{file.filePath}</div>
             {saveError && (
               <div className="mt-2 rounded-md border border-red-300 bg-red-100 p-2 text-red-700 text-sm">
                 {saveError}
               </div>
             )}
           </div>
+
+          {/* Git Commits Overlay */}
+          {fileCommits.length > 0 && (
+            <div className="mt-4">
+              <CommitOverlay
+                commits={fileCommits}
+                date={file.createdAt}
+                className="w-full"
+              />
+            </div>
+          )}
 
           <div className="h-auto rounded-md border bg-gray-50 p-4">
             {isLoading ? (
@@ -341,6 +454,7 @@ export function FileReaderScreen({
       editingFile,
       editingContent,
       saveErrors,
+      commitsByDate,
       handleEditFile,
       handleContentChange,
     ],
@@ -380,8 +494,22 @@ export function FileReaderScreen({
               </div>
             </div>
           ) : (
-            <div className="mb-4 text-gray-600 text-sm">
-              Found {allFilesMetadata.length} markdown files
+            <div className="mb-4 space-y-2">
+              <div className="text-gray-600 text-sm">
+                Found {allFilesMetadata.length} markdown files
+              </div>
+
+              {/* Git Commits Status */}
+              {Object.keys(commitsByDate).length > 0 && (
+                <div className="text-blue-600 text-sm">
+                  🔄 Found commits for {Object.keys(commitsByDate).length} days
+                  (loaded on-demand)
+                </div>
+              )}
+
+              {commitError && (
+                <div className="text-orange-600 text-sm">⚠️ {commitError}</div>
+              )}
             </div>
           )}
 
