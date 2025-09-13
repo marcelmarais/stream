@@ -1,11 +1,13 @@
 "use client";
 
+import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 import {
   type MarkdownFileMetadata,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
+  writeMarkdownFileContent,
 } from "../utils/markdownReader";
 
 interface FileReaderScreenProps {
@@ -30,9 +32,74 @@ export function FileReaderScreen({
   );
   const [loadingPages, setLoadingPages] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [editingFile, setEditingFile] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState<string>("");
+  const [savingFiles, setSavingFiles] = useState<Set<string>>(new Set());
+  const [saveErrors, setSaveErrors] = useState<Map<string, string>>(new Map());
 
   // Track which pages are currently loaded
   const loadedPagesRef = useRef<Set<number>>(new Set());
+
+  // Ref for the textarea to handle auto-sizing
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Create debounced save function
+  const debouncedSave = useCallback(
+    debounce(async (filePath: string, content: string) => {
+      setSavingFiles((prev) => new Set(prev).add(filePath));
+      setSaveErrors((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(filePath);
+        return newMap;
+      });
+
+      try {
+        await writeMarkdownFileContent(filePath, content);
+        // Update the loaded content to reflect the saved changes
+        setLoadedContent((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, content);
+          return newMap;
+        });
+      } catch (error) {
+        console.error(`Error saving file ${filePath}:`, error);
+        setSaveErrors((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, `Failed to save: ${error}`);
+          return newMap;
+        });
+      } finally {
+        setSavingFiles((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(filePath);
+          return newSet;
+        });
+      }
+    }, 500),
+    [],
+  );
+
+  const handleEditFile = useCallback(
+    (filePath: string, currentContent: string) => {
+      setEditingFile(filePath);
+      setEditingContent(currentContent);
+    },
+    [],
+  );
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingFile(null);
+    setEditingContent("");
+  }, []);
+
+  // Handle content changes during editing
+  const handleContentChange = useCallback(
+    (filePath: string, newContent: string) => {
+      setEditingContent(newContent);
+      debouncedSave(filePath, newContent);
+    },
+    [debouncedSave],
+  );
 
   // Calculate which page a file index belongs to
   const getPageForIndex = useCallback(
@@ -199,13 +266,17 @@ export function FileReaderScreen({
 
       const content = loadedContent.get(file.filePath);
       const isLoading = !content && loadingPages.has(getPageForIndex(index));
+      const isEditing = editingFile === file.filePath;
+      const saveError = saveErrors.get(file.filePath);
 
       return (
         <div className="mx-6 mb-6 rounded-lg bg-white p-6 shadow-md">
           <div className="mb-4 border-gray-200 border-b pb-4">
-            <h4 className="font-medium text-gray-800 text-lg">
-              {file.fileName}
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-gray-800 text-lg">
+                {file.fileName}
+              </h4>
+            </div>
             <div className="mt-2 flex flex-wrap gap-4 text-gray-500 text-sm">
               <span>
                 Created: {file.createdAt.toLocaleDateString()} at{" "}
@@ -214,9 +285,14 @@ export function FileReaderScreen({
               <span>Size: {(file.size / 1024).toFixed(1)}KB</span>
             </div>
             <div className="mt-1 text-gray-400 text-xs">{file.filePath}</div>
+            {saveError && (
+              <div className="mt-2 rounded-md border border-red-300 bg-red-100 p-2 text-red-700 text-sm">
+                {saveError}
+              </div>
+            )}
           </div>
 
-          <div className="max-h-96 overflow-y-auto rounded-md border bg-gray-50 p-4">
+          <div className="h-auto rounded-md border bg-gray-50 p-4">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="text-center">
@@ -227,11 +303,26 @@ export function FileReaderScreen({
                 </div>
               </div>
             ) : content ? (
-              <pre className="whitespace-pre-wrap font-mono text-gray-800 text-sm">
-                {content.length > 2000
-                  ? `${content.substring(0, 2000)}...\n\n[Content truncated - ${content.length} total characters]`
-                  : content}
-              </pre>
+              isEditing ? (
+                <textarea
+                  value={editingContent}
+                  onChange={(e) =>
+                    handleContentChange(file.filePath, e.target.value)
+                  }
+                  className="h-80 w-full resize-none text-left text-gray-800 text-sm focus:outline-none"
+                  placeholder="Enter your markdown content..."
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleEditFile(file.filePath, content)}
+                  className="-m-2 cursor-pointer rounded p-2 transition-colors hover:bg-gray-100"
+                >
+                  <div className="w-full whitespace-pre-wrap text-left text-gray-800 text-sm">
+                    {content}
+                  </div>
+                </button>
+              )
             ) : (
               <div className="text-gray-500 text-sm italic">
                 Content not available
@@ -241,7 +332,17 @@ export function FileReaderScreen({
         </div>
       );
     },
-    [allFilesMetadata, loadedContent, loadingPages, getPageForIndex],
+    [
+      allFilesMetadata,
+      loadedContent,
+      loadingPages,
+      getPageForIndex,
+      editingFile,
+      editingContent,
+      saveErrors,
+      handleEditFile,
+      handleContentChange,
+    ],
   );
 
   return (

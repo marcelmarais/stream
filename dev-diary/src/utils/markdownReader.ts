@@ -467,3 +467,24 @@ export async function readMarkdownFilesContentByPaths(
     return map;
   }
 }
+
+/**
+ * Writes content to a markdown file at the specified path.
+ *
+ * @param filePath - The absolute path to the file to write
+ * @param content - The content to write to the file
+ * @returns Promise<void>
+ */
+export async function writeMarkdownFileContent(
+  filePath: string,
+  content: string,
+): Promise<void> {
+  try {
+    // Use Tauri's writeTextFile function to persist the content
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    await writeTextFile(filePath, content);
+  } catch (error) {
+    console.error(`Error writing file ${filePath}:`, error);
+    throw new Error(`Failed to write markdown file: ${error}`);
+  }
+}

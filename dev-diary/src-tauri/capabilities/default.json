@@ -81,6 +81,23 @@
         }
       ]
     },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/Users/**"
+        },
+        {
+          "path": "/home/**"
+        }
+      ]
+    },
     "fs:allow-exists",
     "store:default"
   ]
