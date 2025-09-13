@@ -9,6 +9,7 @@ import {
   readMarkdownFilesContentByPaths,
   writeMarkdownFileContent,
 } from "../utils/markdownReader";
+import RepoConnector from "./RepoConnector";
 
 interface FileReaderScreenProps {
   folderPath: string;
@@ -34,14 +35,14 @@ export function FileReaderScreen({
   const [error, setError] = useState<string | null>(null);
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<string>("");
-  const [savingFiles, setSavingFiles] = useState<Set<string>>(new Set());
+  const [_savingFiles, setSavingFiles] = useState<Set<string>>(new Set());
   const [saveErrors, setSaveErrors] = useState<Map<string, string>>(new Map());
 
   // Track which pages are currently loaded
   const loadedPagesRef = useRef<Set<number>>(new Set());
 
   // Ref for the textarea to handle auto-sizing
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const _textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Create debounced save function
   const debouncedSave = useCallback(
@@ -87,7 +88,7 @@ export function FileReaderScreen({
     [],
   );
 
-  const handleCancelEdit = useCallback(() => {
+  const _handleCancelEdit = useCallback(() => {
     setEditingFile(null);
     setEditingContent("");
   }, []);
@@ -390,6 +391,11 @@ export function FileReaderScreen({
               {error}
             </div>
           )}
+        </div>
+
+        {/* Repository Connector */}
+        <div className="mt-4">
+          <RepoConnector markdownDirectory={folderPath} className="w-full" />
         </div>
       </div>
 
