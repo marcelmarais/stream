@@ -1,14 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Virtuoso } from "react-virtuoso";
 import {
-  createDateRange,
-  type DateRange,
-  filterMarkdownFilesByDateRange,
-  type MarkdownFile,
   type MarkdownFileMetadata,
   readAllMarkdownFilesMetadata,
-  readMarkdownFilesContent,
+  readMarkdownFilesContentByPaths,
 } from "../utils/markdownReader";
 
 interface FileReaderScreenProps {
@@ -16,65 +13,123 @@ interface FileReaderScreenProps {
   onBack: () => void;
 }
 
+// Configuration for virtualized list
+const PAGE_SIZE = 20; // Files per page
+const MAX_PAGES_IN_MEMORY = 5; // Maximum pages to keep in memory
+
 export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
-  const startDateId = useId();
-  const endDateId = useId();
-
-  const [dateRange, setDateRange] = useState<DateRange>(
-    createDateRange.lastDays(7),
-  );
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [allFilesMetadata, setAllFilesMetadata] = useState<
     MarkdownFileMetadata[]
   >([]);
-  const [markdownFiles, setMarkdownFiles] = useState<MarkdownFile[]>([]);
+  const [loadedContent, setLoadedContent] = useState<Map<string, string>>(
+    new Map(),
+  );
+  const [loadingPages, setLoadingPages] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  const handleDateRangeFilterAndRead = useCallback(
-    async (metadata: MarkdownFileMetadata[], newDateRange: DateRange) => {
-      setIsLoadingContent(true);
-      setError(null);
-      setMarkdownFiles([]);
+  // Track which pages are currently loaded
+  const loadedPagesRef = useRef<Set<number>>(new Set());
 
-      try {
-        // Filter metadata by date range
-        const filteredMetadata = filterMarkdownFilesByDateRange(
-          metadata,
-          newDateRange,
-        );
-
-        if (filteredMetadata.length === 0) {
-          setError("No markdown files found in the selected date range");
-          setIsLoadingContent(false);
-          return;
-        }
-
-        // Read content for filtered files
-        const filesWithContent =
-          await readMarkdownFilesContent(filteredMetadata);
-        setMarkdownFiles(filesWithContent);
-
-        if (filesWithContent.length === 0) {
-          setError("Failed to read content from any files in the date range");
-        }
-      } catch (err) {
-        setError(`Error reading file content: ${err}`);
-      } finally {
-        setIsLoadingContent(false);
-      }
-    },
+  // Calculate which page a file index belongs to
+  const getPageForIndex = useCallback(
+    (index: number) => Math.floor(index / PAGE_SIZE),
     [],
   );
 
-  // Read metadata when component mounts
+  // Get files for a specific page
+  const getFilesForPage = useCallback(
+    (page: number) => {
+      const start = page * PAGE_SIZE;
+      const end = start + PAGE_SIZE;
+      return allFilesMetadata.slice(start, end);
+    },
+    [allFilesMetadata],
+  );
+
+  // Load content for a specific page
+  const loadPageContent = useCallback(
+    async (page: number) => {
+      if (loadingPages.has(page) || loadedPagesRef.current.has(page)) {
+        return;
+      }
+
+      setLoadingPages((prev) => new Set(prev).add(page));
+
+      try {
+        const pageFiles = getFilesForPage(page);
+        const filePaths = pageFiles.map((f) => f.filePath);
+
+        if (filePaths.length === 0) return;
+
+        const contentMap = await readMarkdownFilesContentByPaths(filePaths);
+
+        setLoadedContent((prev) => {
+          const newMap = new Map(prev);
+          contentMap.forEach((content, path) => {
+            newMap.set(path, content);
+          });
+          return newMap;
+        });
+
+        loadedPagesRef.current.add(page);
+      } catch (err) {
+        console.error(`Error loading content for page ${page}:`, err);
+      } finally {
+        setLoadingPages((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(page);
+          return newSet;
+        });
+      }
+    },
+    [loadingPages, getFilesForPage],
+  );
+
+  // Evict old pages when we have too many loaded
+  const evictOldPages = useCallback(
+    (currentVisiblePage: number) => {
+      const loadedPages = Array.from(loadedPagesRef.current);
+
+      if (loadedPages.length <= MAX_PAGES_IN_MEMORY) return;
+
+      // Sort by distance from current page, keep closest pages
+      const sortedPages = loadedPages.sort(
+        (a, b) =>
+          Math.abs(a - currentVisiblePage) - Math.abs(b - currentVisiblePage),
+      );
+
+      const pagesToEvict = sortedPages.slice(MAX_PAGES_IN_MEMORY);
+
+      if (pagesToEvict.length > 0) {
+        setLoadedContent((prev) => {
+          const newMap = new Map(prev);
+
+          pagesToEvict.forEach((page) => {
+            const pageFiles = getFilesForPage(page);
+            pageFiles.forEach((file) => {
+              newMap.delete(file.filePath);
+            });
+            loadedPagesRef.current.delete(page);
+          });
+
+          return newMap;
+        });
+      }
+    },
+    [getFilesForPage],
+  );
+
+  // Load metadata when component mounts
   useEffect(() => {
-    const readAllMetadata = async () => {
+    const loadMetadata = async () => {
       setIsLoadingMetadata(true);
       setError(null);
+      setLoadedContent(new Map());
+      loadedPagesRef.current.clear();
 
       try {
         const metadata = await readAllMarkdownFilesMetadata(folderPath, {
@@ -82,6 +137,24 @@ export function FileReaderScreen({
         });
 
         setAllFilesMetadata(metadata);
+
+        // Load first page immediately
+        if (metadata.length > 0) {
+          // Load first page content directly to avoid dependency cycle
+          const firstPageFiles = metadata.slice(0, PAGE_SIZE);
+          const filePaths = firstPageFiles.map((f) => f.filePath);
+
+          if (filePaths.length > 0) {
+            try {
+              const contentMap =
+                await readMarkdownFilesContentByPaths(filePaths);
+              setLoadedContent(contentMap);
+              loadedPagesRef.current.add(0);
+            } catch (err) {
+              console.error("Error loading first page content:", err);
+            }
+          }
+        }
       } catch (err) {
         setError(`Error reading folder metadata: ${err}`);
       } finally {
@@ -89,65 +162,94 @@ export function FileReaderScreen({
       }
     };
 
-    readAllMetadata();
+    loadMetadata();
   }, [folderPath]);
 
-  const handleDateRangeChange = async (preset: string) => {
-    let newDateRange: DateRange;
-    switch (preset) {
-      case "last7days":
-        newDateRange = createDateRange.lastDays(7);
-        break;
-      case "last30days":
-        newDateRange = createDateRange.lastDays(30);
-        break;
-      case "currentMonth":
-        newDateRange = createDateRange.currentMonth();
-        break;
-      default:
-        return;
-    }
+  // Handle range changes for virtualized list
+  const handleRangeChanged = useCallback(
+    (range: { startIndex: number; endIndex: number }) => {
+      const startPage = getPageForIndex(range.startIndex);
+      const endPage = getPageForIndex(range.endIndex);
 
-    setDateRange(newDateRange);
+      // Load pages around the visible range
+      const pagesToLoad = [];
+      for (let page = Math.max(0, startPage - 1); page <= endPage + 1; page++) {
+        pagesToLoad.push(page);
+      }
 
-    // If we have metadata, apply the new date range filter and read content
-    if (allFilesMetadata.length > 0) {
-      await handleDateRangeFilterAndRead(allFilesMetadata, newDateRange);
-    }
-  };
+      // Load pages that aren't already loaded or loading
+      pagesToLoad.forEach((page) => {
+        if (!loadedPagesRef.current.has(page) && !loadingPages.has(page)) {
+          loadPageContent(page);
+        }
+      });
 
-  const handleCustomDateChange = async (
-    field: "start" | "end",
-    value: string,
-  ) => {
-    if (!value) return;
+      // Evict old pages if needed
+      const currentPage = Math.floor((startPage + endPage) / 2);
+      evictOldPages(currentPage);
+    },
+    [getPageForIndex, loadPageContent, loadingPages, evictOldPages],
+  );
 
-    const newDate = new Date(value);
-    let newDateRange: DateRange;
+  // Render individual file item
+  const renderFileItem = useCallback(
+    (index: number) => {
+      const file = allFilesMetadata[index];
+      if (!file) return null;
 
-    if (field === "start") {
-      newDateRange = createDateRange.custom(newDate, dateRange.endDate);
-    } else {
-      newDateRange = createDateRange.custom(dateRange.startDate, newDate);
-    }
+      const content = loadedContent.get(file.filePath);
+      const isLoading = !content && loadingPages.has(getPageForIndex(index));
 
-    setDateRange(newDateRange);
+      return (
+        <div className="mx-6 mb-6 rounded-lg bg-white p-6 shadow-md">
+          <div className="mb-4 border-gray-200 border-b pb-4">
+            <h4 className="font-medium text-gray-800 text-lg">
+              {file.fileName}
+            </h4>
+            <div className="mt-2 flex flex-wrap gap-4 text-gray-500 text-sm">
+              <span>
+                Created: {file.createdAt.toLocaleDateString()} at{" "}
+                {file.createdAt.toLocaleTimeString()}
+              </span>
+              <span>Size: {(file.size / 1024).toFixed(1)}KB</span>
+            </div>
+            <div className="mt-1 text-gray-400 text-xs">{file.filePath}</div>
+          </div>
 
-    // If we have metadata, apply the new date range filter and read content
-    if (allFilesMetadata.length > 0) {
-      await handleDateRangeFilterAndRead(allFilesMetadata, newDateRange);
-    }
-  };
+          <div className="max-h-96 overflow-y-auto rounded-md border bg-gray-50 p-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></div>
+                  <div className="text-gray-600 text-sm">
+                    Loading content...
+                  </div>
+                </div>
+              </div>
+            ) : content ? (
+              <pre className="whitespace-pre-wrap font-mono text-gray-800 text-sm">
+                {content.length > 2000
+                  ? `${content.substring(0, 2000)}...\n\n[Content truncated - ${content.length} total characters]`
+                  : content}
+              </pre>
+            ) : (
+              <div className="text-gray-500 text-sm italic">
+                Content not available
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    },
+    [allFilesMetadata, loadedContent, loadingPages, getPageForIndex],
+  );
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
-      {/* Show only loading state when metadata is loading */}
-      {isLoadingMetadata && (
+    <div className="flex h-screen flex-col">
+      {/* Header */}
+      <div className="mx-auto w-full max-w-4xl flex-shrink-0 p-6">
         <div className="rounded-lg bg-white p-6 shadow-md">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-bold text-2xl text-gray-800">
-              Markdown File Reader
-            </h2>
             <button
               type="button"
               onClick={onBack}
@@ -162,173 +264,59 @@ export function FileReaderScreen({
             <code className="rounded bg-gray-100 px-2 py-1">{folderPath}</code>
           </div>
 
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
-              <div className="font-medium text-blue-700 text-lg">
-                Reading folder metadata...
-              </div>
-              <div className="mt-2 text-gray-600 text-sm">
-                Please wait while we scan for markdown files
+          {/* Status Display */}
+          {isLoadingMetadata ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+                <div className="font-medium text-blue-700 text-lg">
+                  Reading folder metadata...
+                </div>
+                <div className="mt-2 text-gray-600 text-sm">
+                  Please wait while we scan for markdown files
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="mb-4 text-gray-600 text-sm">
+              Found {allFilesMetadata.length} markdown files
+            </div>
+          )}
+
+          {/* Error Display */}
+          {error && (
+            <div className="mt-4 rounded-md border border-red-300 bg-red-100 p-3 text-red-700">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Virtualized List */}
+      {!isLoadingMetadata && allFilesMetadata.length > 0 && (
+        <div className="mx-auto w-full max-w-4xl flex-1">
+          <Virtuoso
+            totalCount={allFilesMetadata.length}
+            itemContent={renderFileItem}
+            rangeChanged={handleRangeChanged}
+            overscan={2}
+            style={{ height: "100%" }}
+          />
         </div>
       )}
 
-      {/* Show main content only after metadata is loaded */}
-      {!isLoadingMetadata && (
-        <>
-          {/* Header with back button */}
-          <div className="rounded-lg bg-white p-6 shadow-md">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-bold text-2xl text-gray-800">
-                Markdown File Reader
-              </h2>
-              <button
-                type="button"
-                onClick={onBack}
-                className="rounded-md bg-gray-100 px-4 py-2 text-gray-700 text-sm transition-colors hover:bg-gray-200"
-              >
-                ← Back to Folder Selection
-              </button>
+      {/* Empty state */}
+      {!isLoadingMetadata && allFilesMetadata.length === 0 && !error && (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="text-center text-gray-500">
+            <div className="mb-2 font-medium text-lg">
+              No markdown files found
             </div>
-
-            <div className="mb-4 text-gray-600 text-sm">
-              Reading from:{" "}
-              <code className="rounded bg-gray-100 px-2 py-1">
-                {folderPath}
-              </code>
+            <div className="text-sm">
+              No .md files were found in the selected folder
             </div>
-
-            {/* Date Range Selection */}
-            <div className="mb-6">
-              <div className="mb-2 block font-medium text-gray-700 text-sm">
-                Date Range (Creation Date)
-              </div>
-
-              {/* Preset buttons */}
-              <div className="mb-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDateRangeChange("last7days")}
-                  className="rounded bg-blue-100 px-3 py-1 text-blue-700 text-sm transition-colors hover:bg-blue-200"
-                >
-                  Last 7 Days
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDateRangeChange("last30days")}
-                  className="rounded bg-blue-100 px-3 py-1 text-blue-700 text-sm transition-colors hover:bg-blue-200"
-                >
-                  Last 30 Days
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDateRangeChange("currentMonth")}
-                  className="rounded bg-blue-100 px-3 py-1 text-blue-700 text-sm transition-colors hover:bg-blue-200"
-                >
-                  Current Month
-                </button>
-              </div>
-
-              {/* Custom date inputs */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor={startDateId}
-                    className="mb-1 block font-medium text-gray-600 text-xs"
-                  >
-                    Start Date
-                  </label>
-                  <input
-                    id={startDateId}
-                    type="date"
-                    value={dateRange.startDate.toISOString().split("T")[0]}
-                    onChange={(e) =>
-                      handleCustomDateChange("start", e.target.value)
-                    }
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor={endDateId}
-                    className="mb-1 block font-medium text-gray-600 text-xs"
-                  >
-                    End Date
-                  </label>
-                  <input
-                    id={endDateId}
-                    type="date"
-                    value={dateRange.endDate.toISOString().split("T")[0]}
-                    onChange={(e) =>
-                      handleCustomDateChange("end", e.target.value)
-                    }
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Status Display */}
-            {isLoadingContent && (
-              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-700">
-                Loading file content...
-              </div>
-            )}
-
-            {/* Error Display */}
-            {error && (
-              <div className="mt-4 rounded-md border border-red-300 bg-red-100 p-3 text-red-700">
-                {error}
-              </div>
-            )}
           </div>
-
-          {/* Results */}
-          {markdownFiles.length > 0 && (
-            <div className="space-y-6">
-              <div className="rounded-lg bg-white p-6 shadow-md">
-                <h3 className="mb-4 font-semibold text-gray-800 text-lg">
-                  Found {markdownFiles.length} Markdown Files
-                </h3>
-              </div>
-
-              {/* Display all files */}
-              {markdownFiles.map((file) => (
-                <div
-                  key={file.filePath}
-                  className="rounded-lg bg-white p-6 shadow-md"
-                >
-                  <div className="mb-4 border-gray-200 border-b pb-4">
-                    <h4 className="font-medium text-gray-800 text-lg">
-                      {file.fileName}
-                    </h4>
-                    <div className="mt-2 flex flex-wrap gap-4 text-gray-500 text-sm">
-                      <span>
-                        Created: {file.createdAt.toLocaleDateString()} at{" "}
-                        {file.createdAt.toLocaleTimeString()}
-                      </span>
-                      <span>Size: {(file.size / 1024).toFixed(1)}KB</span>
-                    </div>
-                    <div className="mt-1 text-gray-400 text-xs">
-                      {file.filePath}
-                    </div>
-                  </div>
-
-                  <div className="max-h-96 overflow-y-auto rounded-md border bg-gray-50 p-4">
-                    <pre className="whitespace-pre-wrap font-mono text-gray-800 text-sm">
-                      {file.content.length > 2000
-                        ? `${file.content.substring(0, 2000)}...\n\n[Content truncated - ${file.content.length} total characters]`
-                        : file.content}
-                    </pre>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+        </div>
       )}
     </div>
   );

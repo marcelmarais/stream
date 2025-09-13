@@ -482,3 +482,39 @@ export function formatMarkdownFileInfo(file: MarkdownFile): string {
   const sizeKB = (file.size / 1024).toFixed(1);
   return `${file.fileName} (${sizeKB}KB) - Created: ${file.createdAt.toLocaleDateString()}`;
 }
+
+/**
+ * Reads the content of a single markdown file by its absolute path.
+ */
+export async function readMarkdownFileContent(
+  filePath: string,
+): Promise<string> {
+  return readTextFile(filePath);
+}
+
+/**
+ * Reads the content of multiple markdown files by their absolute paths.
+ * Returns a Map keyed by file path to content. Files that fail to read
+ * are omitted from the resulting Map.
+ */
+export async function readMarkdownFilesContentByPaths(
+  filePaths: string[],
+): Promise<Map<string, string>> {
+  const results = await processBatched(filePaths, async (path) => {
+    try {
+      const content = await readTextFile(path);
+      return { path, content } as const;
+    } catch (error) {
+      console.error(`Error reading content of ${path}:`, error);
+      return null;
+    }
+  });
+
+  const map = new Map<string, string>();
+  for (const result of results) {
+    if (result) {
+      map.set(result.path, result.content);
+    }
+  }
+  return map;
+}
