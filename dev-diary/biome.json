@@ -23,6 +23,13 @@
       },
       "performance": {
         "noImgElement": "off"
+      },
+      "style": {
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error"
+      },
+      "nursery": {
+        "useSortedClasses": "error"
       }
     },
     "domains": {

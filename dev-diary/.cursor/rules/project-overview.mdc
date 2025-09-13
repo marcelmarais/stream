@@ -1,0 +1,39 @@
+---
+description: Project overview: Next.js + Tauri 2 desktop app with pnpm and Biome
+globs:
+alwaysApply: true
+---
+
+### Project setup overview
+
+- **Frontend**: Next.js ^15 (App Router in `src/app`, React ^19)
+- **Desktop shell**: Tauri v2 (Rust 2021), `tauri-plugin-opener`
+- **Package manager**: pnpm
+- **Language**: TypeScript ~5.8, strict mode
+- **Styling**: Tailwind CSS ^4 with PostCSS (`@tailwindcss/postcss`)
+- **Formatter/Linter**: Biome ^2.2 (formatter + linter; VS Code default)
+
+### Integration details
+
+- **Next.js output**: `output: "export"`; static export to `out/`
+- **Images**: `images.unoptimized: true`
+- **Dev asset prefix**: `assetPrefix` uses `TAURI_DEV_HOST` or `localhost` on port 3000
+- **Tauri build bridge**:
+  - `beforeDevCommand`: `pnpm dev` (Next at `http://localhost:3000`)
+  - `beforeBuildCommand`: `pnpm build` (produces `out/`)
+  - `frontendDist`: `../out`
+- **Tauri app**: one window (800×600), `identifier` `com.marcelmarais.dev-diary`
+- **Rust side**: `greet` command exposed; `tauri_plugin_opener` registered
+
+### Tooling and scripts
+
+- **Dev**: `pnpm dev` (Next + Turbopack)
+- **Desktop dev**: `pnpm tauri dev`
+- **Build**: `pnpm build` then `pnpm tauri build`
+- **Lint/format**:
+  - `pnpm lint`, `pnpm lint:fix`
+  - `pnpm format`
+  - `pnpm check`, `pnpm check:fix`
+- **VS Code**:
+  - Biome is default formatter; format-on-save enabled
+  - Recommended extensions: `tauri-apps.tauri-vscode`, `rust-lang.rust-analyzer`
