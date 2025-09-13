@@ -1,7 +1,7 @@
 "use client";
 
 import { load } from "@tauri-apps/plugin-store";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   createDateRange,
   type DateRange,
@@ -29,28 +29,47 @@ export function MarkdownReader() {
   const [markdownFiles, setMarkdownFiles] = useState<MarkdownFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<MarkdownFile | null>(null);
-  const [_isMounted, setIsMounted] = useState(false);
 
-  // Load persisted folder after component mounts (client-side only)
   useEffect(() => {
     const loadPersistedFolder = async () => {
-      setIsMounted(true);
+
       try {
         const store = await load(STORE_FILE, { autoSave: true, defaults: {} });
         const savedFolder = await store.get<string>(STORAGE_KEY);
         if (savedFolder) {
           setSelectedFolder(savedFolder);
-          // Read metadata for the saved folder
-          await readAllMetadata(savedFolder);
+          // Just read metadata, don't auto-apply date filter
+          setIsLoadingMetadata(true);
+          setError(null);
+
+          const metadata = await readAllMarkdownFilesMetadata(savedFolder, {
+            maxFileSize: 5 * 1024 * 1024,
+          });
+
+          setAllFilesMetadata(metadata);
+
+          if (metadata.length === 0) {
+            setError("No markdown files found in the selected folder");
+          }
+          setIsLoadingMetadata(false);
         }
         console.log("Loaded saved folder from Tauri Store:", savedFolder);
       } catch (error) {
         console.warn("Failed to load saved folder from Tauri Store:", error);
+        setError(`Failed to load saved folder: ${error}`);
+        setIsLoadingMetadata(false);
       }
     };
 
     loadPersistedFolder();
-  }, [readAllMetadata]);
+  }, []);
+
+  // Auto-apply date filter when metadata or date range changes
+  useEffect(() => {
+    if (allFilesMetadata.length > 0) {
+      handleDateRangeFilterAndRead(allFilesMetadata, dateRange);
+    }
+  }, [allFilesMetadata, dateRange, handleDateRangeFilterAndRead]);
 
   const handleFolderSelected = async (folderPath: string | null) => {
     setSelectedFolder(folderPath);
@@ -73,69 +92,64 @@ export function MarkdownReader() {
 
     // Read all metadata when folder is selected
     if (folderPath) {
-      await readAllMetadata(folderPath);
-    }
-  };
+      try {
+        setIsLoadingMetadata(true);
+        setError(null);
 
-  const readAllMetadata = async (folderPath: string) => {
-    setIsLoadingMetadata(true);
-    setError(null);
+        const metadata = await readAllMarkdownFilesMetadata(folderPath, {
+          maxFileSize: 5 * 1024 * 1024,
+        });
 
-    try {
-      const metadata = await readAllMarkdownFilesMetadata(folderPath, {
-        maxFileSize: 5 * 1024 * 1024, // 5MB limit
-      });
+        setAllFilesMetadata(metadata);
 
-      setAllFilesMetadata(metadata);
+        if (metadata.length === 0) {
+          setError("No markdown files found in the selected folder");
+        }
 
-      if (metadata.length === 0) {
-        setError("No markdown files found in the selected folder");
-      } else {
-        // Automatically apply current date range filter
-        await handleDateRangeFilterAndRead(metadata, dateRange);
+        setIsLoadingMetadata(false);
+      } catch (err) {
+        setError(`Error reading folder metadata: ${err}`);
+        setIsLoadingMetadata(false);
       }
-    } catch (err) {
-      setError(`Error reading folder metadata: ${err}`);
-    } finally {
-      setIsLoadingMetadata(false);
     }
   };
 
-  const handleDateRangeFilterAndRead = async (
-    metadata: MarkdownFileMetadata[],
-    newDateRange: DateRange,
-  ) => {
-    setIsLoadingContent(true);
-    setError(null);
-    setMarkdownFiles([]);
-    setSelectedFile(null);
+  const handleDateRangeFilterAndRead = useCallback(
+    async (metadata: MarkdownFileMetadata[], newDateRange: DateRange) => {
+      setIsLoadingContent(true);
+      setError(null);
+      setMarkdownFiles([]);
+      setSelectedFile(null);
 
-    try {
-      // Filter metadata by date range
-      const filteredMetadata = filterMarkdownFilesByDateRange(
-        metadata,
-        newDateRange,
-      );
+      try {
+        // Filter metadata by date range
+        const filteredMetadata = filterMarkdownFilesByDateRange(
+          metadata,
+          newDateRange,
+        );
 
-      if (filteredMetadata.length === 0) {
-        setError("No markdown files found in the selected date range");
+        if (filteredMetadata.length === 0) {
+          setError("No markdown files found in the selected date range");
+          setIsLoadingContent(false);
+          return;
+        }
+
+        // Read content for filtered files
+        const filesWithContent =
+          await readMarkdownFilesContent(filteredMetadata);
+        setMarkdownFiles(filesWithContent);
+
+        if (filesWithContent.length === 0) {
+          setError("Failed to read content from any files in the date range");
+        }
+      } catch (err) {
+        setError(`Error reading file content: ${err}`);
+      } finally {
         setIsLoadingContent(false);
-        return;
       }
-
-      // Read content for filtered files
-      const filesWithContent = await readMarkdownFilesContent(filteredMetadata);
-      setMarkdownFiles(filesWithContent);
-
-      if (filesWithContent.length === 0) {
-        setError("Failed to read content from any files in the date range");
-      }
-    } catch (err) {
-      setError(`Error reading file content: ${err}`);
-    } finally {
-      setIsLoadingContent(false);
-    }
-  };
+    },
+    [],
+  );
 
   const handleDateRangeChange = async (preset: string) => {
     let newDateRange: DateRange;
@@ -154,11 +168,6 @@ export function MarkdownReader() {
     }
 
     setDateRange(newDateRange);
-
-    // If we have metadata, apply the new date range filter and read content
-    if (allFilesMetadata.length > 0) {
-      await handleDateRangeFilterAndRead(allFilesMetadata, newDateRange);
-    }
   };
 
   const handleCustomDateChange = async (
@@ -177,11 +186,6 @@ export function MarkdownReader() {
     }
 
     setDateRange(newDateRange);
-
-    // If we have metadata, apply the new date range filter and read content
-    if (allFilesMetadata.length > 0) {
-      await handleDateRangeFilterAndRead(allFilesMetadata, newDateRange);
-    }
   };
 
   return (
