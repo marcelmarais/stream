@@ -1,7 +1,7 @@
 "use client";
 
 import { debounce } from "lodash";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 import {
   type CommitsByDate,
@@ -39,9 +39,62 @@ interface FileItem {
 
 type VirtualizedItem = DateHeaderItem | FileItem;
 
-// Configuration for virtualized list
-const PAGE_SIZE = 10; // Files per page
-const MAX_PAGES_IN_MEMORY = 5; // Maximum pages to keep in memory
+// Create grouped items from files metadata - moved outside component for stability
+function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
+  // Group files by date
+  const filesByDate = new Map<string, MarkdownFileMetadata[]>();
+
+  files.forEach((file) => {
+    const dateStr = file.createdAt.toISOString().split("T")[0];
+    if (!filesByDate.has(dateStr)) {
+      filesByDate.set(dateStr, []);
+    }
+    filesByDate.get(dateStr)?.push(file);
+  });
+
+  // Sort dates in descending order (newest first)
+  const sortedDates = Array.from(filesByDate.keys()).sort((a, b) =>
+    b.localeCompare(a),
+  );
+
+  // Create flattened list with headers and files
+  const items: VirtualizedItem[] = [];
+  let fileIndex = 0;
+
+  sortedDates.forEach((dateStr) => {
+    const filesForDate = filesByDate.get(dateStr);
+    if (!filesForDate) return;
+
+    // Format date for display
+    const date = new Date(dateStr);
+    const displayDate = date.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    // Add date header
+    items.push({
+      type: "header",
+      date: dateStr,
+      displayDate,
+    });
+
+    // Add files for this date
+    filesForDate.forEach((file) => {
+      items.push({
+        type: "file",
+        file,
+        originalIndex: fileIndex++,
+      });
+    });
+  });
+
+  return items;
+}
+
+// Simplified - virtualization handles efficient loading
 
 export function FileReaderScreen({
   folderPath,
@@ -55,7 +108,6 @@ export function FileReaderScreen({
   const [loadedContent, setLoadedContent] = useState<Map<string, string>>(
     new Map(),
   );
-  const [loadingPages, setLoadingPages] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<string>("");
@@ -63,70 +115,7 @@ export function FileReaderScreen({
   const [saveErrors, setSaveErrors] = useState<Map<string, string>>(new Map());
   const [commitsByDate, setCommitsByDate] = useState<CommitsByDate>({});
   const [commitError, setCommitError] = useState<string | null>(null);
-
-  // Track which pages are currently loaded
-  const loadedPagesRef = useRef<Set<number>>(new Set());
-
-  // Create grouped items from files metadata
-  const createGroupedItems = useCallback(
-    (files: MarkdownFileMetadata[]): VirtualizedItem[] => {
-      // Group files by date
-      const filesByDate = new Map<string, MarkdownFileMetadata[]>();
-
-      files.forEach((file) => {
-        const dateStr = file.createdAt.toISOString().split("T")[0];
-        if (!filesByDate.has(dateStr)) {
-          filesByDate.set(dateStr, []);
-        }
-        filesByDate.get(dateStr)?.push(file);
-      });
-
-      // Sort dates in descending order (newest first)
-      const sortedDates = Array.from(filesByDate.keys()).sort((a, b) =>
-        b.localeCompare(a),
-      );
-
-      // Create flattened list with headers and files
-      const items: VirtualizedItem[] = [];
-      let fileIndex = 0;
-
-      sortedDates.forEach((dateStr) => {
-        const filesForDate = filesByDate.get(dateStr);
-        if (!filesForDate) return;
-
-        // Format date for display
-        const date = new Date(dateStr);
-        const displayDate = date.toLocaleDateString("en-US", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-
-        // Add date header
-        items.push({
-          type: "header",
-          date: dateStr,
-          displayDate,
-        });
-
-        // Add files for this date
-        filesForDate.forEach((file) => {
-          items.push({
-            type: "file",
-            file,
-            originalIndex: fileIndex++,
-          });
-        });
-      });
-
-      return items;
-    },
-    [],
-  );
-
-  // Ref for the textarea to handle auto-sizing
-  const _textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
 
   // Create debounced save function
   const debouncedSave = useCallback(
@@ -186,93 +175,37 @@ export function FileReaderScreen({
     [debouncedSave],
   );
 
-  // Calculate which page a file index belongs to
-  const getPageForIndex = useCallback(
-    (index: number) => Math.floor(index / PAGE_SIZE),
-    [],
-  );
-
-  // Get files for a specific page
-  const getFilesForPage = useCallback(
-    (page: number) => {
-      const start = page * PAGE_SIZE;
-      const end = start + PAGE_SIZE;
-      return allFilesMetadata.slice(start, end);
-    },
-    [allFilesMetadata],
-  );
-
-  // Load content for a specific page
-  const loadPageContent = useCallback(
-    async (page: number) => {
-      if (loadingPages.has(page) || loadedPagesRef.current.has(page)) {
+  // Load content for files that aren't loaded yet
+  const loadFileContent = useCallback(
+    async (filePath: string) => {
+      if (loadingFiles.has(filePath) || loadedContent.has(filePath)) {
         return;
       }
 
-      setLoadingPages((prev) => new Set(prev).add(page));
+      setLoadingFiles((prev) => new Set(prev).add(filePath));
 
       try {
-        const pageFiles = getFilesForPage(page);
-        const filePaths = pageFiles.map((f) => f.filePath);
+        const contentMap = await readMarkdownFilesContentByPaths([filePath]);
+        const content = contentMap.get(filePath);
 
-        if (filePaths.length === 0) return;
-
-        const contentMap = await readMarkdownFilesContentByPaths(filePaths);
-
-        setLoadedContent((prev) => {
-          const newMap = new Map(prev);
-          contentMap.forEach((content, path) => {
-            newMap.set(path, content);
+        if (content !== undefined) {
+          setLoadedContent((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(filePath, content);
+            return newMap;
           });
-          return newMap;
-        });
-
-        loadedPagesRef.current.add(page);
+        }
       } catch (err) {
-        console.error(`Error loading content for page ${page}:`, err);
+        console.error(`Error loading content for file ${filePath}:`, err);
       } finally {
-        setLoadingPages((prev) => {
+        setLoadingFiles((prev) => {
           const newSet = new Set(prev);
-          newSet.delete(page);
+          newSet.delete(filePath);
           return newSet;
         });
       }
     },
-    [loadingPages, getFilesForPage],
-  );
-
-  // Evict old pages when we have too many loaded
-  const evictOldPages = useCallback(
-    (currentVisiblePage: number) => {
-      const loadedPages = Array.from(loadedPagesRef.current);
-
-      if (loadedPages.length <= MAX_PAGES_IN_MEMORY) return;
-
-      // Sort by distance from current page, keep closest pages
-      const sortedPages = loadedPages.sort(
-        (a, b) =>
-          Math.abs(a - currentVisiblePage) - Math.abs(b - currentVisiblePage),
-      );
-
-      const pagesToEvict = sortedPages.slice(MAX_PAGES_IN_MEMORY);
-
-      if (pagesToEvict.length > 0) {
-        setLoadedContent((prev) => {
-          const newMap = new Map(prev);
-
-          pagesToEvict.forEach((page) => {
-            const pageFiles = getFilesForPage(page);
-            pageFiles.forEach((file) => {
-              newMap.delete(file.filePath);
-            });
-            loadedPagesRef.current.delete(page);
-          });
-
-          return newMap;
-        });
-      }
-    },
-    [getFilesForPage],
+    [loadingFiles, loadedContent],
   );
 
   // Load git commits for currently visible files only
@@ -353,7 +286,6 @@ export function FileReaderScreen({
       setIsLoadingMetadata(true);
       setError(null);
       setLoadedContent(new Map());
-      loadedPagesRef.current.clear();
 
       try {
         const metadata = await readAllMarkdownFilesMetadata(folderPath, {
@@ -365,24 +297,6 @@ export function FileReaderScreen({
         // Create grouped items
         const grouped = createGroupedItems(metadata);
         setGroupedItems(grouped);
-
-        // Load first page immediately
-        if (metadata.length > 0) {
-          // Load first page content directly to avoid dependency cycle
-          const firstPageFiles = metadata.slice(0, PAGE_SIZE);
-          const filePaths = firstPageFiles.map((f) => f.filePath);
-
-          if (filePaths.length > 0) {
-            try {
-              const contentMap =
-                await readMarkdownFilesContentByPaths(filePaths);
-              setLoadedContent(contentMap);
-              loadedPagesRef.current.add(0);
-            } catch (err) {
-              console.error("Error loading first page content:", err);
-            }
-          }
-        }
       } catch (err) {
         setError(`Error reading folder metadata: ${err}`);
       } finally {
@@ -396,32 +310,16 @@ export function FileReaderScreen({
   // Load git commits for initially visible files when metadata is loaded
   useEffect(() => {
     if (!isLoadingMetadata && allFilesMetadata.length > 0) {
-      // Load commits for the first page of files
-      const firstPageFiles = allFilesMetadata.slice(0, PAGE_SIZE);
-      loadCommitsForVisibleFiles(firstPageFiles);
+      // Load commits for the first few files
+      const initialFiles = allFilesMetadata.slice(0, 10);
+      loadCommitsForVisibleFiles(initialFiles);
     }
   }, [isLoadingMetadata, allFilesMetadata, loadCommitsForVisibleFiles]);
 
   // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
     (range: { startIndex: number; endIndex: number }) => {
-      const startPage = getPageForIndex(range.startIndex);
-      const endPage = getPageForIndex(range.endIndex);
-
-      // Load pages around the visible range
-      const pagesToLoad = [];
-      for (let page = Math.max(0, startPage - 1); page <= endPage + 1; page++) {
-        pagesToLoad.push(page);
-      }
-
-      // Load pages that aren't already loaded or loading
-      pagesToLoad.forEach((page) => {
-        if (!loadedPagesRef.current.has(page) && !loadingPages.has(page)) {
-          loadPageContent(page);
-        }
-      });
-
-      // Load git commits for currently visible files
+      // Get visible items and extract files
       const visibleItems = groupedItems.slice(
         range.startIndex,
         range.endIndex + 1,
@@ -430,22 +328,19 @@ export function FileReaderScreen({
         .filter((item): item is FileItem => item.type === "file")
         .map((item) => item.file);
 
+      // Load content for visible files that aren't loaded yet
+      visibleFiles.forEach((file) => {
+        if (!loadedContent.has(file.filePath)) {
+          loadFileContent(file.filePath);
+        }
+      });
+
+      // Load git commits for visible files
       if (visibleFiles.length > 0) {
         loadCommitsForVisibleFiles(visibleFiles);
       }
-
-      // Evict old pages if needed
-      const currentPage = Math.floor((startPage + endPage) / 2);
-      evictOldPages(currentPage);
     },
-    [
-      getPageForIndex,
-      loadPageContent,
-      loadingPages,
-      evictOldPages,
-      groupedItems,
-      loadCommitsForVisibleFiles,
-    ],
+    [groupedItems, loadedContent, loadFileContent, loadCommitsForVisibleFiles],
   );
 
   // Render individual item (header or file)
@@ -470,8 +365,7 @@ export function FileReaderScreen({
       // Render file item
       const { file } = item;
       const content = loadedContent.get(file.filePath);
-      const isLoading =
-        !content && loadingPages.has(getPageForIndex(item.originalIndex));
+      const isLoading = !content && loadingFiles.has(file.filePath);
       const isEditing = editingFile === file.filePath;
       const saveError = saveErrors.get(file.filePath);
 
@@ -547,8 +441,7 @@ export function FileReaderScreen({
     [
       groupedItems,
       loadedContent,
-      loadingPages,
-      getPageForIndex,
+      loadingFiles,
       editingFile,
       editingContent,
       saveErrors,
