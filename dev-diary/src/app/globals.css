@@ -119,4 +119,27 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Hide scrollbars for all elements */
+  * {
+    /* Firefox */
+    scrollbar-width: none;
+
+    /* WebKit browsers (Chrome, Safari, Edge) */
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  /* Ensure scrolling still works but scrollbars are hidden */
+  html,
+  body {
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
+  }
 }

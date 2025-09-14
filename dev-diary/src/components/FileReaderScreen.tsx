@@ -17,7 +17,8 @@ import {
   writeMarkdownFileContent,
 } from "../utils/markdownReader";
 import { DateHeader, FileCard } from "./FileReaderComponents";
-import RepoConnector, { getConnectedRepos } from "./RepoConnector";
+import FileReaderHeader from "./FileReaderHeader";
+import { getConnectedRepos } from "./RepoConnector";
 
 interface FileReaderScreenProps {
   folderPath: string;
@@ -394,69 +395,15 @@ export function FileReaderScreen({
   return (
     <div className="flex h-screen flex-col">
       {/* Header */}
-      <div className="mx-auto w-full max-w-4xl flex-shrink-0 p-6">
-        <div className="rounded-lg bg-white p-6 shadow-md">
-          <div className="mb-4 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={onBack}
-              className="rounded-md bg-gray-100 px-4 py-2 text-gray-700 text-sm transition-colors hover:bg-gray-200"
-            >
-              ← Back to Folder Selection
-            </button>
-          </div>
-
-          <div className="mb-4 text-gray-600 text-sm">
-            Reading from:{" "}
-            <code className="rounded bg-gray-100 px-2 py-1">{folderPath}</code>
-          </div>
-
-          {/* Status Display */}
-          {isLoadingMetadata ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-center">
-                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-                <div className="font-medium text-blue-700 text-lg">
-                  Reading folder metadata...
-                </div>
-                <div className="mt-2 text-gray-600 text-sm">
-                  Please wait while we scan for markdown files
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-4 space-y-2">
-              <div className="text-gray-600 text-sm">
-                Found {allFilesMetadata.length} markdown files
-              </div>
-
-              {/* Git Commits Status */}
-              {Object.keys(commitsByDate).length > 0 && (
-                <div className="text-blue-600 text-sm">
-                  🔄 Found commits for {Object.keys(commitsByDate).length} days
-                  (loaded on-demand)
-                </div>
-              )}
-
-              {commitError && (
-                <div className="text-orange-600 text-sm">⚠️ {commitError}</div>
-              )}
-            </div>
-          )}
-
-          {/* Error Display */}
-          {error && (
-            <div className="mt-4 rounded-md border border-red-300 bg-red-100 p-3 text-red-700">
-              {error}
-            </div>
-          )}
-        </div>
-
-        {/* Repository Connector */}
-        <div className="mt-4">
-          <RepoConnector markdownDirectory={folderPath} className="w-full" />
-        </div>
-      </div>
+      <FileReaderHeader
+        folderPath={folderPath}
+        onBack={onBack}
+        isLoadingMetadata={isLoadingMetadata}
+        allFilesMetadata={allFilesMetadata}
+        commitsByDate={commitsByDate}
+        commitError={commitError}
+        error={error}
+      />
 
       {/* Virtualized List */}
       {!isLoadingMetadata && groupedItems.length > 0 && (
