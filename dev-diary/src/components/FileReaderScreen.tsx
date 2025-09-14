@@ -4,8 +4,10 @@ import { debounce } from "lodash";
 import { useCallback, useEffect, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 import {
+  type CommitFilters,
   type CommitsByDate,
   createDateRange,
+  filterCommits,
   getCommitsForDate,
   getGitCommitsForRepos,
   groupCommitsByDate,
@@ -16,6 +18,7 @@ import {
   readMarkdownFilesContentByPaths,
   writeMarkdownFileContent,
 } from "../utils/markdownReader";
+import CommitFilter from "./CommitFilter";
 import { DateHeader, FileCard } from "./FileReaderComponents";
 import FileReaderFooter from "./FileReaderFooter";
 import FileReaderHeader from "./FileReaderHeader";
@@ -123,6 +126,11 @@ export function FileReaderScreen({
   const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
   const [connectedReposCount, setConnectedReposCount] = useState<number>(0);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [commitFilters, setCommitFilters] = useState<CommitFilters>({
+    authors: [],
+    repos: [],
+    searchTerm: "",
+  });
 
   // Create debounced save function
   const debouncedSave = useCallback(
@@ -400,8 +408,9 @@ export function FileReaderScreen({
       const isLoading = !content && loadingFiles.has(file.filePath);
       const saveError = saveErrors.get(file.filePath);
 
-      // Get commits for this file's creation date
-      const fileCommits = getCommitsForDate(commitsByDate, file.createdAt);
+      // Get commits for this file's creation date and apply filters
+      const allFileCommits = getCommitsForDate(commitsByDate, file.createdAt);
+      const fileCommits = filterCommits(allFileCommits, commitFilters);
 
       return (
         <FileCard
@@ -420,23 +429,43 @@ export function FileReaderScreen({
       loadingFiles,
       saveErrors,
       commitsByDate,
+      commitFilters,
       handleContentChange,
     ],
   );
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Header */}
-      <FileReaderHeader
-        folderPath={folderPath}
-        isLoadingMetadata={isLoadingMetadata}
-        allFilesMetadata={allFilesMetadata}
-        commitsByDate={commitsByDate}
-        commitError={commitError}
-        error={error}
-        settingsOpen={settingsOpen}
-        onSettingsOpenChange={setSettingsOpen}
-      />
+      <div className="mx-auto w-full max-w-4xl px-6 pt-4">
+        <div className="flex items-start justify-between gap-4">
+          {/* Filter controls on the left */}
+          {!isLoadingMetadata && (
+            <div className="flex-shrink-0">
+              <CommitFilter
+                commits={Object.values(commitsByDate).flatMap(
+                  (dateData) => dateData.commits,
+                )}
+                filters={commitFilters}
+                onFiltersChange={setCommitFilters}
+              />
+            </div>
+          )}
+
+          {/* Settings button on the right */}
+          <div className="flex flex-1 justify-end">
+            <FileReaderHeader
+              folderPath={folderPath}
+              isLoadingMetadata={isLoadingMetadata}
+              allFilesMetadata={allFilesMetadata}
+              commitsByDate={commitsByDate}
+              commitError={commitError}
+              error={error}
+              settingsOpen={settingsOpen}
+              onSettingsOpenChange={setSettingsOpen}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Virtualized List */}
       {!isLoadingMetadata && groupedItems.length > 0 && (

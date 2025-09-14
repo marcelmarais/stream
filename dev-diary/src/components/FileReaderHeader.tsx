@@ -1,7 +1,8 @@
 "use client";
 
-import type { CommitsByDate } from "../utils/gitReader";
+import type { CommitFilters, CommitsByDate } from "../utils/gitReader";
 import type { MarkdownFileMetadata } from "../utils/markdownReader";
+import CommitFilterButton from "./CommitFilterButton";
 import SettingsDialog from "./SettingsDialog";
 
 interface FileReaderHeaderProps {
@@ -34,7 +35,7 @@ function HeaderNavigation({
   onSettingsOpenChange: (open: boolean) => void;
 }) {
   return (
-    <div className="mb-4 flex items-center justify-end">
+    <div className="flex items-center justify-end">
       <SettingsDialog
         folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}
@@ -69,7 +70,7 @@ export function FileReaderHeader({
   onSettingsOpenChange,
 }: FileReaderHeaderProps) {
   return (
-    <div className="!bg-transparent mx-auto w-full max-w-4xl flex-shrink-0 px-4 py-2">
+    <div className="!bg-transparent flex-shrink-0">
       <HeaderNavigation
         folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}
