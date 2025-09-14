@@ -410,7 +410,7 @@ export function FileReaderScreen({
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="text-center">
-                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></div>
+                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
                   <div className="text-gray-600 text-sm">
                     Loading content...
                   </div>
@@ -484,7 +484,7 @@ export function FileReaderScreen({
           {isLoadingMetadata ? (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
-                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
                 <div className="font-medium text-blue-700 text-lg">
                   Reading folder metadata...
                 </div>

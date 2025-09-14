@@ -226,7 +226,7 @@ export function RepoConnector({
             >
               {isAddingRepo ? (
                 <>
-                  <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent"></div>
+                  <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
                   Adding...
                 </>
               ) : (
@@ -247,7 +247,7 @@ export function RepoConnector({
                 >
                   {isFetching ? (
                     <>
-                      <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent"></div>
+                      <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
                       Fetching...
                     </>
                   ) : (
