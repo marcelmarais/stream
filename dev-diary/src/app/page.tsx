@@ -21,7 +21,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen w-screen bg-gray-100">
+    <div className="min-h-screen w-screen">
       {currentScreen === "folder-selection" && (
         <FolderSelectionScreen onFolderConfirmed={handleFolderConfirmed} />
       )}

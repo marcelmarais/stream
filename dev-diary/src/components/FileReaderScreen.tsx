@@ -16,7 +16,7 @@ import {
   readMarkdownFilesContentByPaths,
   writeMarkdownFileContent,
 } from "../utils/markdownReader";
-import CommitOverlay from "./CommitOverlay";
+import { DateHeader, FileCard } from "./FileReaderComponents";
 import RepoConnector, { getConnectedRepos } from "./RepoConnector";
 
 interface FileReaderScreenProps {
@@ -351,15 +351,7 @@ export function FileReaderScreen({
 
       // Render date header
       if (item.type === "header") {
-        return (
-          <div className="mx-6 mt-8 mb-4 first:mt-0">
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-              <h3 className="font-semibold text-blue-900 text-xl">
-                {item.displayDate}
-              </h3>
-            </div>
-          </div>
-        );
+        return <DateHeader displayDate={item.displayDate} />;
       }
 
       // Render file item
@@ -373,69 +365,17 @@ export function FileReaderScreen({
       const fileCommits = getCommitsForDate(commitsByDate, file.createdAt);
 
       return (
-        <div className="mx-6 mb-6 rounded-lg bg-white p-6 shadow-md">
-          <div className="mb-4 border-gray-200 border-b pb-4">
-            <div className="flex items-center justify-between">
-              <h4 className="font-medium text-gray-800 text-lg">
-                {file.fileName}
-              </h4>
-            </div>
-            {saveError && (
-              <div className="mt-2 rounded-md border border-red-300 bg-red-100 p-2 text-red-700 text-sm">
-                {saveError}
-              </div>
-            )}
-          </div>
-
-          {/* Git Commits Overlay */}
-          {fileCommits.length > 0 && (
-            <div className="mt-4">
-              <CommitOverlay
-                commits={fileCommits}
-                date={file.createdAt}
-                className="w-full"
-              />
-            </div>
-          )}
-
-          <div className="h-auto rounded-md border bg-gray-50 p-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-                  <div className="text-gray-600 text-sm">
-                    Loading content...
-                  </div>
-                </div>
-              </div>
-            ) : content ? (
-              isEditing ? (
-                <textarea
-                  value={editingContent}
-                  onChange={(e) =>
-                    handleContentChange(file.filePath, e.target.value)
-                  }
-                  className="h-80 w-full resize-none text-left text-gray-800 text-sm focus:outline-none"
-                  placeholder="Enter your markdown content..."
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleEditFile(file.filePath, content)}
-                  className="-m-2 cursor-pointer rounded p-2 transition-colors hover:bg-gray-100"
-                >
-                  <div className="w-full whitespace-pre-wrap text-left text-gray-800 text-sm">
-                    {content}
-                  </div>
-                </button>
-              )
-            ) : (
-              <div className="text-gray-500 text-sm italic">
-                Content not available
-              </div>
-            )}
-          </div>
-        </div>
+        <FileCard
+          file={file}
+          content={content}
+          isLoading={isLoading}
+          isEditing={isEditing}
+          editingContent={editingContent}
+          saveError={saveError}
+          commits={fileCommits}
+          onEditFile={handleEditFile}
+          onContentChange={handleContentChange}
+        />
       );
     },
     [
