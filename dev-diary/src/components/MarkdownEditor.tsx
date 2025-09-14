@@ -49,6 +49,12 @@ const CrepeEditor: FC<{
     return crepe;
   });
 
+  // Now you can access the editor instance like this:
+  // const editor = getEditor();
+  // if (editor) {
+  //   // Use editor methods here
+  // }
+
   return (
     <div className={`milkdown-container ${className}`}>
       <Milkdown />

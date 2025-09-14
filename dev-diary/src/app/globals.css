@@ -202,7 +202,7 @@
   }
 
   .milkdown .editor ol {
-    @apply mb-4 pl-6 list-decimal;
+    @apply mb-4 pl-6 text-muted-foreground;
   }
 
   .milkdown .editor li {
