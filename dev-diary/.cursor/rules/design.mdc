@@ -1,0 +1,83 @@
+---
+globs: *.tsx
+alwaysApply: false
+---
+
+### UI Components - shadcn/ui
+
+**ALWAYS use shadcn/ui components** for UI elements instead of building custom components from scratch.
+
+#### Key Guidelines:
+
+- **Prefer shadcn/ui components**: Use existing components from the [shadcn/ui library](https://ui.shadcn.com/docs/components) for buttons, inputs, dialogs, cards, etc.
+- **Installation**: The project is already configured with shadcn/ui, but individual components may need to be installed as needed
+- **Adding new components**: Use the shadcn/ui CLI to add components: `pnpm dlx shadcn@latest add [component-name]`
+- **Available components**: Button, Card, Dialog, Input, Select, Table, Toast, and [many more](https://ui.shadcn.com/docs/components)
+- **Customization**: Components can be customized through Tailwind classes and variant props
+- **Consistency**: Using shadcn/ui ensures consistent design patterns and accessibility standards
+
+#### Installation Reference:
+
+```bash
+# Add specific components as needed
+pnpm dlx shadcn@latest add button
+pnpm dlx shadcn@latest add card
+pnpm dlx shadcn@latest add dialog
+pnpm dlx shadcn@latest add input
+# ... etc
+```
+
+#### Example Usage:
+
+```tsx
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+// Use shadcn/ui components with Tailwind for styling
+<Card className="w-full max-w-md">
+  <CardHeader>
+    <CardTitle>Example Card</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <Button variant="default" size="lg">
+      Click me
+    </Button>
+  </CardContent>
+</Card>
+```
+
+### Styling - Tailwind CSS
+
+**ALWAYS use Tailwind CSS** for styling components instead of custom CSS or inline styles.
+
+#### Key Guidelines:
+
+- **Utility-first approach**: Use Tailwind utility classes for all styling needs
+- **No custom CSS**: Avoid writing custom CSS files or `style` attributes unless absolutely necessary
+- **Responsive design**: Use Tailwind's responsive prefixes (`sm:`, `md:`, `lg:`, `xl:`, `2xl:`) for responsive layouts
+- **Design tokens**: Leverage Tailwind's design system for consistent spacing, colors, typography, and shadows
+- **Component composition**: Combine utility classes to build complex layouts and designs
+- **Dark mode**: Use Tailwind's `dark:` prefix for dark mode variants when needed
+
+#### Common Patterns:
+
+```tsx
+// Layout and spacing
+<div className="flex flex-col gap-4 p-6 max-w-2xl mx-auto">
+  
+// Responsive design
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  
+// Interactive states
+<button className="bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors">
+  
+// Typography
+<h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+```
+
+#### Integration with shadcn/ui:
+
+- shadcn/ui components are built with Tailwind and accept `className` props
+- Extend component styling by passing additional Tailwind classes
+- Override default styles using Tailwind's utility classes
+
