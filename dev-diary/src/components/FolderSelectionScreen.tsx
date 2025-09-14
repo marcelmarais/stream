@@ -62,8 +62,8 @@ export function FolderSelectionScreen({
   if (isLoading) {
     return (
       <div className="mx-auto w-full max-w-2xl space-y-6 p-6">
-        <div className="rounded-lg bg-white p-6 shadow-md">
-          <div className="animate-pulse text-center text-gray-600">
+        <div className="rounded-lg border border-border bg-card p-6 shadow-md">
+          <div className="animate-pulse text-center text-muted-foreground">
             Loading saved settings...
           </div>
         </div>
@@ -73,19 +73,19 @@ export function FolderSelectionScreen({
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 p-6">
-      <div className="rounded-lg bg-white p-6 shadow-md">
-        <h1 className="mb-6 text-center font-bold text-3xl text-gray-800">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-md">
+        <h1 className="mb-6 text-center font-bold text-3xl text-foreground">
           Dev Diary
         </h1>
 
-        <div className="mb-8 text-center text-gray-600">
+        <div className="mb-8 text-center text-muted-foreground">
           <p className="mb-2">Welcome to your development diary reader.</p>
           <p>Select a folder containing your markdown files to get started.</p>
         </div>
 
         {/* Folder Picker */}
         <div className="mb-6">
-          <div className="mb-3 block font-medium text-gray-700 text-sm">
+          <div className="mb-3 block font-medium text-foreground text-sm">
             Select Directory
           </div>
           <FolderPicker
@@ -100,13 +100,13 @@ export function FolderSelectionScreen({
         {/* Continue Button */}
         {selectedFolder && (
           <div className="mt-6">
-            <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-green-700">
+            <div className="mb-4 rounded-md border border-green-500/20 bg-green-500/10 p-3 text-green-700 dark:text-green-400">
               Selected: {selectedFolder}
             </div>
             <button
               type="button"
               onClick={handleContinue}
-              className="w-full rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg bg-primary px-6 py-3 font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
             >
               Continue to File Reader
             </button>
@@ -118,7 +118,7 @@ export function FolderSelectionScreen({
             <button
               type="button"
               onClick={() => handleFolderSelected(null)}
-              className="text-gray-500 text-sm hover:text-gray-700"
+              className="text-muted-foreground text-sm hover:text-foreground"
             >
               Clear selection
             </button>

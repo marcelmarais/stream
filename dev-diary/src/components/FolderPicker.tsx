@@ -63,7 +63,7 @@ export function FolderPicker({
           type="button"
           onClick={handleFolderPick}
           disabled={isLoading}
-          className="rounded-md bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? "Opening..." : buttonText}
         </button>
@@ -72,23 +72,27 @@ export function FolderPicker({
           <button
             type="button"
             onClick={clearSelection}
-            className="rounded-md bg-gray-500 px-3 py-2 text-sm text-white transition-colors hover:bg-gray-600"
+            className="rounded-md bg-secondary px-3 py-2 text-secondary-foreground text-sm transition-colors hover:bg-secondary/80"
           >
             Clear
           </button>
         )}
       </div>
 
-      <div className="min-h-[2.5rem] rounded-md border border-gray-300 bg-gray-50 p-3">
+      <div className="min-h-[2.5rem] rounded-md border border-border bg-muted p-3">
         {selectedFolder ? (
           <div className="flex items-center gap-2">
-            <span className="text-green-600 text-sm">📁</span>
-            <span className="break-all font-mono text-gray-700 text-sm">
+            <span className="text-green-600 text-sm dark:text-green-400">
+              📁
+            </span>
+            <span className="break-all font-mono text-foreground text-sm">
               {selectedFolder}
             </span>
           </div>
         ) : (
-          <span className="text-gray-500 text-sm italic">{placeholder}</span>
+          <span className="text-muted-foreground text-sm italic">
+            {placeholder}
+          </span>
         )}
       </div>
     </div>

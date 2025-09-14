@@ -23,10 +23,10 @@ export function FileName({ fileName, saveError }: FileNameProps) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h4 className="font-base text-gray-400 text-sm">{fileName}</h4>
+        <h4 className="font-base text-muted-foreground text-sm">{fileName}</h4>
       </div>
       {saveError && (
-        <div className="mt-2 rounded-md border border-red-300 bg-red-100 p-2 text-red-700 text-sm">
+        <div className="mt-2 rounded-md border border-destructive/20 bg-destructive/10 p-2 text-destructive text-sm">
           {saveError}
         </div>
       )}
@@ -58,8 +58,10 @@ export function ContentEditor({
       {isLoading ? (
         <div className="flex items-center justify-center py-4">
           <div className="text-center">
-            <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-            <div className="text-gray-600 text-sm">Loading content...</div>
+            <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+            <div className="text-muted-foreground text-sm">
+              Loading content...
+            </div>
           </div>
         </div>
       ) : content ? (
@@ -67,7 +69,7 @@ export function ContentEditor({
           <textarea
             value={editingContent}
             onChange={(e) => onContentChange(filePath, e.target.value)}
-            className="h-80 w-full resize-none text-left focus:outline-none"
+            className="h-80 w-full resize-none bg-background text-left text-foreground focus:outline-none"
             placeholder="Enter your markdown content..."
           />
         ) : (
@@ -82,7 +84,7 @@ export function ContentEditor({
           </button>
         )
       ) : (
-        <div className="text-gray-500 text-sm italic">
+        <div className="text-muted-foreground text-sm italic">
           Content not available
         </div>
       )}

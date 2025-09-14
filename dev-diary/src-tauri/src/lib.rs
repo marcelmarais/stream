@@ -464,7 +464,9 @@ pub fn run() {
 
                 let ns_window = window.ns_window().unwrap();
                 unsafe {
-                    let bg_color = NSColor::blackColor();
+                    // Match the dark theme background color: #0c0a09
+                    // RGB(12, 10, 9) normalized to 0-1 range
+                    let bg_color = NSColor::colorWithRed_green_blue_alpha(0.047, 0.039, 0.035, 1.0);
                     let window_obj: *mut AnyObject = ns_window as *mut AnyObject;
                     let _: () = objc2::msg_send![window_obj, setBackgroundColor: &*bg_color];
                 }

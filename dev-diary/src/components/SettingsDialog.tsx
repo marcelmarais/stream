@@ -26,10 +26,10 @@ interface SettingsDialogProps {
 function FolderInfo({ folderPath }: { folderPath: string }) {
   return (
     <div className="space-y-2">
-      <h3 className="font-medium text-gray-900">Current Folder</h3>
-      <div className="text-gray-600 text-sm">
+      <h3 className="font-medium text-foreground">Current Folder</h3>
+      <div className="text-muted-foreground text-sm">
         Reading from:{" "}
-        <code className="rounded bg-gray-100 px-2 py-1 font-mono text-xs">
+        <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
           {folderPath}
         </code>
       </div>
@@ -49,22 +49,22 @@ function StatusInfo({
 }) {
   return (
     <div className="space-y-2">
-      <h3 className="font-medium text-gray-900">Status Information</h3>
+      <h3 className="font-medium text-foreground">Status Information</h3>
       <div className="space-y-1">
-        <div className="text-gray-600 text-sm">
+        <div className="text-muted-foreground text-sm">
           📄 Found {fileCount} markdown files
         </div>
 
         {/* Git Commits Status */}
         {Object.keys(commitsByDate).length > 0 && (
-          <div className="text-blue-600 text-sm">
+          <div className="text-blue-600 text-sm dark:text-blue-400">
             🔄 Found commits for {Object.keys(commitsByDate).length} days
             (loaded on-demand)
           </div>
         )}
 
         {commitError && (
-          <div className="rounded-md border border-orange-200 bg-orange-50 p-2 text-orange-700 text-sm">
+          <div className="rounded-md border border-orange-500/20 bg-orange-500/10 p-2 text-orange-700 text-sm dark:text-orange-400">
             ⚠️ {commitError}
           </div>
         )}
@@ -78,11 +78,11 @@ function LoadingState() {
   return (
     <div className="flex items-center justify-center py-8">
       <div className="text-center">
-        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-        <div className="font-medium text-blue-700 text-lg">
+        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+        <div className="font-medium text-lg text-primary">
           Reading folder metadata...
         </div>
-        <div className="mt-2 text-gray-600 text-sm">
+        <div className="mt-2 text-muted-foreground text-sm">
           Please wait while we scan for markdown files
         </div>
       </div>
@@ -130,7 +130,9 @@ export function SettingsDialog({
 
           {/* Repository Connector */}
           <div className="space-y-2">
-            <h3 className="font-medium text-gray-900">Repository Management</h3>
+            <h3 className="font-medium text-foreground">
+              Repository Management
+            </h3>
             <RepoConnector
               markdownDirectory={folderPath}
               className="border-0 bg-transparent p-0 shadow-none"

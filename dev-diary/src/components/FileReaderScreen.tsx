@@ -424,7 +424,7 @@ export function FileReaderScreen({
       {/* Empty state */}
       {!isLoadingMetadata && allFilesMetadata.length === 0 && !error && (
         <div className="flex flex-1 items-center justify-center">
-          <div className="text-center text-gray-500">
+          <div className="text-center text-muted-foreground">
             <div className="mb-2 font-medium text-lg">
               No markdown files found
             </div>

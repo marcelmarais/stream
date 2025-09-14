@@ -51,7 +51,7 @@ function HeaderNavigation({
 // Error display component
 function ErrorDisplay({ error }: { error: string }) {
   return (
-    <div className="mt-4 rounded-md border border-red-300 bg-red-100 p-3 text-red-700">
+    <div className="mt-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-destructive">
       {error}
     </div>
   );

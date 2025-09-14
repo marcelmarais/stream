@@ -158,8 +158,10 @@ export function RepoConnector({
 
   if (isLoading) {
     return (
-      <div className={`rounded-lg bg-white p-4 shadow-sm ${className}`}>
-        <div className="animate-pulse text-center text-gray-600 text-sm">
+      <div
+        className={`rounded-lg border border-border bg-card p-4 shadow-sm ${className}`}
+      >
+        <div className="animate-pulse text-center text-muted-foreground text-sm">
           Loading connected repositories...
         </div>
       </div>
@@ -167,16 +169,18 @@ export function RepoConnector({
   }
 
   return (
-    <div className={`rounded-lg bg-white p-4 shadow-sm ${className}`}>
+    <div
+      className={`rounded-lg border border-border bg-card p-4 shadow-sm ${className}`}
+    >
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-gray-700 text-sm">🔗</span>
-          <h3 className="font-medium text-gray-800 text-sm">
+          <span className="text-muted-foreground text-sm">🔗</span>
+          <h3 className="font-medium text-foreground text-sm">
             Connected Code Repositories
           </h3>
           {connectedRepos.length > 0 && (
-            <span className="rounded-full bg-blue-100 px-2 py-1 text-blue-700 text-xs">
+            <span className="rounded-full bg-blue-500/20 px-2 py-1 text-blue-700 text-xs dark:text-blue-300">
               {connectedRepos.length}
             </span>
           )}
@@ -184,7 +188,7 @@ export function RepoConnector({
         <button
           type="button"
           onClick={() => setShowConnector(!showConnector)}
-          className="text-gray-500 text-xs hover:text-gray-700"
+          className="text-muted-foreground text-xs hover:text-foreground"
         >
           {showConnector ? "Hide" : "Manage"}
         </button>
@@ -194,7 +198,7 @@ export function RepoConnector({
       {connectedRepos.length > 0 && !showConnector && (
         <div className="space-y-1">
           {connectedRepos.slice(0, 2).map((repo) => (
-            <div key={repo} className="text-gray-600 text-xs">
+            <div key={repo} className="text-muted-foreground text-xs">
               📁 {repo.split("/").pop()}
             </div>
           ))}
@@ -208,7 +212,7 @@ export function RepoConnector({
 
       {/* No repos connected message */}
       {connectedRepos.length === 0 && !showConnector && (
-        <div className="text-gray-500 text-xs italic">
+        <div className="text-muted-foreground text-xs italic">
           No code repositories connected
         </div>
       )}
