@@ -68,12 +68,15 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
 
     // Format date for display
     const date = new Date(dateStr);
-    const displayDate = date.toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    const displayDate = date
+      .toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+      .replace(", ", " — ")
+      .toLowerCase();
 
     // Add date header
     items.push({

@@ -74,7 +74,7 @@ export function ContentEditor({
           <button
             type="button"
             onClick={() => onEditFile(filePath, content)}
-            className="cursor-pointer rounded transition-colors hover:bg-gray-100"
+            className="cursor-text"
           >
             <div className="w-full whitespace-pre-wrap text-left">
               {content}
