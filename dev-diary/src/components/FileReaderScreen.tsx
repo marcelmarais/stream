@@ -24,6 +24,21 @@ interface FileReaderScreenProps {
   onBack: () => void;
 }
 
+// Types for grouped items
+interface DateHeaderItem {
+  type: "header";
+  date: string;
+  displayDate: string;
+}
+
+interface FileItem {
+  type: "file";
+  file: MarkdownFileMetadata;
+  originalIndex: number;
+}
+
+type VirtualizedItem = DateHeaderItem | FileItem;
+
 // Configuration for virtualized list
 const PAGE_SIZE = 10; // Files per page
 const MAX_PAGES_IN_MEMORY = 5; // Maximum pages to keep in memory
@@ -36,6 +51,7 @@ export function FileReaderScreen({
   const [allFilesMetadata, setAllFilesMetadata] = useState<
     MarkdownFileMetadata[]
   >([]);
+  const [groupedItems, setGroupedItems] = useState<VirtualizedItem[]>([]);
   const [loadedContent, setLoadedContent] = useState<Map<string, string>>(
     new Map(),
   );
@@ -50,6 +66,64 @@ export function FileReaderScreen({
 
   // Track which pages are currently loaded
   const loadedPagesRef = useRef<Set<number>>(new Set());
+
+  // Create grouped items from files metadata
+  const createGroupedItems = useCallback(
+    (files: MarkdownFileMetadata[]): VirtualizedItem[] => {
+      // Group files by date
+      const filesByDate = new Map<string, MarkdownFileMetadata[]>();
+
+      files.forEach((file) => {
+        const dateStr = file.createdAt.toISOString().split("T")[0];
+        if (!filesByDate.has(dateStr)) {
+          filesByDate.set(dateStr, []);
+        }
+        filesByDate.get(dateStr)?.push(file);
+      });
+
+      // Sort dates in descending order (newest first)
+      const sortedDates = Array.from(filesByDate.keys()).sort((a, b) =>
+        b.localeCompare(a),
+      );
+
+      // Create flattened list with headers and files
+      const items: VirtualizedItem[] = [];
+      let fileIndex = 0;
+
+      sortedDates.forEach((dateStr) => {
+        const filesForDate = filesByDate.get(dateStr);
+        if (!filesForDate) return;
+
+        // Format date for display
+        const date = new Date(dateStr);
+        const displayDate = date.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+        // Add date header
+        items.push({
+          type: "header",
+          date: dateStr,
+          displayDate,
+        });
+
+        // Add files for this date
+        filesForDate.forEach((file) => {
+          items.push({
+            type: "file",
+            file,
+            originalIndex: fileIndex++,
+          });
+        });
+      });
+
+      return items;
+    },
+    [],
+  );
 
   // Ref for the textarea to handle auto-sizing
   const _textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -288,6 +362,10 @@ export function FileReaderScreen({
 
         setAllFilesMetadata(metadata);
 
+        // Create grouped items
+        const grouped = createGroupedItems(metadata);
+        setGroupedItems(grouped);
+
         // Load first page immediately
         if (metadata.length > 0) {
           // Load first page content directly to avoid dependency cycle
@@ -344,10 +422,14 @@ export function FileReaderScreen({
       });
 
       // Load git commits for currently visible files
-      const visibleFiles = allFilesMetadata.slice(
+      const visibleItems = groupedItems.slice(
         range.startIndex,
         range.endIndex + 1,
       );
+      const visibleFiles = visibleItems
+        .filter((item): item is FileItem => item.type === "file")
+        .map((item) => item.file);
+
       if (visibleFiles.length > 0) {
         loadCommitsForVisibleFiles(visibleFiles);
       }
@@ -361,19 +443,35 @@ export function FileReaderScreen({
       loadPageContent,
       loadingPages,
       evictOldPages,
-      allFilesMetadata,
+      groupedItems,
       loadCommitsForVisibleFiles,
     ],
   );
 
-  // Render individual file item
-  const renderFileItem = useCallback(
+  // Render individual item (header or file)
+  const renderItem = useCallback(
     (index: number) => {
-      const file = allFilesMetadata[index];
-      if (!file) return null;
+      const item = groupedItems[index];
+      if (!item) return null;
 
+      // Render date header
+      if (item.type === "header") {
+        return (
+          <div className="mx-6 mt-8 mb-4 first:mt-0">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <h3 className="font-semibold text-blue-900 text-xl">
+                {item.displayDate}
+              </h3>
+            </div>
+          </div>
+        );
+      }
+
+      // Render file item
+      const { file } = item;
       const content = loadedContent.get(file.filePath);
-      const isLoading = !content && loadingPages.has(getPageForIndex(index));
+      const isLoading =
+        !content && loadingPages.has(getPageForIndex(item.originalIndex));
       const isEditing = editingFile === file.filePath;
       const saveError = saveErrors.get(file.filePath);
 
@@ -447,7 +545,7 @@ export function FileReaderScreen({
       );
     },
     [
-      allFilesMetadata,
+      groupedItems,
       loadedContent,
       loadingPages,
       getPageForIndex,
@@ -528,11 +626,11 @@ export function FileReaderScreen({
       </div>
 
       {/* Virtualized List */}
-      {!isLoadingMetadata && allFilesMetadata.length > 0 && (
+      {!isLoadingMetadata && groupedItems.length > 0 && (
         <div className="mx-auto w-full max-w-4xl flex-1">
           <Virtuoso
-            totalCount={allFilesMetadata.length}
-            itemContent={renderFileItem}
+            totalCount={groupedItems.length}
+            itemContent={renderItem}
             rangeChanged={handleRangeChanged}
             overscan={2}
             style={{ height: "100%" }}
