@@ -43,14 +43,14 @@ export function CommitOverlay({
 
   return (
     <div
-      className={`rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 ${className}`}
+      className={`rounded-full border border-blue-500/20 bg-blue-500/10 p-3 ${className}`}
     >
       {/* Header */}
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mx-4 mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-blue-600 text-sm dark:text-blue-400">🔄</span>
           <h4 className="font-medium text-blue-800 text-sm dark:text-blue-200">
-            Git Activity - {date.toLocaleDateString()}
+            Git Activity
           </h4>
           <span className="rounded-full bg-blue-500/20 px-2 py-1 text-blue-700 text-xs dark:text-blue-300">
             {totalCommits} commit{totalCommits !== 1 ? "s" : ""} from{" "}
@@ -68,7 +68,7 @@ export function CommitOverlay({
 
       {/* Compact Summary (always visible) */}
       {!isExpanded && (
-        <div className="space-y-1">
+        <div className="mx-4 space-y-1">
           {Object.entries(commitsByRepo)
             .slice(0, 2)
             .map(([repoName, repoCommits]) => (
