@@ -440,7 +440,7 @@ export function FileReaderScreen({
 
       {/* Virtualized List */}
       {!isLoadingMetadata && groupedItems.length > 0 && (
-        <div className="mx-auto w-full max-w-4xl flex-1">
+        <div className="mx-auto w-full max-w-4xl flex-1 pt-6">
           <Virtuoso
             totalCount={groupedItems.length}
             itemContent={renderItem}

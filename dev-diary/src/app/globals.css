@@ -181,6 +181,10 @@
     @apply text-base font-medium mb-2 text-muted-foreground;
   }
 
+  .milkdown-icon {
+    @apply hidden;
+  }
+
   .milkdown .editor h5 {
     @apply text-base font-medium mb-2 text-muted-foreground;
   }
