@@ -1,8 +1,9 @@
 "use client";
 
 import { load } from "@tauri-apps/plugin-store";
+import { Folder } from "lucide-react";
 import { useEffect, useState } from "react";
-import FolderPicker from "./FolderPicker";
+import { Button } from "@/components/ui/button";
 
 const STORAGE_KEY = "dev-diary-last-selected-folder";
 const STORE_FILE = "settings.json";
@@ -61,69 +62,91 @@ export function FolderSelectionScreen({
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-2xl space-y-6 p-6">
-        <div className="rounded-lg border border-border bg-card p-6 shadow-md">
-          <div className="animate-pulse text-center text-muted-foreground">
-            Loading saved settings...
-          </div>
-        </div>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6 p-6">
-      <div className="rounded-lg border border-border bg-card p-6 shadow-md">
-        <h1 className="mb-6 text-center font-bold text-3xl text-foreground">
-          Dev Diary
-        </h1>
-
-        <div className="mb-8 text-center text-muted-foreground">
-          <p className="mb-2">Welcome to your development diary reader.</p>
-          <p>Select a folder containing your markdown files to get started.</p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
+      <div className="w-full max-w-md space-y-8 text-center">
+        {/* App Title */}
+        <div className="space-y-2">
+          <h1 className="font-semibold text-2xl text-foreground tracking-tight">
+            stream.
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Select a folder to get started
+          </p>
         </div>
 
-        {/* Folder Picker */}
-        <div className="mb-6">
-          <div className="mb-3 block font-medium text-foreground text-sm">
-            Select Directory
-          </div>
-          <FolderPicker
-            onFolderSelected={handleFolderSelected}
-            value={selectedFolder}
-            buttonText="Choose Directory"
-            placeholder="No directory selected"
-            className="w-full"
-          />
-        </div>
+        {/* Folder Selection */}
+        <div className="space-y-4">
+          {!selectedFolder ? (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const { open } = await import("@tauri-apps/plugin-dialog");
+                  const folderPath = await open({
+                    directory: true,
+                    multiple: false,
+                  });
 
-        {/* Continue Button */}
-        {selectedFolder && (
-          <div className="mt-6">
-            <div className="mb-4 rounded-md border border-green-500/20 bg-green-500/10 p-3 text-green-700 dark:text-green-400">
-              Selected: {selectedFolder}
+                  if (folderPath && typeof folderPath === "string") {
+                    handleFolderSelected(folderPath);
+                  }
+                } catch (error) {
+                  console.error("Error opening folder picker:", error);
+                }
+              }}
+              className="w-full rounded-md bg-primary px-4 py-3 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
+            >
+              Open Folder
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    const { open } = await import("@tauri-apps/plugin-dialog");
+                    const folderPath = await open({
+                      directory: true,
+                      multiple: false,
+                    });
+
+                    if (folderPath && typeof folderPath === "string") {
+                      handleFolderSelected(folderPath);
+                    }
+                  } catch (error) {
+                    console.error("Error opening folder picker:", error);
+                  }
+                }}
+                className="h-auto w-full justify-start rounded-md border border-border bg-muted/50 px-3 py-3 text-muted-foreground text-sm transition-colors hover:bg-muted/70"
+              >
+                <div className="flex items-center gap-3">
+                  <Folder className="h-4 w-4 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="truncate font-mono text-foreground"
+                      title={selectedFolder}
+                    >
+                      {selectedFolder}
+                    </div>
+                    <div className="mt-1 text-muted-foreground text-xs">
+                      Click to change
+                    </div>
+                  </div>
+                </div>
+              </Button>
+              <Button onClick={handleContinue} className="w-full">
+                Open
+              </Button>
             </div>
-            <button
-              type="button"
-              onClick={handleContinue}
-              className="w-full rounded-lg bg-primary px-6 py-3 font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              Continue to File Reader
-            </button>
-          </div>
-        )}
-
-        {selectedFolder && (
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => handleFolderSelected(null)}
-              className="text-muted-foreground text-sm hover:text-foreground"
-            >
-              Clear selection
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
