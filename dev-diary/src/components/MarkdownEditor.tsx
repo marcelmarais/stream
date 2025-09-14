@@ -42,6 +42,7 @@ const CrepeEditor: FC<{
     // Set up change listener
     crepe.on((listener) => {
       listener.markdownUpdated((_, markdown) => {
+        console.log("markdownUpdated", markdown);
         onChange(markdown);
       });
     });

@@ -24,7 +24,7 @@ interface FileNameProps {
 export function FileName({ fileName, saveError }: FileNameProps) {
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-end">
         <h4 className="font-base text-muted-foreground text-sm">{fileName}</h4>
       </div>
       {saveError && (
