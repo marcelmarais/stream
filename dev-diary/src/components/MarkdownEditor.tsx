@@ -64,7 +64,7 @@ const CrepeEditor: FC<{
 
 export function MarkdownEditor({ value, onChange }: MarkdownEditorProps) {
   return (
-    <div className={`markdown-editor-wrapper`}>
+    <div className={`markdown-editor-wrapper pb-12`}>
       <MilkdownProvider>
         <CrepeEditor value={value} onChange={onChange} className="" />
       </MilkdownProvider>
