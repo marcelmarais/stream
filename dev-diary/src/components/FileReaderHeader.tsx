@@ -69,7 +69,7 @@ export function FileReaderHeader({
   onSettingsOpenChange,
 }: FileReaderHeaderProps) {
   return (
-    <div className="mx-auto w-full max-w-4xl flex-shrink-0 px-4 py-2">
+    <div className="!bg-transparent mx-auto w-full max-w-4xl flex-shrink-0 px-4 py-2">
       <HeaderNavigation
         folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}

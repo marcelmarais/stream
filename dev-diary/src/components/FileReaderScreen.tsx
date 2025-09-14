@@ -114,8 +114,8 @@ export function FileReaderScreen({
     new Map(),
   );
   const [error, setError] = useState<string | null>(null);
-  const [editingFile, setEditingFile] = useState<string | null>(null);
-  const [editingContent, setEditingContent] = useState<string>("");
+  const [_editingFile, setEditingFile] = useState<string | null>(null);
+  const [_editingContent, setEditingContent] = useState<string>("");
   const [_savingFiles, setSavingFiles] = useState<Set<string>>(new Set());
   const [saveErrors, setSaveErrors] = useState<Map<string, string>>(new Map());
   const [commitsByDate, setCommitsByDate] = useState<CommitsByDate>({});
@@ -160,7 +160,7 @@ export function FileReaderScreen({
     [],
   );
 
-  const handleEditFile = useCallback(
+  const _handleEditFile = useCallback(
     (filePath: string, currentContent: string) => {
       setEditingFile(filePath);
       setEditingContent(currentContent);
@@ -238,58 +238,77 @@ export function FileReaderScreen({
           ),
         );
 
-        // Only load commits for dates we don't already have
-        const datesToLoad = visibleDates.filter(
-          (dateStr) => !commitsByDate[dateStr],
-        );
+        // Check current commits state and filter dates we need
+        setCommitsByDate((currentCommitsByDate) => {
+          const datesToLoad = visibleDates.filter(
+            (dateStr) => !currentCommitsByDate[dateStr],
+          );
 
-        if (datesToLoad.length === 0) return;
+          if (datesToLoad.length > 0) {
+            // Trigger async loading outside of state setter
+            setTimeout(async () => {
+              try {
+                console.log(
+                  `Loading commits for ${datesToLoad.length} new dates:`,
+                  datesToLoad,
+                );
 
-        console.log(
-          `Loading commits for ${datesToLoad.length} new dates:`,
-          datesToLoad,
-        );
+                // Create date ranges for each date we need
+                const dateRanges = datesToLoad.map((dateStr) => {
+                  const date = new Date(dateStr);
+                  const startOfDay = new Date(date);
+                  startOfDay.setHours(0, 0, 0, 0);
+                  const endOfDay = new Date(date);
+                  endOfDay.setHours(23, 59, 59, 999);
+                  return createDateRange.custom(startOfDay, endOfDay);
+                });
 
-        // Create date ranges for each date we need
-        const dateRanges = datesToLoad.map((dateStr) => {
-          const date = new Date(dateStr);
-          const startOfDay = new Date(date);
-          startOfDay.setHours(0, 0, 0, 0);
-          const endOfDay = new Date(date);
-          endOfDay.setHours(23, 59, 59, 999);
-          return createDateRange.custom(startOfDay, endOfDay);
-        });
+                // Load commits for each date range
+                const allNewCommits: CommitsByDate = {};
 
-        // Load commits for each date range
-        const allNewCommits: CommitsByDate = {};
+                for (const dateRange of dateRanges) {
+                  try {
+                    const repoCommits = await getGitCommitsForRepos(
+                      connectedRepos,
+                      dateRange,
+                    );
+                    const groupedCommits = groupCommitsByDate(repoCommits);
 
-        for (const dateRange of dateRanges) {
-          try {
-            const repoCommits = await getGitCommitsForRepos(
-              connectedRepos,
-              dateRange,
-            );
-            const groupedCommits = groupCommitsByDate(repoCommits);
+                    // Merge new commits with existing ones
+                    Object.assign(allNewCommits, groupedCommits);
+                  } catch (error) {
+                    console.error(
+                      `Error loading commits for date range:`,
+                      error,
+                    );
+                  }
+                }
 
-            // Merge new commits with existing ones
-            Object.assign(allNewCommits, groupedCommits);
-          } catch (error) {
-            console.error(`Error loading commits for date range:`, error);
+                // Update state with new commits (merge with existing)
+                setCommitsByDate((prev) => ({ ...prev, ...allNewCommits }));
+
+                console.log(
+                  `Loaded commits for ${Object.keys(allNewCommits).length} new days`,
+                );
+              } catch (error) {
+                console.error(
+                  "Error loading commits for visible files:",
+                  error,
+                );
+                setCommitError(`Failed to load git commits: ${error}`);
+              }
+            }, 0);
           }
-        }
 
-        // Update state with new commits (merge with existing)
-        setCommitsByDate((prev) => ({ ...prev, ...allNewCommits }));
-
-        console.log(
-          `Loaded commits for ${Object.keys(allNewCommits).length} new days`,
-        );
+          // Return current state unchanged
+          return currentCommitsByDate;
+        });
       } catch (error) {
         console.error("Error loading commits for visible files:", error);
         setCommitError(`Failed to load git commits: ${error}`);
       }
     },
-    [folderPath, commitsByDate],
+    [folderPath],
   );
 
   // Load metadata when component mounts
@@ -379,7 +398,6 @@ export function FileReaderScreen({
       const { file } = item;
       const content = loadedContent.get(file.filePath);
       const isLoading = !content && loadingFiles.has(file.filePath);
-      const isEditing = editingFile === file.filePath;
       const saveError = saveErrors.get(file.filePath);
 
       // Get commits for this file's creation date
@@ -390,11 +408,8 @@ export function FileReaderScreen({
           file={file}
           content={content}
           isLoading={isLoading}
-          isEditing={isEditing}
-          editingContent={editingContent}
           saveError={saveError}
           commits={fileCommits}
-          onEditFile={handleEditFile}
           onContentChange={handleContentChange}
         />
       );
@@ -403,11 +418,8 @@ export function FileReaderScreen({
       groupedItems,
       loadedContent,
       loadingFiles,
-      editingFile,
-      editingContent,
       saveErrors,
       commitsByDate,
-      handleEditFile,
       handleContentChange,
     ],
   );

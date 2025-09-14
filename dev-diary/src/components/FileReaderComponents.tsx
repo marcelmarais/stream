@@ -1,6 +1,8 @@
 import type { GitCommit } from "../utils/gitReader";
 import type { MarkdownFileMetadata } from "../utils/markdownReader";
 import CommitOverlay from "./CommitOverlay";
+import MarkdownEditor from "./MarkdownEditor";
+import { Separator } from "./ui/separator";
 
 interface DateHeaderProps {
   displayDate: string;
@@ -37,24 +39,18 @@ export function FileName({ fileName, saveError }: FileNameProps) {
 interface ContentEditorProps {
   content?: string;
   isLoading: boolean;
-  isEditing: boolean;
-  editingContent: string;
   filePath: string;
-  onEditFile: (filePath: string, content: string) => void;
   onContentChange: (filePath: string, content: string) => void;
 }
 
 export function ContentEditor({
   content,
   isLoading,
-  isEditing,
-  editingContent,
   filePath,
-  onEditFile,
   onContentChange,
 }: ContentEditorProps) {
   return (
-    <div className="h-auto">
+    <div>
       {isLoading ? (
         <div className="flex items-center justify-center py-4">
           <div className="text-center">
@@ -64,29 +60,12 @@ export function ContentEditor({
             </div>
           </div>
         </div>
-      ) : content ? (
-        isEditing ? (
-          <textarea
-            value={editingContent}
-            onChange={(e) => onContentChange(filePath, e.target.value)}
-            className="h-80 w-full resize-none bg-background text-left text-foreground focus:outline-none"
-            placeholder="Enter your markdown content..."
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => onEditFile(filePath, content)}
-            className="cursor-text"
-          >
-            <div className="w-full whitespace-pre-wrap text-left">
-              {content}
-            </div>
-          </button>
-        )
       ) : (
-        <div className="text-muted-foreground text-sm italic">
-          Content not available
-        </div>
+        <MarkdownEditor
+          value={content || ""}
+          onChange={(value) => onContentChange(filePath, value)}
+          placeholder="Enter your markdown content..."
+        />
       )}
     </div>
   );
@@ -96,11 +75,8 @@ interface FileCardProps {
   file: MarkdownFileMetadata;
   content?: string;
   isLoading: boolean;
-  isEditing: boolean;
-  editingContent: string;
   saveError?: string;
   commits: GitCommit[];
-  onEditFile: (filePath: string, content: string) => void;
   onContentChange: (filePath: string, content: string) => void;
 }
 
@@ -108,11 +84,8 @@ export function FileCard({
   file,
   content,
   isLoading,
-  isEditing,
-  editingContent,
   saveError,
   commits,
-  onEditFile,
   onContentChange,
 }: FileCardProps) {
   return (
@@ -120,10 +93,7 @@ export function FileCard({
       <ContentEditor
         content={content}
         isLoading={isLoading}
-        isEditing={isEditing}
-        editingContent={editingContent}
         filePath={file.filePath}
-        onEditFile={onEditFile}
         onContentChange={onContentChange}
       />
       <FileName fileName={file.fileName} saveError={saveError} />
@@ -137,6 +107,7 @@ export function FileCard({
           />
         </div>
       )}
+      <Separator className="mt-12" />
     </div>
   );
 }
