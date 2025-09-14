@@ -417,7 +417,6 @@ export function FileReaderScreen({
       {/* Header */}
       <FileReaderHeader
         folderPath={folderPath}
-        onBack={onBack}
         isLoadingMetadata={isLoadingMetadata}
         allFilesMetadata={allFilesMetadata}
         commitsByDate={commitsByDate}
@@ -460,6 +459,7 @@ export function FileReaderScreen({
         fileCount={allFilesMetadata.length}
         connectedReposCount={connectedReposCount}
         onSettingsClick={handleOpenSettings}
+        onFolderClick={onBack}
       />
     </div>
   );

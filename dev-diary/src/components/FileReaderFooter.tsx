@@ -7,6 +7,7 @@ interface FileReaderFooterProps {
   fileCount: number;
   connectedReposCount: number;
   onSettingsClick: () => void;
+  onFolderClick: () => void;
 }
 
 export function FileReaderFooter({
@@ -14,6 +15,7 @@ export function FileReaderFooter({
   fileCount,
   connectedReposCount,
   onSettingsClick,
+  onFolderClick,
 }: FileReaderFooterProps) {
   // Extract just the folder name from the full path for display
   const folderName = folderPath.split("/").pop() || folderPath;
@@ -24,9 +26,9 @@ export function FileReaderFooter({
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={onSettingsClick}
+            onClick={onFolderClick}
             className="flex cursor-pointer items-center gap-1 transition-colors hover:text-foreground"
-            title="Click to open settings"
+            title="Click to go back to folder selection"
           >
             <Folder className="size-3" />
             <span title={folderPath}>{folderName}</span>
@@ -51,7 +53,6 @@ export function FileReaderFooter({
             <GitBranch className="size-3" />
             <span>{connectedReposCount} connected repos</span>
           </button>
-          <div className="text-right">dev-diary</div>
         </div>
       </div>
     </div>

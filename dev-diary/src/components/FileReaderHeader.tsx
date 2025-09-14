@@ -1,14 +1,11 @@
 "use client";
 
-import { ChevronLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import type { CommitsByDate } from "../utils/gitReader";
 import type { MarkdownFileMetadata } from "../utils/markdownReader";
 import SettingsDialog from "./SettingsDialog";
 
 interface FileReaderHeaderProps {
   folderPath: string;
-  onBack: () => void;
   isLoadingMetadata: boolean;
   allFilesMetadata: MarkdownFileMetadata[];
   commitsByDate: CommitsByDate;
@@ -18,9 +15,8 @@ interface FileReaderHeaderProps {
   onSettingsOpenChange: (open: boolean) => void;
 }
 
-// Navigation component with back button and settings
+// Navigation component with settings only
 function HeaderNavigation({
-  onBack,
   folderPath,
   isLoadingMetadata,
   allFilesMetadata,
@@ -29,7 +25,6 @@ function HeaderNavigation({
   settingsOpen,
   onSettingsOpenChange,
 }: {
-  onBack: () => void;
   folderPath: string;
   isLoadingMetadata: boolean;
   allFilesMetadata: MarkdownFileMetadata[];
@@ -39,10 +34,7 @@ function HeaderNavigation({
   onSettingsOpenChange: (open: boolean) => void;
 }) {
   return (
-    <div className="mb-4 flex items-center justify-between">
-      <Button onClick={onBack} variant={"ghost"}>
-        <ChevronLeft className="size-4" />
-      </Button>
+    <div className="mb-4 flex items-center justify-end">
       <SettingsDialog
         folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}
@@ -68,7 +60,6 @@ function ErrorDisplay({ error }: { error: string }) {
 // Main header component that combines all sub-components
 export function FileReaderHeader({
   folderPath,
-  onBack,
   isLoadingMetadata,
   allFilesMetadata,
   commitsByDate,
@@ -80,7 +71,6 @@ export function FileReaderHeader({
   return (
     <div className="mx-auto w-full max-w-4xl flex-shrink-0 px-2 py-8">
       <HeaderNavigation
-        onBack={onBack}
         folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}
         allFilesMetadata={allFilesMetadata}
