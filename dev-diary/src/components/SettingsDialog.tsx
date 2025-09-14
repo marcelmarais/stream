@@ -20,6 +20,8 @@ interface SettingsDialogProps {
   allFilesMetadata: MarkdownFileMetadata[];
   commitsByDate: CommitsByDate;
   commitError: string | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Folder path display component
@@ -96,9 +98,11 @@ export function SettingsDialog({
   allFilesMetadata,
   commitsByDate,
   commitError,
+  open,
+  onOpenChange,
 }: SettingsDialogProps) {
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8">
           <Settings className="h-4 w-4" />

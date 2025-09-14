@@ -17,6 +17,7 @@ import {
   writeMarkdownFileContent,
 } from "../utils/markdownReader";
 import { DateHeader, FileCard } from "./FileReaderComponents";
+import FileReaderFooter from "./FileReaderFooter";
 import FileReaderHeader from "./FileReaderHeader";
 import { getConnectedRepos } from "./RepoConnector";
 
@@ -120,6 +121,8 @@ export function FileReaderScreen({
   const [commitsByDate, setCommitsByDate] = useState<CommitsByDate>({});
   const [commitError, setCommitError] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
+  const [connectedReposCount, setConnectedReposCount] = useState<number>(0);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
   // Create debounced save function
   const debouncedSave = useCallback(
@@ -168,6 +171,10 @@ export function FileReaderScreen({
   const _handleCancelEdit = useCallback(() => {
     setEditingFile(null);
     setEditingContent("");
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    setSettingsOpen(true);
   }, []);
 
   // Handle content changes during editing
@@ -219,6 +226,7 @@ export function FileReaderScreen({
 
       try {
         const connectedRepos = await getConnectedRepos(folderPath);
+        setConnectedReposCount(connectedRepos.length);
         if (connectedRepos.length === 0) return;
 
         // Get unique dates from visible files
@@ -301,6 +309,15 @@ export function FileReaderScreen({
         // Create grouped items
         const grouped = createGroupedItems(metadata);
         setGroupedItems(grouped);
+
+        // Load connected repos count
+        try {
+          const connectedRepos = await getConnectedRepos(folderPath);
+          setConnectedReposCount(connectedRepos.length);
+        } catch (repoError) {
+          console.error("Error loading connected repos:", repoError);
+          setConnectedReposCount(0);
+        }
       } catch (err) {
         setError(`Error reading folder metadata: ${err}`);
       } finally {
@@ -406,6 +423,8 @@ export function FileReaderScreen({
         commitsByDate={commitsByDate}
         commitError={commitError}
         error={error}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={setSettingsOpen}
       />
 
       {/* Virtualized List */}
@@ -434,6 +453,14 @@ export function FileReaderScreen({
           </div>
         </div>
       )}
+
+      {/* Footer */}
+      <FileReaderFooter
+        folderPath={folderPath}
+        fileCount={allFilesMetadata.length}
+        connectedReposCount={connectedReposCount}
+        onSettingsClick={handleOpenSettings}
+      />
     </div>
   );
 }

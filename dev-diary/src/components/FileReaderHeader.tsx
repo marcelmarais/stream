@@ -14,6 +14,8 @@ interface FileReaderHeaderProps {
   commitsByDate: CommitsByDate;
   commitError: string | null;
   error: string | null;
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
 }
 
 // Navigation component with back button and settings
@@ -24,6 +26,8 @@ function HeaderNavigation({
   allFilesMetadata,
   commitsByDate,
   commitError,
+  settingsOpen,
+  onSettingsOpenChange,
 }: {
   onBack: () => void;
   folderPath: string;
@@ -31,6 +35,8 @@ function HeaderNavigation({
   allFilesMetadata: MarkdownFileMetadata[];
   commitsByDate: CommitsByDate;
   commitError: string | null;
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
 }) {
   return (
     <div className="mb-4 flex items-center justify-between">
@@ -43,6 +49,8 @@ function HeaderNavigation({
         allFilesMetadata={allFilesMetadata}
         commitsByDate={commitsByDate}
         commitError={commitError}
+        open={settingsOpen}
+        onOpenChange={onSettingsOpenChange}
       />
     </div>
   );
@@ -66,6 +74,8 @@ export function FileReaderHeader({
   commitsByDate,
   commitError,
   error,
+  settingsOpen,
+  onSettingsOpenChange,
 }: FileReaderHeaderProps) {
   return (
     <div className="mx-auto w-full max-w-4xl flex-shrink-0 px-2 py-8">
@@ -76,6 +86,8 @@ export function FileReaderHeader({
         allFilesMetadata={allFilesMetadata}
         commitsByDate={commitsByDate}
         commitError={commitError}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={onSettingsOpenChange}
       />
 
       {/* Error Display */}
