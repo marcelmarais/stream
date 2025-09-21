@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, X } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { useCallback, useId, useMemo, useState } from "react";
 import type { CommitFilters, GitCommit } from "../utils/gitReader";
 import { formatCommitAuthor } from "../utils/gitReader";
@@ -112,7 +112,7 @@ export function CommitFilter({
     return (
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Filter
+          <SlidersHorizontal
             className={`h-4 w-4 ${hasActiveFilters || isExpanded ? "bg-white" : ""}`}
           />
           <span className="text-sm">No commits loaded yet</span>
@@ -131,7 +131,7 @@ export function CommitFilter({
           onClick={() => setIsExpanded(!isExpanded)}
           className="h-auto p-1 text-xs"
         >
-          <Filter
+          <SlidersHorizontal
             className={`h-4 w-4 ${hasActiveFilters || isExpanded ? "fill-white" : ""}`}
           />
         </Button>
