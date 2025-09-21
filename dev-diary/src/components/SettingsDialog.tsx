@@ -27,11 +27,11 @@ interface SettingsDialogProps {
 // Folder path display component
 function FolderInfo({ folderPath }: { folderPath: string }) {
   return (
-    <div className="space-y-2">
-      <h3 className="font-medium text-foreground">Current Folder</h3>
-      <div className="text-muted-foreground text-sm">
-        Reading from:{" "}
-        <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
+    <div className="space-y-3">
+      <h3 className="font-semibold text-foreground text-lg">Current Folder</h3>
+      <div className="text-muted-foreground">
+        <div className="mb-2 text-sm">Reading from:</div>
+        <code className="block break-all rounded-md bg-background px-3 py-2 font-mono text-sm">
           {folderPath}
         </code>
       </div>
@@ -50,24 +50,30 @@ function StatusInfo({
   commitError: string | null;
 }) {
   return (
-    <div className="space-y-2">
-      <h3 className="font-medium text-foreground">Status Information</h3>
-      <div className="space-y-1">
-        <div className="text-muted-foreground text-sm">
-          📄 Found {fileCount} markdown files
+    <div className="space-y-3">
+      <h3 className="font-semibold text-foreground text-lg">
+        Status Information
+      </h3>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className="font-medium">{fileCount}</span>
+          <span>markdown files found</span>
         </div>
 
         {/* Git Commits Status */}
         {Object.keys(commitsByDate).length > 0 && (
-          <div className="text-blue-600 text-sm dark:text-blue-400">
-            🔄 Found commits for {Object.keys(commitsByDate).length} days
-            (loaded on-demand)
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <span className="font-medium">
+              {Object.keys(commitsByDate).length}
+            </span>
+            <span>days with commits (loaded on-demand)</span>
           </div>
         )}
 
         {commitError && (
-          <div className="rounded-md border border-orange-500/20 bg-orange-500/10 p-2 text-orange-700 text-sm dark:text-orange-400">
-            ⚠️ {commitError}
+          <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-destructive text-sm">
+            <div className="mb-1 font-medium">Git Error</div>
+            <div>{commitError}</div>
           </div>
         )}
       </div>
@@ -78,14 +84,16 @@ function StatusInfo({
 // Loading state component
 function LoadingState() {
   return (
-    <div className="flex items-center justify-center py-8">
-      <div className="text-center">
-        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
-        <div className="font-medium text-lg text-primary">
-          Reading folder metadata...
-        </div>
-        <div className="mt-2 text-muted-foreground text-sm">
-          Please wait while we scan for markdown files
+    <div className="flex items-center justify-center py-12">
+      <div className="space-y-4 text-center">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-foreground" />
+        <div>
+          <div className="font-semibold text-foreground text-lg">
+            Reading folder metadata...
+          </div>
+          <div className="mt-2 text-muted-foreground">
+            Please wait while we scan for markdown files
+          </div>
         </div>
       </div>
     </div>
@@ -109,38 +117,41 @@ export function SettingsDialog({
           <span className="sr-only">Open settings</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Settings & Information</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="max-h-[85vh] min-w-[66vw] overflow-y-scroll">
+        <DialogHeader className="pb-6">
+          <DialogTitle className="text-xl">Settings & Information</DialogTitle>
+          <DialogDescription className="text-base">
             Manage your folder settings and connected repositories
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-8">
           {/* Folder Information */}
-          <FolderInfo folderPath={folderPath} />
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <FolderInfo folderPath={folderPath} />
+          </div>
 
           {/* Status Information */}
-          {isLoadingMetadata ? (
-            <LoadingState />
-          ) : (
-            <StatusInfo
-              fileCount={allFilesMetadata.length}
-              commitsByDate={commitsByDate}
-              commitError={commitError}
-            />
-          )}
+          <div className="rounded-lg border bg-muted/30 p-4">
+            {isLoadingMetadata ? (
+              <LoadingState />
+            ) : (
+              <StatusInfo
+                fileCount={allFilesMetadata.length}
+                commitsByDate={commitsByDate}
+                commitError={commitError}
+              />
+            )}
+          </div>
 
           {/* Repository Connector */}
-          <div className="space-y-2">
-            <h3 className="font-medium text-foreground">
-              Repository Management
-            </h3>
-            <RepoConnector
-              markdownDirectory={folderPath}
-              className="border-0 bg-transparent p-0 shadow-none"
-            />
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-foreground text-lg">
+                Repository Management
+              </h3>
+            </div>
+            <RepoConnector markdownDirectory={folderPath} className="" />
           </div>
         </div>
       </DialogContent>

@@ -3,7 +3,29 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
+import {
+  CheckCircle2,
+  CircleAlert,
+  Folder,
+  GitBranch,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 
 const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
 
@@ -158,206 +180,237 @@ export function RepoConnector({
 
   if (isLoading) {
     return (
-      <div
-        className={`rounded-lg border border-border bg-card p-4 shadow-sm ${className}`}
-      >
-        <div className="animate-pulse text-center text-muted-foreground text-sm">
-          Loading connected repositories...
-        </div>
-      </div>
+      <Card className={className}>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <GitBranch className="size-4 text-muted-foreground" />
+            <CardTitle className="font-medium text-sm">
+              Connected Code Repositories
+            </CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Loading repositories…
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-6 w-full animate-pulse rounded bg-muted" />
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div
-      className={`rounded-lg border border-border bg-card p-4 shadow-sm ${className}`}
-    >
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
+    <Card className={className}>
+      <CardHeader>
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground text-sm">🔗</span>
-          <h3 className="font-medium text-foreground text-sm">
+          <GitBranch className="size-4 text-muted-foreground" />
+          <CardTitle className="font-medium text-sm">
             Connected Code Repositories
-          </h3>
-          {connectedRepos.length > 0 && (
-            <span className="rounded-full bg-blue-500/20 px-2 py-1 text-blue-700 text-xs dark:text-blue-300">
-              {connectedRepos.length}
-            </span>
-          )}
+          </CardTitle>
+          {connectedRepos.length > 0 ? (
+            <Badge variant="secondary">{connectedRepos.length}</Badge>
+          ) : null}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowConnector(!showConnector)}
-          className="text-muted-foreground text-xs hover:text-foreground"
-        >
-          {showConnector ? "Hide" : "Manage"}
-        </button>
-      </div>
+        <CardDescription className="text-xs">
+          Link code repositories to this markdown folder
+        </CardDescription>
+        <CardAction>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowConnector(!showConnector)}
+          >
+            {showConnector ? "Hide" : "Manage"}
+          </Button>
+        </CardAction>
+      </CardHeader>
 
-      {/* Connected Repos Summary (always visible) */}
-      {connectedRepos.length > 0 && !showConnector && (
-        <div className="space-y-1">
-          {connectedRepos.slice(0, 2).map((repo) => (
-            <div key={repo} className="text-muted-foreground text-xs">
-              📁 {repo.split("/").pop()}
-            </div>
-          ))}
-          {connectedRepos.length > 2 && (
-            <div className="text-gray-500 text-xs">
-              +{connectedRepos.length - 2} more...
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* No repos connected message */}
-      {connectedRepos.length === 0 && !showConnector && (
-        <div className="text-muted-foreground text-xs italic">
-          No code repositories connected
-        </div>
-      )}
-
-      {/* Full Connector Interface */}
-      {showConnector && (
-        <div className="space-y-4">
-          {/* Add Repository Button */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleAddRepo}
-              disabled={isAddingRepo}
-              className="flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isAddingRepo ? (
-                <>
-                  <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <span>+</span>
-                  Connect Repository
-                </>
-              )}
-            </button>
-
-            {connectedRepos.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleFetchRepos}
-                  disabled={isFetching}
-                  className="flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isFetching ? (
-                    <>
-                      <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
-                      Fetching...
-                    </>
-                  ) : (
-                    <>
-                      <span>🔄</span>
-                      Git Fetch All
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleClearAllRepos}
-                  className="rounded-md bg-red-500 px-3 py-2 text-sm text-white transition-colors hover:bg-red-600"
-                >
-                  Clear All
-                </button>
-              </>
-            )}
+      <CardContent className="space-y-6">
+        {/* Summary (when collapsed) */}
+        {connectedRepos.length > 0 && !showConnector ? (
+          <div className="space-y-2">
+            {connectedRepos.slice(0, 2).map((repo) => (
+              <div
+                key={repo}
+                className="flex items-center gap-2 text-muted-foreground text-sm"
+              >
+                <span className="text-muted-foreground">📁</span>
+                <span>{repo.split("/").pop()}</span>
+              </div>
+            ))}
+            {connectedRepos.length > 2 ? (
+              <div className="text-muted-foreground text-sm">
+                +{connectedRepos.length - 2} more repositories
+              </div>
+            ) : null}
           </div>
+        ) : null}
 
-          {/* Fetch Results */}
-          {showFetchResults && fetchResults.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="font-medium text-gray-700 text-sm">
-                  Fetch Results:
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowFetchResults(false)}
-                  className="text-gray-500 text-xs hover:text-gray-700"
-                >
-                  Hide
-                </button>
-              </div>
-              <div className="max-h-32 space-y-1 overflow-y-auto">
-                {fetchResults.map((result) => (
-                  <div
-                    key={result.repo_path}
-                    className={`rounded-md border p-2 text-xs ${
-                      result.success
-                        ? "border-green-200 bg-green-50 text-green-800"
-                        : "border-red-200 bg-red-50 text-red-800"
-                    }`}
-                  >
-                    <div className="font-medium">
-                      {result.repo_path.split("/").pop()}
-                    </div>
-                    <div className="mt-1">{result.message}</div>
-                  </div>
-                ))}
-              </div>
+        {/* Empty (when collapsed) */}
+        {connectedRepos.length === 0 && !showConnector ? (
+          <div className="py-4 text-center">
+            <div className="text-muted-foreground text-sm">
+              No code repositories connected
             </div>
-          )}
+            <div className="mt-1 text-muted-foreground text-xs">
+              Click "Manage" to connect repositories
+            </div>
+          </div>
+        ) : null}
 
-          {/* Connected Repositories List */}
-          {connectedRepos.length > 0 && (
-            <div className="space-y-2">
-              <div className="font-medium text-gray-700 text-sm">
-                Connected Repositories:
-              </div>
-              <div className="max-h-40 space-y-2 overflow-y-auto">
-                {connectedRepos.map((repo) => (
-                  <div
-                    key={repo}
-                    className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-3"
+        {/* Full interface (when expanded) */}
+        {showConnector ? (
+          <div className="space-y-6">
+            {/* Primary Actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={handleAddRepo} disabled={isAddingRepo} size="sm">
+                {isAddingRepo ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Adding…
+                  </>
+                ) : (
+                  <>
+                    <Plus className="size-4" />
+                    Connect Repository
+                  </>
+                )}
+              </Button>
+
+              {connectedRepos.length > 0 ? (
+                <>
+                  <Button
+                    onClick={handleFetchRepos}
+                    disabled={isFetching}
+                    variant="secondary"
+                    size="sm"
                   >
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="text-green-600 text-sm">📁</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-mono text-gray-800 text-sm">
-                          {repo.split("/").pop()}
-                        </div>
-                        <div className="truncate font-mono text-gray-500 text-xs">
-                          {repo}
+                    {isFetching ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Fetching…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="size-4" />
+                        Git Fetch All
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    onClick={handleClearAllRepos}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    <Trash2 className="size-4" />
+                    Clear All
+                  </Button>
+                </>
+              ) : null}
+            </div>
+
+            {/* Fetch Results */}
+            {showFetchResults && fetchResults.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-sm">Fetch results</div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowFetchResults(false)}
+                  >
+                    Hide
+                  </Button>
+                </div>
+                <ScrollArea className="max-h-48 rounded-md border">
+                  <div className="space-y-2 p-4">
+                    {fetchResults.map((result) => (
+                      <div
+                        key={result.repo_path}
+                        className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3"
+                      >
+                        {result.success ? (
+                          <CheckCircle2 className="size-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <CircleAlert className="size-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <div className="min-w-0">
+                          <div className="truncate font-mono text-sm">
+                            {result.repo_path.split("/").pop()}
+                          </div>
+                          <div className="mt-0.5 text-muted-foreground text-xs">
+                            {result.message}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveRepo(repo)}
-                      className="ml-2 flex-shrink-0 rounded-md bg-red-500 px-2 py-1 text-white text-xs transition-colors hover:bg-red-600"
-                    >
-                      Remove
-                    </button>
+                    ))}
                   </div>
-                ))}
+                </ScrollArea>
               </div>
-            </div>
-          )}
+            ) : null}
 
-          {/* Empty State */}
-          {connectedRepos.length === 0 && (
-            <div className="rounded-md border-2 border-gray-300 border-dashed p-6 text-center">
-              <div className="text-gray-400 text-sm">
-                No code repositories connected
+            {/* Connected Repositories */}
+            {connectedRepos.length > 0 ? (
+              <div className="space-y-2">
+                <div className="font-medium text-sm">
+                  Connected repositories
+                </div>
+                <ScrollArea className="max-h-64 overflow-y-scroll rounded-md border">
+                  <div className="space-y-2 p-4">
+                    {connectedRepos.map((repo) => (
+                      <div
+                        key={repo}
+                        className="flex items-center justify-between rounded-lg border bg-muted/30 p-3"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <Folder className="size-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <div className="truncate font-mono text-sm">
+                              {repo.split("/").pop()}
+                            </div>
+                            <div className="truncate text-muted-foreground text-xs">
+                              {repo}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => handleRemoveRepo(repo)}
+                          variant="ghost"
+                          size="sm"
+                          className="ml-2 shrink-0 text-destructive"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
-              <div className="mt-1 text-gray-400 text-xs">
-                Connect repositories to link your markdown notes with your code
+            ) : null}
+
+            {/* Empty State */}
+            {connectedRepos.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center">
+                <div className="text-muted-foreground text-sm">
+                  No code repositories connected
+                </div>
+                <div className="mt-1 text-muted-foreground text-xs">
+                  Connect repositories to link your markdown notes with your
+                  code
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Visual separator when expanded and content exists */}
+        {showConnector &&
+        (connectedRepos.length > 0 || fetchResults.length > 0) ? (
+          <Separator />
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
