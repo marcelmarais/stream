@@ -94,7 +94,7 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
                                 <Badge
                                   key={branch}
                                   variant={
-                                    isMainBranch ? "secondary" : "outline"
+                                    isMainBranch ? "default" : "secondary"
                                   }
                                   className="px-1.5 py-0 text-[10px]"
                                 >
