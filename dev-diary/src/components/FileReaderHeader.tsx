@@ -1,8 +1,7 @@
 "use client";
 
-import type { CommitFilters, CommitsByDate } from "../utils/gitReader";
+import type { CommitsByDate } from "../utils/gitReader";
 import type { MarkdownFileMetadata } from "../utils/markdownReader";
-import CommitFilterButton from "./CommitFilterButton";
 import SettingsDialog from "./SettingsDialog";
 
 interface FileReaderHeaderProps {
