@@ -1,5 +1,7 @@
 "use client";
 
+import { CalendarPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { CommitsByDate } from "../utils/gitReader";
 import type { MarkdownFileMetadata } from "../utils/markdownReader";
 import SettingsDialog from "./SettingsDialog";
@@ -13,6 +15,8 @@ interface FileReaderHeaderProps {
   error: string | null;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
+  onCreateToday: () => void | Promise<void>;
+  creatingToday?: boolean;
 }
 
 // Navigation component with settings only
@@ -22,6 +26,8 @@ function HeaderNavigation({
   allFilesMetadata,
   commitsByDate,
   commitError,
+  onCreateToday,
+  creatingToday,
   settingsOpen,
   onSettingsOpenChange,
 }: {
@@ -30,11 +36,22 @@ function HeaderNavigation({
   allFilesMetadata: MarkdownFileMetadata[];
   commitsByDate: CommitsByDate;
   commitError: string | null;
+  onCreateToday: () => void | Promise<void>;
+  creatingToday?: boolean;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-end">
+    <div className="flex items-center justify-end gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        onClick={onCreateToday}
+        disabled={isLoadingMetadata || Boolean(creatingToday)}
+      >
+        <CalendarPlus className="size-4" />
+      </Button>
       <SettingsDialog
         folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}
@@ -67,6 +84,8 @@ export function FileReaderHeader({
   error,
   settingsOpen,
   onSettingsOpenChange,
+  onCreateToday,
+  creatingToday,
 }: FileReaderHeaderProps) {
   return (
     <div className="!bg-transparent flex-shrink-0">
@@ -76,6 +95,8 @@ export function FileReaderHeader({
         allFilesMetadata={allFilesMetadata}
         commitsByDate={commitsByDate}
         commitError={commitError}
+        onCreateToday={onCreateToday}
+        creatingToday={creatingToday}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={onSettingsOpenChange}
       />

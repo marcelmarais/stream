@@ -488,3 +488,37 @@ export async function writeMarkdownFileContent(
     throw new Error(`Failed to write markdown file: ${error}`);
   }
 }
+
+/**
+ * Returns today's file name in YYYY-MM-DD.md format using local time.
+ */
+export function getTodayMarkdownFileName(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}.md`;
+}
+
+/**
+ * Ensures that a markdown file for today exists at the root of directoryPath.
+ * If it doesn't exist, it is created with empty content.
+ * Returns the absolute file path and whether it was created.
+ */
+export async function ensureTodayMarkdownFile(
+  directoryPath: string,
+): Promise<{ filePath: string; created: boolean }> {
+  const fileName = getTodayMarkdownFileName();
+  const filePath = directoryPath.endsWith("/")
+    ? `${directoryPath}${fileName}`
+    : `${directoryPath}/${fileName}`;
+
+  try {
+    await stat(filePath);
+    return { filePath, created: false };
+  } catch {
+    // File doesn't exist, create it
+    await writeMarkdownFileContent(filePath, "");
+    return { filePath, created: true };
+  }
+}

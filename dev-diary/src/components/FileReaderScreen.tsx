@@ -13,6 +13,7 @@ import {
   groupCommitsByDate,
 } from "../utils/gitReader";
 import {
+  ensureTodayMarkdownFile,
   type MarkdownFileMetadata,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
@@ -137,6 +138,7 @@ export function FileReaderScreen({
     repos: [],
     searchTerm: "",
   });
+  const [creatingToday, setCreatingToday] = useState<boolean>(false);
 
   // Keep a ref of commitsByDate to avoid stale closures in async code
   const commitsByDateRef = useRef<CommitsByDate>({});
@@ -176,6 +178,45 @@ export function FileReaderScreen({
   const handleOpenSettings = useCallback(() => {
     setSettingsOpen(true);
   }, []);
+
+  const refreshMetadata = useCallback(async () => {
+    setIsLoadingMetadata(true);
+    setError(null);
+    try {
+      const metadata = await readAllMarkdownFilesMetadata(folderPath, {
+        maxFileSize: 5 * 1024 * 1024,
+      });
+      setAllFilesMetadata(metadata);
+      const grouped = createGroupedItems(metadata);
+      setGroupedItems(grouped);
+    } catch (err) {
+      setError(`Error reading folder metadata: ${err}`);
+    } finally {
+      setIsLoadingMetadata(false);
+    }
+  }, [folderPath]);
+
+  const handleCreateToday = useCallback(async () => {
+    if (!folderPath) return;
+    setCreatingToday(true);
+    try {
+      const { filePath } = await ensureTodayMarkdownFile(folderPath);
+      // Load content for the new file into cache so it renders immediately
+      const contentMap = await readMarkdownFilesContentByPaths([filePath]);
+      const content = contentMap.get(filePath) ?? "";
+      setLoadedContent((prev) => {
+        const map = new Map(prev);
+        map.set(filePath, content);
+        return map;
+      });
+      await refreshMetadata();
+    } catch (e) {
+      console.error("Failed to create today's file:", e);
+      setError(`Failed to create today's file: ${e}`);
+    } finally {
+      setCreatingToday(false);
+    }
+  }, [folderPath, refreshMetadata]);
 
   // Handle content changes during editing
   const handleContentChange = useCallback(
@@ -432,6 +473,8 @@ export function FileReaderScreen({
               error={error}
               settingsOpen={settingsOpen}
               onSettingsOpenChange={setSettingsOpen}
+              onCreateToday={handleCreateToday}
+              creatingToday={creatingToday}
             />
           </div>
         </div>
