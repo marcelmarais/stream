@@ -1,7 +1,7 @@
 "use client";
 
 import { debounce } from "lodash";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 import {
   type CommitFilters,
@@ -50,7 +50,7 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
   const filesByDate = new Map<string, MarkdownFileMetadata[]>();
 
   files.forEach((file) => {
-    const dateStr = file.createdAt.toISOString().split("T")[0];
+    const dateStr = getDateKeyFromDate(file.createdAt);
     if (!filesByDate.has(dateStr)) {
       filesByDate.set(dateStr, []);
     }
@@ -71,16 +71,7 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
     if (!filesForDate) return;
 
     // Format date for display
-    const date = new Date(dateStr);
-    const displayDate = date
-      .toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      })
-      .replace(", ", " — ")
-      .toLowerCase();
+    const displayDate = formatDisplayDateFromKey(dateStr);
 
     // Add date header
     items.push({
@@ -104,6 +95,24 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
 
 // Simplified - virtualization handles efficient loading
 
+// Helpers
+function getDateKeyFromDate(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
+
+function formatDisplayDateFromKey(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date
+    .toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })
+    .replace(", ", " — ")
+    .toLowerCase();
+}
+
 export function FileReaderScreen({
   folderPath,
   onBack,
@@ -117,9 +126,6 @@ export function FileReaderScreen({
     new Map(),
   );
   const [error, setError] = useState<string | null>(null);
-  const [_editingFile, setEditingFile] = useState<string | null>(null);
-  const [_editingContent, setEditingContent] = useState<string>("");
-  const [_savingFiles, setSavingFiles] = useState<Set<string>>(new Set());
   const [saveErrors, setSaveErrors] = useState<Map<string, string>>(new Map());
   const [commitsByDate, setCommitsByDate] = useState<CommitsByDate>({});
   const [commitError, setCommitError] = useState<string | null>(null);
@@ -132,10 +138,15 @@ export function FileReaderScreen({
     searchTerm: "",
   });
 
+  // Keep a ref of commitsByDate to avoid stale closures in async code
+  const commitsByDateRef = useRef<CommitsByDate>({});
+  useEffect(() => {
+    commitsByDateRef.current = commitsByDate;
+  }, [commitsByDate]);
+
   // Create debounced save function
   const debouncedSave = useCallback(
     debounce(async (filePath: string, content: string) => {
-      setSavingFiles((prev) => new Set(prev).add(filePath));
       setSaveErrors((prev) => {
         const newMap = new Map(prev);
         newMap.delete(filePath);
@@ -157,29 +168,10 @@ export function FileReaderScreen({
           newMap.set(filePath, `Failed to save: ${error}`);
           return newMap;
         });
-      } finally {
-        setSavingFiles((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(filePath);
-          return newSet;
-        });
       }
     }, 500),
     [],
   );
-
-  const _handleEditFile = useCallback(
-    (filePath: string, currentContent: string) => {
-      setEditingFile(filePath);
-      setEditingContent(currentContent);
-    },
-    [],
-  );
-
-  const _handleCancelEdit = useCallback(() => {
-    setEditingFile(null);
-    setEditingContent("");
-  }, []);
 
   const handleOpenSettings = useCallback(() => {
     setSettingsOpen(true);
@@ -188,7 +180,6 @@ export function FileReaderScreen({
   // Handle content changes during editing
   const handleContentChange = useCallback(
     (filePath: string, newContent: string) => {
-      setEditingContent(newContent);
       debouncedSave(filePath, newContent);
     },
     [debouncedSave],
@@ -237,80 +228,59 @@ export function FileReaderScreen({
         setConnectedReposCount(connectedRepos.length);
         if (connectedRepos.length === 0) return;
 
-        // Get unique dates from visible files
+        // Unique date keys for visible files
         const visibleDates = Array.from(
           new Set(
-            visibleFiles.map(
-              (file) => file.createdAt.toISOString().split("T")[0],
-            ),
+            visibleFiles.map((file) => getDateKeyFromDate(file.createdAt)),
           ),
         );
 
-        // Check current commits state and filter dates we need
-        setCommitsByDate((currentCommitsByDate) => {
-          const datesToLoad = visibleDates.filter(
-            (dateStr) => !currentCommitsByDate[dateStr],
-          );
+        // Filter out dates we already have
+        const datesToLoad = visibleDates.filter(
+          (dateStr) => !commitsByDateRef.current[dateStr],
+        );
 
-          if (datesToLoad.length > 0) {
-            // Trigger async loading outside of state setter
-            setTimeout(async () => {
-              try {
-                console.log(
-                  `Loading commits for ${datesToLoad.length} new dates:`,
-                  datesToLoad,
-                );
+        if (datesToLoad.length === 0) return;
 
-                // Create date ranges for each date we need
-                const dateRanges = datesToLoad.map((dateStr) => {
-                  const date = new Date(dateStr);
-                  const startOfDay = new Date(date);
-                  startOfDay.setHours(0, 0, 0, 0);
-                  const endOfDay = new Date(date);
-                  endOfDay.setHours(23, 59, 59, 999);
-                  return createDateRange.custom(startOfDay, endOfDay);
-                });
-
-                // Load commits for each date range
-                const allNewCommits: CommitsByDate = {};
-
-                for (const dateRange of dateRanges) {
-                  try {
-                    const repoCommits = await getGitCommitsForRepos(
-                      connectedRepos,
-                      dateRange,
-                    );
-                    const groupedCommits = groupCommitsByDate(repoCommits);
-
-                    // Merge new commits with existing ones
-                    Object.assign(allNewCommits, groupedCommits);
-                  } catch (error) {
-                    console.error(
-                      `Error loading commits for date range:`,
-                      error,
-                    );
-                  }
-                }
-
-                // Update state with new commits (merge with existing)
-                setCommitsByDate((prev) => ({ ...prev, ...allNewCommits }));
-
-                console.log(
-                  `Loaded commits for ${Object.keys(allNewCommits).length} new days`,
-                );
-              } catch (error) {
-                console.error(
-                  "Error loading commits for visible files:",
-                  error,
-                );
-                setCommitError(`Failed to load git commits: ${error}`);
-              }
-            }, 0);
-          }
-
-          // Return current state unchanged
-          return currentCommitsByDate;
+        // Build date ranges
+        const dateRanges = datesToLoad.map((dateStr) => {
+          const date = new Date(dateStr);
+          const startOfDay = new Date(date);
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(date);
+          endOfDay.setHours(23, 59, 59, 999);
+          return {
+            dateStr,
+            range: createDateRange.custom(startOfDay, endOfDay),
+          };
         });
+
+        // Fetch in parallel
+        const results = await Promise.all(
+          dateRanges.map(async ({ range }) => {
+            try {
+              const repoCommits = await getGitCommitsForRepos(
+                connectedRepos,
+                range,
+              );
+              return groupCommitsByDate(repoCommits);
+            } catch (error) {
+              console.error("Error loading commits for date range:", error);
+              return {} as CommitsByDate;
+            }
+          }),
+        );
+
+        const merged: CommitsByDate = {};
+        for (const partial of results) {
+          for (const [key, value] of Object.entries(partial)) {
+            merged[key] = value;
+          }
+        }
+
+        if (Object.keys(merged).length > 0) {
+          setCommitsByDate((prev) => ({ ...prev, ...merged }));
+        }
       } catch (error) {
         console.error("Error loading commits for visible files:", error);
         setCommitError(`Failed to load git commits: ${error}`);
@@ -469,13 +439,13 @@ export function FileReaderScreen({
 
       {/* Virtualized List */}
       {!isLoadingMetadata && groupedItems.length > 0 && (
-        <div className="mx-auto w-full max-w-4xl flex-1 pt-6">
+        <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 pt-6">
           <Virtuoso
             totalCount={groupedItems.length}
             itemContent={renderItem}
             rangeChanged={handleRangeChanged}
             overscan={2}
-            style={{ height: "100%" }}
+            className="h-full"
           />
         </div>
       )}
