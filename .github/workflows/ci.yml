@@ -25,13 +25,17 @@ jobs:
         with:
           node-version: "20"
           cache: "pnpm"
+          cache-dependency-path: "dev-diary/pnpm-lock.yaml"
 
       - name: Install dependencies
+        working-directory: dev-diary
         run: pnpm install --frozen-lockfile
 
       - name: Run Biome check (lint + format)
+        working-directory: dev-diary
         run: pnpm check
 
       - name: Run TypeScript type check
+        working-directory: dev-diary
         run: pnpm exec tsc --noEmit
 
