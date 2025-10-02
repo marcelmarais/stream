@@ -8,14 +8,7 @@ on:
 jobs:
   build-and-release:
     name: Build and Release
-    strategy:
-      matrix:
-        include:
-          - platform: macos-latest
-            target: universal-apple-darwin
-            bundle: dmg
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
@@ -35,8 +28,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          workspaces: dev-diary/src-tauri -> target
 
       - name: Install dependencies
         working-directory: dev-diary
@@ -44,7 +40,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: dev-diary
-        run: pnpm tauri build --bundles ${{ matrix.bundle }} --target universal-apple-darwin
+        run: pnpm tauri build --bundles dmg
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
@@ -53,16 +49,17 @@ jobs:
         working-directory: dev-diary
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          cd src-tauri/target/universal-apple-darwin/release/bundle/dmg
+          ARCH=$(uname -m)
+          cd src-tauri/target/release/bundle/dmg
           for file in *.dmg; do
-            mv "$file" "dev-diary-${VERSION}-macos-universal.dmg"
+            mv "$file" "dev-diary-${VERSION}-macos-${ARCH}.dmg"
           done
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dev-diary/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            dev-diary/src-tauri/target/release/bundle/dmg/*.dmg
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -70,6 +67,8 @@ jobs:
             ## Installation Instructions (macOS - Unsigned)
             
             ⚠️ **Important**: This app is not signed with an Apple Developer certificate.
+            
+            **Platform**: Apple Silicon (M1/M2/M3/M4) only - Intel Macs are not currently supported
             
             ### How to install:
             1. Download the `.dmg` file below
