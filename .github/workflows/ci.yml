@@ -5,6 +5,7 @@ on:
     branches: ["main", "feat/**"]
   pull_request:
     branches: ["main"]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   lint-and-typecheck:
@@ -42,7 +43,7 @@ jobs:
   build-macos:
     name: Build macOS App
     runs-on: macos-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'build-macos')
 
     steps:
       - name: Checkout repository

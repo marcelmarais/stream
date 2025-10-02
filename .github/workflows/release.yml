@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    strategy:
+      matrix:
+        include:
+          - platform: macos-latest
+            target: universal-apple-darwin
+            bundle: dmg
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: "dev-diary/pnpm-lock.yaml"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install dependencies
+        working-directory: dev-diary
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        working-directory: dev-diary
+        run: pnpm tauri build --bundles ${{ matrix.bundle }} --target universal-apple-darwin
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Rename and prepare artifacts
+        working-directory: dev-diary
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cd src-tauri/target/universal-apple-darwin/release/bundle/dmg
+          for file in *.dmg; do
+            mv "$file" "dev-diary-${VERSION}-macos-universal.dmg"
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dev-diary/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Installation Instructions (macOS - Unsigned)
+            
+            ⚠️ **Important**: This app is not signed with an Apple Developer certificate.
+            
+            ### How to install:
+            1. Download the `.dmg` file below
+            2. Open the DMG and drag the app to Applications
+            3. **First time only**: Right-click the app → Select "Open" → Click "Open" again
+            4. macOS will remember your choice and you can open normally afterward
+            
+            ### What's Changed
+            See below for automatically generated release notes.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
