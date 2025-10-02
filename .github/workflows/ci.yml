@@ -39,3 +39,49 @@ jobs:
         working-directory: dev-diary
         run: pnpm exec tsc --noEmit
 
+  build-macos:
+    name: Build macOS App
+    runs-on: macos-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: "dev-diary/pnpm-lock.yaml"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install dependencies
+        working-directory: dev-diary
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        working-directory: dev-diary
+        run: pnpm tauri build --bundles app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Upload macOS app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-diary-macos-${{ github.event.pull_request.number }}
+          path: dev-diary/src-tauri/target/release/bundle/macos/*.app
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
+
