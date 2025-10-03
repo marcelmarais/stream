@@ -12,23 +12,27 @@
     "format": "biome format --write .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@milkdown/crepe": "^7.15.5",
-    "@milkdown/kit": "^7.15.5",
-    "@milkdown/react": "^7.15.5",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-separator": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
+    "@tailwindcss/typography": "^0.5.19",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-fs": "~2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-store": "~2",
+    "@tiptap/extension-placeholder": "^3.6.3",
+    "@tiptap/extension-typography": "^3.6.3",
+    "@tiptap/pm": "^3.6.3",
+    "@tiptap/react": "^3.6.3",
+    "@tiptap/starter-kit": "^3.6.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lodash": "^4.17.21",
@@ -38,7 +42,8 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-virtuoso": "^4.14.0",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",

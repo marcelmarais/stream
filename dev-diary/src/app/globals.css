@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -147,171 +148,109 @@
 }
 
 @layer components {
-  /* Milkdown Editor Styling */
+  /* TipTap Editor Styling */
   .markdown-editor-wrapper {
     @apply w-full h-full relative;
   }
 
-  .milkdown-container {
-    @apply w-full h-full relative text-muted-foreground;
+  /* Obsidian-like prose overrides */
+  .prose.prose-obsidian {
+    /* Much lighter, smaller headings */
+    & h1 {
+      font-size: 1.5rem;
+      font-weight: 500;
+      margin-top: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    & h2 {
+      font-size: 1.25rem;
+      font-weight: 500;
+      margin-top: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    & h3 {
+      font-size: 1.125rem;
+      font-weight: 500;
+      margin-top: 0.875rem;
+      margin-bottom: 0.625rem;
+    }
+    
+    & h4 {
+      font-size: 1rem;
+      font-weight: 500;
+      margin-top: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    & h5 {
+      font-size: 1rem;
+      font-weight: 400;
+      margin-top: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    & h6 {
+      font-size: 0.875rem;
+      font-weight: 400;
+      margin-top: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Override paragraph spacing inside list items - more specific, comes first */
+    & li > p {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+
+    /* Comfortable paragraph spacing */
+    & p {
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    /* No spacing for nested lists - more specific, comes first */
+    & ul > li > ul,
+    & ol > li > ol,
+    & ul > li > ol,
+    & ol > li > ul {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+
+    & ul, & ol {
+      margin-top: 0.5rem;
+      margin-bottom: 0;
+      padding-left: 1.5rem;
+    }
+    
+    & li {
+      margin-top: 0;
+      margin-bottom: 0;
+      line-height: 1;
+    }
+
+    /* Comfortable blockquotes */
+    & blockquote {
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+      font-weight: 400;
+    }
+
+    /* Comfortable code blocks */
+    & pre {
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+    }
   }
 
-  .milkdown {
-    @apply w-full h-full;
-  }
-
-  .milkdown .editor {
-    @apply text-muted-foreground bg-background leading-relaxed;
-    @apply focus:outline-none;
-    overflow: visible;
-  }
-
-  /* Typography Styles */
-  .milkdown .editor h1 {
-    @apply text-2xl font-semibold mb-6 mt-8 text-muted-foreground leading-tight;
-  }
-
-  .milkdown .editor h2 {
-    @apply text-xl font-semibold mb-4 mt-6 text-muted-foreground leading-tight;
-  }
-
-  .milkdown .editor h3 {
-    @apply text-lg font-semibold mb-3 mt-5 text-muted-foreground leading-tight;
-  }
-
-  .milkdown .editor h4 {
-    @apply text-base font-semibold mb-2 mt-4 text-muted-foreground leading-tight;
-  }
-
-  .milkdown-icon {
-    @apply hidden;
-  }
-
-  .milkdown .editor h5 {
-    @apply text-sm font-semibold mb-2 mt-3 text-muted-foreground leading-tight;
-  }
-
-  .milkdown .editor h6 {
-    @apply text-sm font-medium mb-2 mt-3 text-muted-foreground leading-tight;
-  }
-
-  .milkdown .editor p {
-    @apply mb-4 text-muted-foreground leading-relaxed;
-  }
-
-  .milkdown .editor blockquote {
-    @apply border-l-4 border-primary/30 pl-6 italic my-6 text-muted-foreground bg-muted/30 py-4 rounded-r-md;
-  }
-
-  .milkdown .editor ul {
-    @apply mb-6 pl-6 list-disc text-muted-foreground space-y-2;
-  }
-
-  .milkdown .editor ol {
-    @apply mb-6 pl-6 text-muted-foreground space-y-2;
-  }
-
-  .milkdown .editor li {
-    @apply list-item leading-relaxed;
-  }
-
-  .milkdown .editor .label-wrapper {
-    @apply h-0;
-  }
-
-  .milkdown .editor code {
-    @apply bg-muted px-2 py-1 rounded-md text-sm font-mono font-medium;
-  }
-
-  .milkdown .editor pre {
-    @apply bg-muted p-6 rounded-lg overflow-x-auto my-6 border border-border/50;
-  }
-
-  .milkdown .editor pre code {
-    @apply bg-transparent p-0;
-  }
-
-  /* Link Styles */
-  .milkdown .editor a {
-    @apply text-primary underline hover:text-primary/80 transition-colors;
-  }
-
-  /* Text Formatting Styles */
-  .milkdown .editor strong {
-    @apply font-semibold text-foreground/80;
-  }
-
-  .milkdown .editor em {
-    @apply italic;
-  }
-
-  .milkdown .editor del,
-  .milkdown .editor .strikethrough {
-    @apply line-through text-muted-foreground/70;
-  }
-
-  /* Table Styles */
-  .milkdown .editor table {
-    @apply w-full border-collapse border border-border my-4;
-  }
-
-  .milkdown .editor th,
-  .milkdown .editor td {
-    @apply border border-border px-3 py-2 text-left;
-  }
-
-  .milkdown .editor th {
-    @apply bg-muted font-semibold;
-  }
-
-  /* Horizontal Rule */
-  .milkdown .editor hr {
-    @apply border-0 border-t border-border my-6;
-  }
-
-  /* Selection Styles */
-  .milkdown .editor ::selection {
-    @apply bg-primary/20;
-  }
-
-  /* Focus Styles */
-  .milkdown .editor:focus-within {
-    @apply outline-none;
-  }
-
-  /* Placeholder Styles */
-  .milkdown .editor .placeholder {
-    @apply text-muted-foreground pointer-events-none absolute;
-  }
-
-  /* CodeMirror Integration Styles */
-  .milkdown .editor .cm-editor {
-    @apply bg-muted rounded-lg;
-  }
-
-  .milkdown .editor .cm-content {
-    @apply p-4 min-h-[100px];
-  }
-
-  .milkdown .editor .cm-focused {
-    @apply outline-none ring-2 ring-primary/20;
-  }
-
-  /* Dark mode adjustments */
-  .dark .milkdown .editor {
-    @apply text-foreground;
-  }
-
-  .dark .milkdown .editor code {
-    @apply bg-muted text-foreground;
-  }
-
-  .dark .milkdown .editor pre {
-    @apply bg-muted;
-  }
-
-  .dark .milkdown .editor del,
-  .dark .milkdown .editor .strikethrough {
-    @apply line-through text-foreground/60;
+  /* Placeholder */
+  .tiptap p.is-editor-empty:first-child::before {
+    @apply text-muted-foreground;
+    content: attr(data-placeholder);
+    float: left;
+    pointer-events: none;
+    height: 0;
   }
 }
