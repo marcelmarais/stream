@@ -1,0 +1,278 @@
+---
+globs: MarkdownEditor.tsx
+alwaysApply: false
+---
+
+## Markdown Editor - TipTap Setup
+
+### Overview
+
+The `MarkdownEditor` component uses **TipTap** (a headless editor framework) to provide a rich WYSIWYG markdown editing experience. It handles **bidirectional binding** between markdown text and the editor state, allowing both reading and saving of markdown content.
+
+### Global CSS Setup Guidelines
+
+TipTap requires specific CSS configuration in `globals.css` for proper styling and functionality.
+
+#### 1. Tailwind Typography Plugin
+
+**MUST include** the `@tailwindcss/typography` plugin to enable `prose` classes that provide base markdown styling. This is essential for making the editor content look like formatted markdown/text rather than plain HTML.
+
+#### 2. Editor Container Styling
+
+Create a wrapper class (e.g., `.markdown-editor-wrapper`) in the `@layer components` section that provides:
+- Full width and height
+- Relative positioning for absolute child elements
+- Any additional layout constraints needed
+
+#### 3. Placeholder Functionality
+
+**Critical requirement** - Implement placeholder styling using:
+- Target the `.tiptap` class with the first empty paragraph selector
+- Use a `::before` pseudo-element to display placeholder text
+- Pull placeholder text from a data attribute using `content: attr(data-placeholder)`
+- Set `pointer-events: none` to prevent interference with cursor placement
+- Use muted colors that match your theme
+
+**Key concept:** TipTap adds an `is-editor-empty` class to empty paragraphs. Use this to conditionally show placeholders only when content is empty.
+
+#### 4. Custom Prose Styling (Optional)
+
+Override default Tailwind Typography styles by creating custom prose classes (e.g., `.prose-obsidian` or `.prose-custom`):
+
+**Heading customization:**
+- Adjust font sizes to match your design (smaller often feels less intrusive)
+- Control font weights (lighter weights for a cleaner look)
+- Fine-tune margins for comfortable reading
+
+**Paragraph and spacing:**
+- Set comfortable vertical rhythm between elements
+- Special attention to list item paragraphs (often need zero margins)
+- Adjust line heights for readability
+
+**List styling:**
+- Control indentation levels
+- Handle nested list spacing separately (often needs zero margins)
+- Ensure list items have appropriate vertical spacing
+
+**Block elements:**
+- Blockquotes need distinct styling but comfortable spacing
+- Code blocks should stand out but not overwhelm
+- Consider horizontal rules, tables, and other markdown elements
+
+#### Important CSS Principles
+
+1. **CSS Layer Organization** - Place all TipTap styles in `@layer components` to allow proper Tailwind cascade and overrides
+
+2. **Selector Specificity** - More specific selectors (like `li > p`) must come before general ones (`p`) to ensure proper cascade
+
+3. **Dark Mode Support** - Use `dark:prose-invert` in editor classes and ensure custom overrides respect dark mode
+
+4. **Responsive Considerations** - Typography should scale appropriately across device sizes
+
+5. **Theme Integration** - Leverage CSS variables and theme colors rather than hardcoded values
+
+6. **Performance** - Avoid overly complex selectors; keep CSS minimal and efficient
+
+### Required Dependencies
+
+Install these packages for full TipTap functionality with markdown support:
+
+- **@tiptap/react** - React integration for TipTap
+- **@tiptap/starter-kit** - Essential editing features (bold, italic, headings, lists, code blocks, etc.)
+- **@tiptap/extension-typography** - Smart typography (smart quotes, em dashes, ellipses)
+- **@tiptap/extension-placeholder** - Placeholder text functionality
+- **tiptap-markdown** - **Critical** - Enables bidirectional markdown conversion via storage API
+
+### Core Configuration Principles
+
+#### Required Extensions Setup
+
+1. **StarterKit** - Provides base editing functionality
+   - Configure which heading levels to support (typically H1-H6)
+   - Contains essential features: paragraphs, bold, italic, lists, code, blockquotes, etc.
+
+2. **Typography** - Enables smart typography replacements
+   - Automatically converts straight quotes to curly quotes
+   - Handles em dashes, en dashes, ellipses
+   - Improves overall text quality
+
+3. **Markdown Extension** - **Critical for markdown I/O**
+   - Enable HTML support to handle rich content
+   - Configure text transformation on paste (converts pasted markdown to editor format)
+   - Configure text transformation on copy (converts editor content to markdown)
+   - Provides the storage API for reading/writing markdown
+
+4. **Placeholder Extension** - Shows hint text when empty
+   - Accepts placeholder string as configuration
+   - Works with CSS to display placeholder
+
+#### Editor Initialization Guidelines
+
+**Key configuration points:**
+
+1. **SSR Compatibility** - Set `immediatelyRender: false` for Next.js to prevent hydration errors
+
+2. **Initial Content** - Pass markdown string as initial `content` value
+
+3. **Editor Props** - Configure CSS classes for styling:
+   - Include `prose` class for typography styling
+   - Add size variant (e.g., `prose-sm`) based on design
+   - Use `max-w-none` to remove default max-width constraint
+   - Add `dark:prose-invert` for dark mode support
+   - Include custom prose class if using custom overrides
+   - Remove focus outline (TipTap handles focus states)
+
+4. **Update Handler** - Implement `onUpdate` callback to capture content changes and emit markdown
+
+### Reading and Saving Markdown
+
+#### Saving Markdown (Editor → State)
+
+**Key concept:** Access markdown via the storage API provided by the `tiptap-markdown` extension.
+
+- The markdown extension exposes a `getMarkdown()` method through `editor.storage.markdown`
+- Call this method in the `onUpdate` callback to retrieve current markdown
+- Pass the markdown string to your state management (e.g., onChange callback)
+
+**Type safety note:** Editor storage types aren't fully exported by TipTap, so type assertion may be needed (document with linter ignore comments)
+
+#### Reading Markdown (State → Editor)
+
+**Key concept:** Use the `setContent` command to programmatically update editor content.
+
+- Access commands via `editor.commands.setContent(markdownString)`
+- The markdown extension automatically converts the markdown string to editor format
+- This is how external markdown (e.g., loaded from file) gets displayed in the editor
+
+### Critical Implementation Pattern: Preventing Update Loops
+
+**The Problem:** Bidirectional binding between state and editor creates infinite update loops:
+1. User types → onUpdate fires → updates state → triggers re-render
+2. Re-render → useEffect sees new value → updates editor → onUpdate fires → updates state... (infinite loop)
+
+**The Solution:** Implement a three-part protection mechanism:
+
+#### 1. Update Flag Pattern
+
+Use a ref (doesn't trigger re-renders) to track when you're programmatically updating the editor:
+- Create a boolean ref (e.g., `isUpdatingFromProp`)
+- Set to `true` before programmatic updates
+- Check this flag in `onUpdate` - if true, skip state updates
+- Reset to `false` after programmatic update completes
+
+**Purpose:** Prevents programmatic updates from triggering the `onUpdate` callback
+
+#### 2. Focus Check Pattern
+
+Only update editor content when it's not focused:
+- Check `editor.isFocused` before calling `setContent`
+- Skip updates if user is actively typing
+- This prevents overwriting user input mid-keystroke
+
+**Purpose:** Respects user's active editing session
+
+#### 3. Change Detection Pattern
+
+Compare current markdown with incoming value:
+- Get current markdown from editor storage
+- Compare with new value from props/state
+- Only call `setContent` if they differ
+
+**Purpose:** Prevents unnecessary re-renders and update cycles
+
+#### When to Sync Editor with External State
+
+Use a `useEffect` that watches the value prop and editor instance:
+- Only runs when external value changes
+- Applies all three protection patterns before updating
+- Typically runs on initial load or when loading different content
+
+### Styling Guidelines
+
+#### Prose Classes
+
+Apply Tailwind Typography classes to the editor element via `editorProps.attributes.class`:
+
+**Base styling:**
+- `prose` - Foundation typography class (required)
+- Size variant - Control overall scale (`prose-sm`, `prose-base`, `prose-lg`)
+- `max-w-none` - Remove default width constraints for full-width editing
+- `dark:prose-invert` - Automatic color inversion for dark mode
+- `focus:outline-none` - Remove default focus outline (editor manages its own focus states)
+
+**Custom classes:**
+- Add your custom prose override class (e.g., `prose-obsidian`)
+- Include the `tiptap` class for targeting in CSS
+
+#### Styling Architecture
+
+Organize styles hierarchically:
+1. Base `prose` class provides defaults
+2. Size variants adjust scale
+3. Dark mode variants handle color schemes
+4. Custom prose class applies project-specific overrides
+5. Component-specific styles (wrapper, placeholder) in separate selectors
+
+### Best Practices
+
+1. **SSR Compatibility** - Always disable immediate rendering for server-side rendering frameworks (prevents hydration mismatches)
+
+2. **Update Loop Prevention** - Always implement all three protection patterns (update flag, focus check, change detection)
+
+3. **Focus Awareness** - Check editor focus state before programmatic updates to avoid overwriting user input
+
+4. **Type Safety** - Document when type assertions are needed (e.g., editor storage API) with appropriate linter comments
+
+5. **Cleanup** - TipTap's hooks handle cleanup automatically; be aware of this if implementing custom lifecycle management
+
+6. **Controlled Component Pattern** - Use fully controlled components (parent manages state) for predictable behavior
+
+7. **Performance** - Only trigger updates when content actually changes; use change detection to prevent wasteful operations
+
+### Common Pitfalls
+
+#### ❌ Pitfall 1: Missing Focus Check
+**Problem:** Updating editor while user is typing overwrites their input
+**Solution:** Always check `editor.isFocused` before programmatic updates
+
+#### ❌ Pitfall 2: No Loop Prevention
+**Problem:** Creating infinite update cycles between editor and state
+**Solution:** Implement the update flag pattern with refs
+
+#### ❌ Pitfall 3: Wrong Method for Markdown
+**Problem:** Using `.getHTML()` instead of storage API returns HTML, not markdown
+**Solution:** Always use `editor.storage.markdown.getMarkdown()` for markdown output
+
+#### ❌ Pitfall 4: Ignoring SSR
+**Problem:** Hydration errors in Next.js/server-rendered apps
+**Solution:** Set `immediatelyRender: false` in editor configuration
+
+#### ❌ Pitfall 5: Hardcoded Values
+**Problem:** Using hardcoded colors, sizes, or spacing that break theming
+**Solution:** Use CSS variables and Tailwind classes that respect theme configuration
+
+### Component Interface
+
+```typescript
+interface MarkdownEditorProps {
+  value: string;           // Markdown content (controlled)
+  onChange: (value: string) => void;  // Callback when content changes
+  placeholder?: string;    // Placeholder text
+  className?: string;      // Additional styling
+}
+```
+
+The component is **controlled** - parent manages the markdown state, editor syncs with it.
+
+### Usage Example
+
+```typescript
+const [markdown, setMarkdown] = useState("# Hello\n\nStart writing...");
+
+<MarkdownEditor 
+  value={markdown}
+  onChange={setMarkdown}
+  placeholder="Write your diary entry..."
+  className="min-h-[400px]"
+/>
+```

@@ -175,6 +175,39 @@ export function FileReaderScreen({
     [],
   );
 
+  // Create immediate save function for Cmd+S
+  const handleImmediateSave = useCallback(
+    async (filePath: string) => {
+      const content = loadedContent.get(filePath);
+      if (!content) return;
+
+      setSaveErrors((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(filePath);
+        return newMap;
+      });
+
+      try {
+        await writeMarkdownFileContent(filePath, content);
+        // Update the loaded content to reflect the saved changes
+        setLoadedContent((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, content);
+          return newMap;
+        });
+      } catch (error) {
+        console.error(`Error saving file ${filePath}:`, error);
+        setSaveErrors((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, `Failed to save: ${error}`);
+          return newMap;
+        });
+        throw error; // Re-throw so the editor can show the error
+      }
+    },
+    [loadedContent],
+  );
+
   const handleOpenSettings = useCallback(() => {
     setSettingsOpen(true);
   }, []);
@@ -431,6 +464,7 @@ export function FileReaderScreen({
           saveError={saveError}
           commits={fileCommits}
           onContentChange={handleContentChange}
+          onSave={handleImmediateSave}
         />
       );
     },
@@ -442,6 +476,7 @@ export function FileReaderScreen({
       commitsByDate,
       commitFilters,
       handleContentChange,
+      handleImmediateSave,
     ],
   );
 

@@ -1,7 +1,7 @@
 import type { GitCommit } from "../utils/gitReader";
 import type { MarkdownFileMetadata } from "../utils/markdownReader";
 import CommitOverlay from "./CommitOverlay";
-import MarkdownEditor from "./MarkdownEditor";
+import { MarkdownEditor } from "./MarkdownEditor";
 import { Separator } from "./ui/separator";
 
 interface DateHeaderProps {
@@ -41,6 +41,7 @@ interface ContentEditorProps {
   isLoading: boolean;
   filePath: string;
   onContentChange: (filePath: string, content: string) => void;
+  onSave?: (filePath: string) => void | Promise<void>;
 }
 
 export function ContentEditor({
@@ -48,6 +49,7 @@ export function ContentEditor({
   isLoading,
   filePath,
   onContentChange,
+  onSave,
 }: ContentEditorProps) {
   return (
     <div>
@@ -61,7 +63,8 @@ export function ContentEditor({
       ) : (
         <MarkdownEditor
           value={content || ""}
-          onChange={(value) => onContentChange(filePath, value)}
+          onChange={(value: string) => onContentChange(filePath, value)}
+          onSave={onSave ? () => onSave(filePath) : undefined}
           placeholder="Start typing..."
         />
       )}
@@ -76,6 +79,7 @@ interface FileCardProps {
   saveError?: string;
   commits: GitCommit[];
   onContentChange: (filePath: string, content: string) => void;
+  onSave?: (filePath: string) => void | Promise<void>;
 }
 
 export function FileCard({
@@ -85,6 +89,7 @@ export function FileCard({
   saveError,
   commits,
   onContentChange,
+  onSave,
 }: FileCardProps) {
   return (
     <div className="mb-6 p-6">
@@ -93,6 +98,7 @@ export function FileCard({
         isLoading={isLoading}
         filePath={file.filePath}
         onContentChange={onContentChange}
+        onSave={onSave}
       />
       <FileName fileName={file.fileName} saveError={saveError} />
       {/* Git Commits Overlay */}
