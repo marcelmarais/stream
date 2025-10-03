@@ -27,3 +27,4 @@ dist-ssr
 .env
 out
 .DS_Store
+*.tsbuildinfo
