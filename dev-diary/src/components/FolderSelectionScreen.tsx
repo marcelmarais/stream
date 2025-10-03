@@ -10,10 +10,12 @@ const STORE_FILE = "settings.json";
 
 interface FolderSelectionScreenProps {
   onFolderConfirmed: (folderPath: string) => void;
+  autoNavigate?: boolean;
 }
 
 export function FolderSelectionScreen({
   onFolderConfirmed,
+  autoNavigate = true,
 }: FolderSelectionScreenProps) {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,6 +28,10 @@ export function FolderSelectionScreen({
         const savedFolder = await store.get<string>(STORAGE_KEY);
         if (savedFolder) {
           setSelectedFolder(savedFolder);
+          // Auto-navigate to the persisted folder only if autoNavigate is true
+          if (autoNavigate) {
+            onFolderConfirmed(savedFolder);
+          }
         }
         console.log("Loaded saved folder from Tauri Store:", savedFolder);
       } catch (error) {
@@ -36,7 +42,7 @@ export function FolderSelectionScreen({
     };
 
     loadPersistedFolder();
-  }, []);
+  }, [onFolderConfirmed, autoNavigate]);
 
   const handleFolderSelected = async (folderPath: string | null) => {
     setSelectedFolder(folderPath);

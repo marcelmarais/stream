@@ -45,6 +45,9 @@ interface FileItem {
 
 type VirtualizedItem = DateHeaderItem | FileItem;
 
+// Configuration for git commit refresh interval (in milliseconds)
+const GIT_COMMIT_REFRESH_INTERVAL = 5000; // 30 seconds - adjust as needed
+
 // Create grouped items from files metadata - moved outside component for stability
 function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
   // Group files by date
@@ -173,6 +176,39 @@ export function FileReaderScreen({
       }
     }, 500),
     [],
+  );
+
+  // Create immediate save function for Cmd+S
+  const handleImmediateSave = useCallback(
+    async (filePath: string) => {
+      const content = loadedContent.get(filePath);
+      if (!content) return;
+
+      setSaveErrors((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(filePath);
+        return newMap;
+      });
+
+      try {
+        await writeMarkdownFileContent(filePath, content);
+        // Update the loaded content to reflect the saved changes
+        setLoadedContent((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, content);
+          return newMap;
+        });
+      } catch (error) {
+        console.error(`Error saving file ${filePath}:`, error);
+        setSaveErrors((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(filePath, `Failed to save: ${error}`);
+          return newMap;
+        });
+        throw error; // Re-throw so the editor can show the error
+      }
+    },
+    [loadedContent],
   );
 
   const handleOpenSettings = useCallback(() => {
@@ -330,6 +366,59 @@ export function FileReaderScreen({
     [folderPath],
   );
 
+  // Refresh all currently loaded commits
+  const refreshAllCommits = useCallback(async () => {
+    const loadedDates = Object.keys(commitsByDateRef.current);
+    if (loadedDates.length === 0) return;
+
+    try {
+      const connectedRepos = await getConnectedRepos(folderPath);
+      if (connectedRepos.length === 0) return;
+
+      // Build date ranges for all loaded dates
+      const dateRanges = loadedDates.map((dateStr) => {
+        const date = new Date(dateStr);
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+        return {
+          dateStr,
+          range: createDateRange.custom(startOfDay, endOfDay),
+        };
+      });
+
+      // Fetch in parallel
+      const results = await Promise.all(
+        dateRanges.map(async ({ range }) => {
+          try {
+            const repoCommits = await getGitCommitsForRepos(
+              connectedRepos,
+              range,
+            );
+            return groupCommitsByDate(repoCommits);
+          } catch (error) {
+            console.error("Error refreshing commits for date range:", error);
+            return {} as CommitsByDate;
+          }
+        }),
+      );
+
+      const merged: CommitsByDate = {};
+      for (const partial of results) {
+        for (const [key, value] of Object.entries(partial)) {
+          merged[key] = value;
+        }
+      }
+
+      if (Object.keys(merged).length > 0) {
+        setCommitsByDate((prev) => ({ ...prev, ...merged }));
+      }
+    } catch (error) {
+      console.error("Error refreshing commits:", error);
+    }
+  }, [folderPath]);
+
   // Load metadata when component mounts
   useEffect(() => {
     const loadMetadata = async () => {
@@ -374,6 +463,21 @@ export function FileReaderScreen({
       loadCommitsForVisibleFiles(initialFiles);
     }
   }, [isLoadingMetadata, allFilesMetadata, loadCommitsForVisibleFiles]);
+
+  // Set up automatic git commit refresh
+  useEffect(() => {
+    // Only start refreshing if we have loaded some commits
+    if (Object.keys(commitsByDate).length === 0) return;
+
+    const intervalId = setInterval(() => {
+      refreshAllCommits();
+    }, GIT_COMMIT_REFRESH_INTERVAL);
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [commitsByDate, refreshAllCommits]);
 
   // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
@@ -431,6 +535,7 @@ export function FileReaderScreen({
           saveError={saveError}
           commits={fileCommits}
           onContentChange={handleContentChange}
+          onSave={handleImmediateSave}
         />
       );
     },
@@ -442,6 +547,7 @@ export function FileReaderScreen({
       commitsByDate,
       commitFilters,
       handleContentChange,
+      handleImmediateSave,
     ],
   );
 
