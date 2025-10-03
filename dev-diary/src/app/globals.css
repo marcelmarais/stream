@@ -162,35 +162,35 @@
       margin-top: 1rem;
       margin-bottom: 0.75rem;
     }
-    
+
     & h2 {
       font-size: 1.25rem;
       font-weight: 500;
       margin-top: 1rem;
       margin-bottom: 0.75rem;
     }
-    
+
     & h3 {
       font-size: 1.125rem;
       font-weight: 500;
       margin-top: 0.875rem;
       margin-bottom: 0.625rem;
     }
-    
+
     & h4 {
       font-size: 1rem;
       font-weight: 500;
       margin-top: 0.75rem;
       margin-bottom: 0.5rem;
     }
-    
+
     & h5 {
       font-size: 1rem;
       font-weight: 400;
       margin-top: 0.75rem;
       margin-bottom: 0.5rem;
     }
-    
+
     & h6 {
       font-size: 0.875rem;
       font-weight: 400;
@@ -219,12 +219,13 @@
       margin-bottom: 0;
     }
 
-    & ul, & ol {
+    & ul,
+    & ol {
       margin-top: 0.5rem;
       margin-bottom: 0;
       padding-left: 1.5rem;
     }
-    
+
     & li {
       margin-top: 0;
       margin-bottom: 0;
