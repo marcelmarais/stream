@@ -5,7 +5,7 @@ import { Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-const STORAGE_KEY = "dev-diary-last-selected-folder";
+const STORAGE_KEY = "stream-last-selected-folder";
 const STORE_FILE = "settings.json";
 
 interface FolderSelectionScreenProps {

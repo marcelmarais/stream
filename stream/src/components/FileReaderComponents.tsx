@@ -92,7 +92,7 @@ export function FileCard({
   onSave,
 }: FileCardProps) {
   return (
-    <div className="mb-6 p-6">
+    <div className="p-6">
       <ContentEditor
         content={content}
         isLoading={isLoading}
