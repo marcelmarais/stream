@@ -116,7 +116,6 @@ export function CommitFilter({
 
   return (
     <div className="relative">
-      {/* Filter Header */}
       <div className="flex items-center justify-between gap-2">
         <Button
           variant="ghost"
@@ -129,7 +128,6 @@ export function CommitFilter({
           />
         </Button>
 
-        {/* Active Filters Summary */}
         {hasActiveFilters && !isExpanded && (
           <div className="flex flex-wrap gap-2">
             {filters.authors.map((author) => (

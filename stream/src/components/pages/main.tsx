@@ -3,9 +3,10 @@
 import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
-import FileReaderFooter, {
+import {
   DateHeader,
   FileCard,
+  FileReaderFooter,
   FileReaderHeader,
 } from "@/components/markdown-file-card";
 import { getConnectedRepos } from "@/components/repo-connector";
