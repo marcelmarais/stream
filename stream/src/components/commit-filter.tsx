@@ -31,7 +31,6 @@ export function CommitFilter({
   const authorSelectId = useId();
   const repoSelectId = useId();
 
-  // Extract unique authors and repos from all commits
   const { uniqueAuthors, uniqueRepos } = useMemo(() => {
     const authorsSet = new Set<string>();
     const reposSet = new Set<string>();
@@ -67,7 +66,6 @@ export function CommitFilter({
     [filters, onFiltersChange],
   );
 
-  // Handle adding/removing repos
   const handleRepoChange = useCallback(
     (repo: string) => {
       const newRepos = filters.repos.includes(repo)
@@ -82,7 +80,6 @@ export function CommitFilter({
     [filters, onFiltersChange],
   );
 
-  // Handle search term change
   const handleSearchChange = useCallback(
     (searchTerm: string) => {
       onFiltersChange({
@@ -93,7 +90,6 @@ export function CommitFilter({
     [filters, onFiltersChange],
   );
 
-  // Clear all filters
   const handleClearFilters = useCallback(() => {
     onFiltersChange({
       authors: [],
