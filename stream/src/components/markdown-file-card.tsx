@@ -12,6 +12,7 @@ import CommitOverlay from "@/components/commit-overlay";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
 import {
   Popover,
@@ -271,43 +272,45 @@ export function HeaderNavigation({
   const DayButton = createDayButtonWithDots(hasMarkdownFile);
 
   return (
-    <div className="flex items-center justify-end gap-2">
-      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-        <PopoverTrigger asChild>
+    <div className="flex items-center justify-end">
+      <ButtonGroup>
+        {!todayFileExists && (
           <Button
             type="button"
             size="sm"
-            variant="ghost"
-            disabled={isLoadingMetadata}
+            variant="secondary"
+            onClick={onCreateToday}
+            disabled={isLoadingMetadata || Boolean(creatingToday)}
           >
-            <CalendarIcon className="size-4" />
+            <CalendarPlus className="size-4" />
           </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
-          <Calendar
-            mode="single"
-            onSelect={handleDateSelect}
-            disabled={(date) => !hasMarkdownFile(date)}
-            defaultMonth={new Date()}
-            captionLayout="dropdown"
-            components={{
-              DayButton,
-            }}
-            autoFocus
-          />
-        </PopoverContent>
-      </Popover>
-      {!todayFileExists && (
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={onCreateToday}
-          disabled={isLoadingMetadata || Boolean(creatingToday)}
-        >
-          <CalendarPlus className="size-4" />
-        </Button>
-      )}
+        )}
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={isLoadingMetadata}
+            >
+              <CalendarIcon className="size-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <Calendar
+              mode="single"
+              onSelect={handleDateSelect}
+              disabled={(date) => !hasMarkdownFile(date)}
+              defaultMonth={new Date()}
+              captionLayout="dropdown"
+              components={{
+                DayButton,
+              }}
+              autoFocus
+            />
+          </PopoverContent>
+        </Popover>
+      </ButtonGroup>
     </div>
   );
 }
