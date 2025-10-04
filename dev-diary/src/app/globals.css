@@ -155,94 +155,68 @@
 
   /* Obsidian-like prose overrides */
   .prose.prose-obsidian {
-    /* Much lighter, smaller headings */
+    /* Headings - consistent spacing */
     & h1 {
-      font-size: 1.5rem;
-      font-weight: 500;
-      margin-top: 1rem;
-      margin-bottom: 0.75rem;
+      @apply !text-3xl !font-medium !mt-6 !mb-3;
     }
 
     & h2 {
-      font-size: 1.25rem;
-      font-weight: 500;
-      margin-top: 1rem;
-      margin-bottom: 0.75rem;
+      @apply !text-2xl !font-medium !mt-6 !mb-3;
     }
 
     & h3 {
-      font-size: 1.125rem;
-      font-weight: 500;
-      margin-top: 0.875rem;
-      margin-bottom: 0.625rem;
+      @apply !text-xl !font-medium !mt-5 !mb-2;
     }
 
     & h4 {
-      font-size: 1rem;
-      font-weight: 500;
-      margin-top: 0.75rem;
-      margin-bottom: 0.5rem;
+      @apply !text-lg !font-medium !mt-4 !mb-2;
     }
 
     & h5 {
-      font-size: 1rem;
-      font-weight: 400;
-      margin-top: 0.75rem;
-      margin-bottom: 0.5rem;
+      @apply !text-lg !font-normal !mt-4 !mb-2;
     }
 
     & h6 {
-      font-size: 0.875rem;
-      font-weight: 400;
-      margin-top: 0.75rem;
-      margin-bottom: 0.5rem;
+      @apply !text-base !font-normal !mt-4 !mb-2;
     }
 
-    /* Override paragraph spacing inside list items - more specific, comes first */
-    & li > p {
-      margin-top: 0;
-      margin-bottom: 0;
-    }
-
-    /* Comfortable paragraph spacing */
+    /* Paragraphs */
     & p {
-      margin-top: 0.5rem;
-      margin-bottom: 0.5rem;
+      @apply !mt-3 !mb-3;
     }
 
-    /* No spacing for nested lists - more specific, comes first */
+    /* Override paragraph spacing inside list items */
+    & li > p {
+      @apply !mt-0 !mb-0;
+    }
+
+    /* Lists */
+    & ul,
+    & ol {
+      @apply !mt-3 !mb-3 !pl-6;
+    }
+
+    /* Nested lists - remove extra spacing, match parent indentation */
     & ul > li > ul,
     & ol > li > ol,
     & ul > li > ol,
     & ol > li > ul {
-      margin-top: 0;
-      margin-bottom: 0;
+      @apply !mt-1 !mb-0 !pl-6;
     }
 
-    & ul,
-    & ol {
-      margin-top: 0.5rem;
-      margin-bottom: 0;
-      padding-left: 1.5rem;
-    }
-
+    /* List items */
     & li {
-      margin-top: 0;
-      margin-bottom: 0;
-      line-height: 1;
+      @apply !mt-0 !mb-1 !pt-0 !pb-0;
     }
 
-    /* Comfortable blockquotes */
+    /* Blockquotes */
     & blockquote {
-      margin-top: 1rem;
-      margin-bottom: 1rem;
-      font-weight: 400;
+      @apply !mt-3 !mb-3 !font-normal;
     }
 
-    /* Comfortable code blocks */
+    /* Code blocks */
     & pre {
-      margin-top: 1rem;
-      margin-bottom: 1rem;
+      @apply !mt-3 !mb-3;
     }
   }
 

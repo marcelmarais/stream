@@ -10,8 +10,8 @@ interface DateHeaderProps {
 
 export function DateHeader({ displayDate }: DateHeaderProps) {
   return (
-    <div className="mx-6 mt-8 mb-4 first:mt-0">
-      <h3 className="font-semibold text-3xl">{displayDate}</h3>
+    <div className="mx-6 mt-8 first:mt-0">
+      <h1 className="font-semibold text-4xl">{displayDate}</h1>
     </div>
   );
 }
