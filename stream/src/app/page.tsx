@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import FolderSelectionScreen from "@/components/pages/folder-selection";
-import FileReaderScreen from "@/components/pages/main";
+import FolderSelectionScreen from "@/components/views/folder-selection";
+import FileReaderScreen from "@/components/views/main";
 
 export default function Home() {
   const [currentScreen, setCurrentScreen] = useState<
