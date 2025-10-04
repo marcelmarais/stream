@@ -1,15 +1,12 @@
 "use client";
 
-import { Settings } from "lucide-react";
 import RepoConnector from "@/components/repo-connector";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import type { CommitsByDate } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
@@ -108,12 +105,6 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Settings className="h-4 w-4" />
-          <span className="sr-only">Open settings</span>
-        </Button>
-      </DialogTrigger>
       <DialogContent className="max-h-[85vh] min-w-[66vw] overflow-y-scroll">
         <DialogHeader className="pb-6">
           <DialogTitle className="text-xl">Settings & Information</DialogTitle>

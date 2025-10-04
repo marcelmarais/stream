@@ -174,10 +174,6 @@ export function FileReaderScreen({
     [loadedContent],
   );
 
-  const handleOpenSettings = useCallback(() => {
-    setSettingsOpen(true);
-  }, []);
-
   const handleScrollToDate = useCallback(
     (date: Date) => {
       const dateStr = getDateKey(date);
@@ -560,17 +556,12 @@ export function FileReaderScreen({
             </div>
           )}
 
-          {/* Settings button on the right */}
+          {/* Navigation buttons on the right */}
           <div className="flex flex-1 justify-end">
             <FileReaderHeader
-              folderPath={folderPath}
               isLoadingMetadata={isLoadingMetadata}
               allFilesMetadata={allFilesMetadata}
-              commitsByDate={commitsByDate}
-              commitError={commitError}
               error={error}
-              settingsOpen={settingsOpen}
-              onSettingsOpenChange={setSettingsOpen}
               onCreateToday={handleCreateToday}
               creatingToday={creatingToday}
               onScrollToDate={handleScrollToDate}
@@ -612,8 +603,13 @@ export function FileReaderScreen({
         folderPath={folderPath}
         fileCount={allFilesMetadata.length}
         connectedReposCount={connectedReposCount}
-        onSettingsClick={handleOpenSettings}
         onFolderClick={onBack}
+        isLoadingMetadata={isLoadingMetadata}
+        allFilesMetadata={allFilesMetadata}
+        commitsByDate={commitsByDate}
+        commitError={commitError}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={setSettingsOpen}
       />
     </div>
   );

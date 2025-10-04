@@ -4,6 +4,7 @@ import {
   FileText,
   Folder,
   GitBranch,
+  Settings,
 } from "lucide-react";
 import type { ComponentProps } from "react";
 import { useState } from "react";
@@ -94,16 +95,26 @@ interface FileReaderFooterProps {
   folderPath: string;
   fileCount: number;
   connectedReposCount: number;
-  onSettingsClick: () => void;
   onFolderClick: () => void;
+  isLoadingMetadata: boolean;
+  allFilesMetadata: MarkdownFileMetadata[];
+  commitsByDate: CommitsByDate;
+  commitError: string | null;
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
 }
 
 export function FileReaderFooter({
   folderPath,
   fileCount,
   connectedReposCount,
-  onSettingsClick,
   onFolderClick,
+  isLoadingMetadata,
+  allFilesMetadata,
+  commitsByDate,
+  commitError,
+  settingsOpen,
+  onSettingsOpenChange,
 }: FileReaderFooterProps) {
   const folderName = folderPath.split("/").pop() || folderPath;
 
@@ -125,7 +136,7 @@ export function FileReaderFooter({
             variant="ghost"
             size="sm"
             className="h-auto text-xs"
-            onClick={onSettingsClick}
+            disabled
             title="Click to open settings"
           >
             <FileText className="size-3" />
@@ -134,32 +145,47 @@ export function FileReaderFooter({
             </span>
           </Button>
         </div>
-        <Button
-          onClick={onSettingsClick}
-          variant="ghost"
-          size="sm"
-          className="h-auto text-xs"
-          title="Click to open settings"
-        >
-          <GitBranch className="size-3" />
-          <span>
-            {connectedReposCount} repo{connectedReposCount === 1 ? "" : "s"}
-          </span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto text-xs"
+            disabled
+            title="Connected repositories"
+          >
+            <GitBranch className="size-3" />
+            <span>
+              {connectedReposCount} repo{connectedReposCount === 1 ? "" : "s"}
+            </span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto p-1"
+            onClick={() => onSettingsOpenChange(true)}
+            title="Open settings"
+          >
+            <Settings className="size-3" />
+          </Button>
+        </div>
       </div>
+      <SettingsDialog
+        folderPath={folderPath}
+        isLoadingMetadata={isLoadingMetadata}
+        allFilesMetadata={allFilesMetadata}
+        commitsByDate={commitsByDate}
+        commitError={commitError}
+        open={settingsOpen}
+        onOpenChange={onSettingsOpenChange}
+      />
     </div>
   );
 }
 
 interface FileReaderHeaderProps {
-  folderPath: string;
   isLoadingMetadata: boolean;
   allFilesMetadata: MarkdownFileMetadata[];
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
   error: string | null;
-  settingsOpen: boolean;
-  onSettingsOpenChange: (open: boolean) => void;
   onCreateToday: () => void | Promise<void>;
   creatingToday?: boolean;
   onScrollToDate: (date: Date) => void;
@@ -199,26 +225,16 @@ function createDayButtonWithDots(hasMarkdownFile: (date: Date) => boolean) {
 }
 
 export function HeaderNavigation({
-  folderPath,
   isLoadingMetadata,
   allFilesMetadata,
-  commitsByDate,
-  commitError,
   onCreateToday,
   creatingToday,
-  settingsOpen,
-  onSettingsOpenChange,
   onScrollToDate,
 }: {
-  folderPath: string;
   isLoadingMetadata: boolean;
   allFilesMetadata: MarkdownFileMetadata[];
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
   onCreateToday: () => void | Promise<void>;
   creatingToday?: boolean;
-  settingsOpen: boolean;
-  onSettingsOpenChange: (open: boolean) => void;
   onScrollToDate: (date: Date) => void;
 }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -292,15 +308,6 @@ export function HeaderNavigation({
           <CalendarPlus className="size-4" />
         </Button>
       )}
-      <SettingsDialog
-        folderPath={folderPath}
-        isLoadingMetadata={isLoadingMetadata}
-        allFilesMetadata={allFilesMetadata}
-        commitsByDate={commitsByDate}
-        commitError={commitError}
-        open={settingsOpen}
-        onOpenChange={onSettingsOpenChange}
-      />
     </div>
   );
 }
@@ -316,14 +323,9 @@ function ErrorDisplay({ error }: { error: string }) {
 
 // Main header component that combines all sub-components
 export function FileReaderHeader({
-  folderPath,
   isLoadingMetadata,
   allFilesMetadata,
-  commitsByDate,
-  commitError,
   error,
-  settingsOpen,
-  onSettingsOpenChange,
   onCreateToday,
   creatingToday,
   onScrollToDate,
@@ -331,15 +333,10 @@ export function FileReaderHeader({
   return (
     <div className="!bg-transparent flex-shrink-0">
       <HeaderNavigation
-        folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}
         allFilesMetadata={allFilesMetadata}
-        commitsByDate={commitsByDate}
-        commitError={commitError}
         onCreateToday={onCreateToday}
         creatingToday={creatingToday}
-        settingsOpen={settingsOpen}
-        onSettingsOpenChange={onSettingsOpenChange}
         onScrollToDate={onScrollToDate}
       />
 
