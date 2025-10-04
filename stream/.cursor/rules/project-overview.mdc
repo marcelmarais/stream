@@ -22,7 +22,7 @@ alwaysApply: true
   - `beforeDevCommand`: `pnpm dev` (Next at `http://localhost:3000`)
   - `beforeBuildCommand`: `pnpm build` (produces `out/`)
   - `frontendDist`: `../out`
-- **Tauri app**: one window (800×600), `identifier` `com.marcelmarais.dev-diary`
+- **Tauri app**: one window (800×600), `identifier` `com.marcelmarais.stream`
 - **Rust side**: `greet` command exposed; `tauri_plugin_opener` registered
 
 ### Tooling and scripts

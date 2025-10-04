@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: "20"
           cache: "pnpm"
-          cache-dependency-path: "dev-diary/pnpm-lock.yaml"
+          cache-dependency-path: "stream/pnpm-lock.yaml"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -35,34 +35,34 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: dev-diary/src-tauri -> target
+          workspaces: stream/src-tauri -> target
 
       - name: Install dependencies
-        working-directory: dev-diary
+        working-directory: stream
         run: pnpm install --frozen-lockfile
 
       - name: Build Tauri app
-        working-directory: dev-diary
+        working-directory: stream
         run: pnpm tauri build --bundles dmg
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Rename and prepare artifacts
-        working-directory: dev-diary
+        working-directory: stream
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           ARCH=$(uname -m)
           cd src-tauri/target/release/bundle/dmg
           for file in *.dmg; do
-            mv "$file" "dev-diary-${VERSION}-macos-${ARCH}.dmg"
+            mv "$file" "stream-${VERSION}-macos-${ARCH}.dmg"
           done
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dev-diary/src-tauri/target/release/bundle/dmg/*.dmg
+            stream/src-tauri/target/release/bundle/dmg/*.dmg
           draft: false
           prerelease: false
           generate_release_notes: true
