@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { CommitsByDate, GitCommit } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
+import { getTodayMarkdownFileName } from "@/utils/markdown-reader";
 
 export function DateHeader({ displayDate }: { displayDate: string }) {
   return (
@@ -147,7 +148,6 @@ interface FileReaderHeaderProps {
   creatingToday?: boolean;
 }
 
-// Navigation component with settings only
 export function HeaderNavigation({
   folderPath,
   isLoadingMetadata,
@@ -169,17 +169,24 @@ export function HeaderNavigation({
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
 }) {
+  const todayFileName = getTodayMarkdownFileName();
+  const todayFileExists = allFilesMetadata.some(
+    (file) => file.fileName === todayFileName,
+  );
+
   return (
     <div className="flex items-center justify-end gap-2">
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        onClick={onCreateToday}
-        disabled={isLoadingMetadata || Boolean(creatingToday)}
-      >
-        <CalendarPlus className="size-4" />
-      </Button>
+      {!todayFileExists && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={onCreateToday}
+          disabled={isLoadingMetadata || Boolean(creatingToday)}
+        >
+          <CalendarPlus className="size-4" />
+        </Button>
+      )}
       <SettingsDialog
         folderPath={folderPath}
         isLoadingMetadata={isLoadingMetadata}
