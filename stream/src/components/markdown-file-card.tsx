@@ -1,9 +1,25 @@
-import { CalendarPlus, FileText, Folder, GitBranch } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  CalendarPlus,
+  FileText,
+  Folder,
+  GitBranch,
+} from "lucide-react";
+import type { ComponentProps } from "react";
+import { useState } from "react";
 import CommitOverlay from "@/components/commit-overlay";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
+import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 import type { CommitsByDate, GitCommit } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 import { getTodayMarkdownFileName } from "@/utils/markdown-reader";
@@ -146,6 +162,40 @@ interface FileReaderHeaderProps {
   onSettingsOpenChange: (open: boolean) => void;
   onCreateToday: () => void | Promise<void>;
   creatingToday?: boolean;
+  onScrollToDate: (date: Date) => void;
+}
+
+function CustomDayButton({
+  day,
+  modifiers,
+  hasFile,
+  ...props
+}: ComponentProps<typeof CalendarDayButton> & { hasFile: boolean }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn(
+        "relative h-9 w-9 p-0 font-normal",
+        modifiers.selected &&
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+        modifiers.today && "bg-accent text-accent-foreground",
+      )}
+      {...props}
+    >
+      <span>{day.date.getDate()}</span>
+      {hasFile && (
+        <span className="-translate-x-1/2 absolute bottom-1 left-1/2 h-1 w-1 rounded-full bg-primary" />
+      )}
+    </Button>
+  );
+}
+
+function createDayButtonWithDots(hasMarkdownFile: (date: Date) => boolean) {
+  return (props: ComponentProps<typeof CalendarDayButton>) => {
+    const hasFile = hasMarkdownFile(props.day.date);
+    return <CustomDayButton {...props} hasFile={hasFile} />;
+  };
 }
 
 export function HeaderNavigation({
@@ -158,6 +208,7 @@ export function HeaderNavigation({
   creatingToday,
   settingsOpen,
   onSettingsOpenChange,
+  onScrollToDate,
 }: {
   folderPath: string;
   isLoadingMetadata: boolean;
@@ -168,14 +219,68 @@ export function HeaderNavigation({
   creatingToday?: boolean;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
+  onScrollToDate: (date: Date) => void;
 }) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
   const todayFileName = getTodayMarkdownFileName();
   const todayFileExists = allFilesMetadata.some(
     (file) => file.fileName === todayFileName,
   );
 
+  // Get dates that have markdown files (use filename date if available, otherwise fall back to createdAt)
+  const datesWithFiles = new Set(
+    allFilesMetadata.map((file) => {
+      const dateFromFilename = getDateFromFilename(file.fileName);
+      if (dateFromFilename) {
+        return dateFromFilename;
+      }
+
+      return getDateKey(new Date(file.createdAt));
+    }),
+  );
+
+  const hasMarkdownFile = (date: Date) => {
+    const key = getDateKey(date);
+    return datesWithFiles.has(key);
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date && hasMarkdownFile(date)) {
+      onScrollToDate(date);
+      setCalendarOpen(false);
+    }
+  };
+
+  const DayButton = createDayButtonWithDots(hasMarkdownFile);
+
   return (
     <div className="flex items-center justify-end gap-2">
+      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={isLoadingMetadata}
+          >
+            <CalendarIcon className="size-4" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <Calendar
+            mode="single"
+            onSelect={handleDateSelect}
+            disabled={(date) => !hasMarkdownFile(date)}
+            defaultMonth={new Date()}
+            captionLayout="dropdown"
+            components={{
+              DayButton,
+            }}
+            autoFocus
+          />
+        </PopoverContent>
+      </Popover>
       {!todayFileExists && (
         <Button
           type="button"
@@ -221,6 +326,7 @@ export function FileReaderHeader({
   onSettingsOpenChange,
   onCreateToday,
   creatingToday,
+  onScrollToDate,
 }: FileReaderHeaderProps) {
   return (
     <div className="!bg-transparent flex-shrink-0">
@@ -234,6 +340,7 @@ export function FileReaderHeader({
         creatingToday={creatingToday}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={onSettingsOpenChange}
+        onScrollToDate={onScrollToDate}
       />
 
       {error && <ErrorDisplay error={error} />}

@@ -2,7 +2,7 @@
 
 import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Virtuoso } from "react-virtuoso";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
   DateHeader,
   FileCard,
@@ -10,6 +10,11 @@ import {
   FileReaderHeader,
 } from "@/components/markdown-file-card";
 import { getConnectedRepos } from "@/components/repo-connector";
+import {
+  formatDisplayDate,
+  getDateFromFilename,
+  getDateKey,
+} from "@/utils/date-utils";
 import {
   type CommitFilters,
   type CommitsByDate,
@@ -54,7 +59,10 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
   const filesByDate = new Map<string, MarkdownFileMetadata[]>();
 
   files.forEach((file) => {
-    const dateStr = getDateKeyFromDate(file.createdAt);
+    // Try to get date from filename first, fall back to creation date
+    const dateFromFilename = getDateFromFilename(file.fileName);
+    const dateStr = dateFromFilename || getDateKey(file.createdAt);
+
     if (!filesByDate.has(dateStr)) {
       filesByDate.set(dateStr, []);
     }
@@ -72,7 +80,7 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
     const filesForDate = filesByDate.get(dateStr);
     if (!filesForDate) return;
 
-    const displayDate = formatDisplayDateFromKey(dateStr);
+    const displayDate = formatDisplayDate(dateStr);
 
     items.push({
       type: "header",
@@ -90,23 +98,6 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
   });
 
   return items;
-}
-
-function getDateKeyFromDate(date: Date): string {
-  return date.toISOString().split("T")[0];
-}
-
-function formatDisplayDateFromKey(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date
-    .toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    })
-    .replace(", ", " — ")
-    .toLowerCase();
 }
 
 export function FileReaderScreen({
@@ -139,6 +130,9 @@ export function FileReaderScreen({
   useEffect(() => {
     commitsByDateRef.current = commitsByDate;
   }, [commitsByDate]);
+
+  // Virtuoso ref for scrolling
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   // Create debounced save function
   const debouncedSave = useCallback(
@@ -184,6 +178,24 @@ export function FileReaderScreen({
     setSettingsOpen(true);
   }, []);
 
+  const handleScrollToDate = useCallback(
+    (date: Date) => {
+      const dateStr = getDateKey(date);
+      const index = groupedItems.findIndex(
+        (item) => item.type === "header" && item.date === dateStr,
+      );
+
+      if (index !== -1 && virtuosoRef.current) {
+        virtuosoRef.current.scrollToIndex({
+          index,
+          align: "start",
+          behavior: "auto",
+        });
+      }
+    },
+    [groupedItems],
+  );
+
   const refreshMetadata = useCallback(async () => {
     setIsLoadingMetadata(true);
     setError(null);
@@ -226,6 +238,13 @@ export function FileReaderScreen({
   // Handle content changes during editing
   const handleContentChange = useCallback(
     (filePath: string, newContent: string) => {
+      // Update state immediately for responsive editing
+      setLoadedContent((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(filePath, newContent);
+        return newMap;
+      });
+      // Debounce the actual file save
       debouncedSave(filePath, newContent);
     },
     [debouncedSave],
@@ -274,10 +293,13 @@ export function FileReaderScreen({
         setConnectedReposCount(connectedRepos.length);
         if (connectedRepos.length === 0) return;
 
-        // Unique date keys for visible files
+        // Unique date keys for visible files (use filename date if available)
         const visibleDates = Array.from(
           new Set(
-            visibleFiles.map((file) => getDateKeyFromDate(file.createdAt)),
+            visibleFiles.map((file) => {
+              const dateFromFilename = getDateFromFilename(file.fileName);
+              return dateFromFilename || getDateKey(file.createdAt);
+            }),
           ),
         );
 
@@ -491,8 +513,12 @@ export function FileReaderScreen({
       const content = loadedContent.get(file.filePath);
       const isLoading = !content && loadingFiles.has(file.filePath);
 
-      // Get commits for this file's creation date and apply filters
-      const allFileCommits = getCommitsForDate(commitsByDate, file.createdAt);
+      // Get commits for this file's date (use filename date if available)
+      const dateFromFilename = getDateFromFilename(file.fileName);
+      const fileDate = dateFromFilename
+        ? new Date(dateFromFilename)
+        : file.createdAt;
+      const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
       const fileCommits = filterCommits(allFileCommits, commitFilters);
 
       return (
@@ -547,6 +573,7 @@ export function FileReaderScreen({
               onSettingsOpenChange={setSettingsOpen}
               onCreateToday={handleCreateToday}
               creatingToday={creatingToday}
+              onScrollToDate={handleScrollToDate}
             />
           </div>
         </div>
@@ -556,6 +583,7 @@ export function FileReaderScreen({
       {!isLoadingMetadata && groupedItems.length > 0 && (
         <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-6">
           <Virtuoso
+            ref={virtuosoRef}
             totalCount={groupedItems.length}
             itemContent={renderItem}
             rangeChanged={handleRangeChanged}
