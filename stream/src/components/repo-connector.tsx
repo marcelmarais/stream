@@ -416,7 +416,6 @@ export function RepoConnector({
 
 export default RepoConnector;
 
-// Utility functions for external use
 export async function getConnectedRepos(
   markdownDirectory: string,
 ): Promise<string[]> {

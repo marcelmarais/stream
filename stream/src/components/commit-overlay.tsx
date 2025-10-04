@@ -11,8 +11,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { GitCommit } from "../utils/git-reader";
-import { formatCommitAuthor, getShortCommitId } from "../utils/git-reader";
+import type { GitCommit } from "@/utils/git-reader";
+import { formatCommitAuthor, getShortCommitId } from "@/utils/git-reader";
 
 interface CommitOverlayProps {
   commits: GitCommit[];

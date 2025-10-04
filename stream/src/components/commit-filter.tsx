@@ -2,18 +2,18 @@
 
 import { SlidersHorizontal, X } from "lucide-react";
 import { useCallback, useId, useMemo, useState } from "react";
-import type { CommitFilters, GitCommit } from "../utils/git-reader";
-import { formatCommitAuthor } from "../utils/git-reader";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
+} from "@/components/ui/select";
+import { formatCommitAuthor } from "@/utils/git-reader";
+import type { CommitFilters, GitCommit } from "../utils/git-reader";
 
 interface CommitFilterProps {
   commits: GitCommit[];

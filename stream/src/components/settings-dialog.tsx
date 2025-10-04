@@ -1,6 +1,7 @@
 "use client";
 
 import { Settings } from "lucide-react";
+import RepoConnector from "@/components/repo-connector";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,9 +11,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import type { CommitsByDate } from "../utils/git-reader";
-import type { MarkdownFileMetadata } from "../utils/markdown-reader";
-import RepoConnector from "./repo-connector";
+import type { CommitsByDate } from "@/utils/git-reader";
+import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 
 interface SettingsDialogProps {
   folderPath: string;
@@ -24,7 +24,6 @@ interface SettingsDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-// Folder path display component
 function FolderInfo({ folderPath }: { folderPath: string }) {
   return (
     <div className="space-y-3">
@@ -39,7 +38,6 @@ function FolderInfo({ folderPath }: { folderPath: string }) {
   );
 }
 
-// Status information component
 function StatusInfo({
   fileCount,
   commitsByDate,
@@ -81,7 +79,6 @@ function StatusInfo({
   );
 }
 
-// Loading state component
 function LoadingState() {
   return (
     <div className="flex items-center justify-center py-12">
@@ -126,12 +123,10 @@ export function SettingsDialog({
         </DialogHeader>
 
         <div className="space-y-8">
-          {/* Folder Information */}
           <div className="rounded-lg border bg-muted/30 p-4">
             <FolderInfo folderPath={folderPath} />
           </div>
 
-          {/* Status Information */}
           <div className="rounded-lg border bg-muted/30 p-4">
             {isLoadingMetadata ? (
               <LoadingState />
@@ -144,7 +139,6 @@ export function SettingsDialog({
             )}
           </div>
 
-          {/* Repository Connector */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-foreground text-lg">

@@ -1,11 +1,11 @@
 import { CalendarPlus, FileText, Folder, GitBranch } from "lucide-react";
+import CommitOverlay from "@/components/commit-overlay";
+import { MarkdownEditor } from "@/components/markdown-editor";
+import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
-import type { CommitsByDate, GitCommit } from "../utils/git-reader";
-import type { MarkdownFileMetadata } from "../utils/markdown-reader";
-import CommitOverlay from "./commit-overlay";
-import { MarkdownEditor } from "./markdown-editor";
-import SettingsDialog from "./settings-dialog";
-import { Separator } from "./ui/separator";
+import { Separator } from "@/components/ui/separator";
+import type { CommitsByDate, GitCommit } from "@/utils/git-reader";
+import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 
 export function DateHeader({ displayDate }: { displayDate: string }) {
   return (
