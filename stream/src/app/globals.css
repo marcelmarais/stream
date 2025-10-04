@@ -183,28 +183,28 @@
       @apply !text-base !font-normal !mt-4 !mb-2 !text-heading/50;
     }
 
+    /* Override paragraph spacing inside list items (more specific, comes first) */
+    & li > p {
+      @apply !mt-0 !mb-0;
+    }
+
     /* Paragraphs */
     & p {
       @apply !mt-3 !mb-3;
     }
 
-    /* Override paragraph spacing inside list items */
-    & li > p {
-      @apply !mt-0 !mb-0;
+    /* Nested lists - remove extra spacing, match parent indentation (more specific, comes first) */
+    & ul > li > ul,
+    & ol > li > ol,
+    & ul > li > ol,
+    & ol > li > ul {
+      @apply !mt-1 !mb-0 !pl-6;
     }
 
     /* Lists */
     & ul,
     & ol {
       @apply !mt-3 !mb-3 !pl-6;
-    }
-
-    /* Nested lists - remove extra spacing, match parent indentation */
-    & ul > li > ul,
-    & ol > li > ol,
-    & ul > li > ol,
-    & ol > li > ul {
-      @apply !mt-1 !mb-0 !pl-6;
     }
 
     /* List items */
