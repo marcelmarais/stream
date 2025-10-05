@@ -1,10 +1,15 @@
 "use client";
 
 import { SlidersHorizontal, X } from "lucide-react";
-import { useCallback, useId, useMemo, useState } from "react";
+import { useCallback, useId, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -26,7 +31,6 @@ export function CommitFilter({
   filters,
   onFiltersChange,
 }: CommitFilterProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const searchId = useId();
   const authorSelectId = useId();
   const repoSelectId = useId();
@@ -107,97 +111,25 @@ export function CommitFilter({
   if (commits.length === 0) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
-        <SlidersHorizontal
-          className={`h-4 w-4 ${hasActiveFilters || isExpanded ? "bg-white" : ""}`}
-        />
+        <SlidersHorizontal className="h-4 w-4" />
       </div>
     );
   }
 
   return (
-    <div className="relative">
-      <div className="flex items-center justify-between gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="h-auto p-1 text-xs"
-        >
-          <SlidersHorizontal
-            className={`h-4 w-4 ${hasActiveFilters || isExpanded ? "fill-white" : ""}`}
-          />
-        </Button>
-
-        {hasActiveFilters && !isExpanded && (
-          <div className="flex flex-wrap gap-2">
-            {filters.authors.map((author) => (
-              <Badge
-                key={author}
-                variant="default"
-                className="flex items-center gap-1 text-xs"
-              >
-                Author: {author}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleAuthorChange(author)}
-                  className="h-auto p-0 hover:bg-transparent"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </Badge>
-            ))}
-            {filters.repos.map((repo) => (
-              <Badge
-                key={repo}
-                variant="default"
-                className="flex items-center gap-1 text-xs"
-              >
-                Repo: {repo}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleRepoChange(repo)}
-                  className="h-auto p-0 hover:bg-transparent"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </Badge>
-            ))}
-            {filters.searchTerm && (
-              <Badge
-                variant="default"
-                className="flex items-center gap-1 text-xs"
-              >
-                Search: "{filters.searchTerm}"
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleSearchChange("")}
-                  className="h-auto p-0 hover:bg-transparent"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Expanded Filter Controls - Overlay */}
-      {isExpanded && (
-        <div className="absolute top-full left-0 z-50 mt-2 w-96 space-y-4 rounded-lg border bg-card p-4 shadow-lg">
-          {/* Close button */}
-          <div className="flex items-center justify-between">
+    <div className="flex items-center gap-2">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+            <SlidersHorizontal
+              className={`h-4 w-4 ${hasActiveFilters ? "fill-white" : ""}`}
+            />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-96 space-y-4" align="start">
+          {/* Header */}
+          <div>
             <h3 className="font-medium text-sm">Filter Commits</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsExpanded(false)}
-              className="h-auto p-1"
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
 
           {/* Search Input */}
@@ -332,6 +264,62 @@ export function CommitFilter({
                 Clear All Filters
               </Button>
             </div>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Active Filter Badges */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-2">
+          {filters.authors.map((author) => (
+            <Badge
+              key={author}
+              variant="default"
+              className="flex items-center gap-1 text-xs"
+            >
+              Author: {author}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleAuthorChange(author)}
+                className="h-auto p-0 hover:bg-transparent"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          ))}
+          {filters.repos.map((repo) => (
+            <Badge
+              key={repo}
+              variant="default"
+              className="flex items-center gap-1 text-xs"
+            >
+              Repo: {repo}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleRepoChange(repo)}
+                className="h-auto p-0 hover:bg-transparent"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          ))}
+          {filters.searchTerm && (
+            <Badge
+              variant="default"
+              className="flex items-center gap-1 text-xs"
+            >
+              Search: "{filters.searchTerm}"
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleSearchChange("")}
+                className="h-auto p-0 hover:bg-transparent"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
           )}
         </div>
       )}
