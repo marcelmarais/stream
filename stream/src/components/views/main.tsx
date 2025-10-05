@@ -104,7 +104,8 @@ export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
-  const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+  const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
+  const [showLoading, setShowLoading] = useState(true);
   const [allFilesMetadata, setAllFilesMetadata] = useState<
     MarkdownFileMetadata[]
   >([]);
@@ -409,7 +410,9 @@ export function FileReaderScreen({
   // Load metadata when component mounts
   useEffect(() => {
     const loadMetadata = async () => {
+      const startTime = Date.now();
       setIsLoadingMetadata(true);
+      setShowLoading(true);
       setError(null);
       setLoadedContent(new Map());
 
@@ -436,6 +439,14 @@ export function FileReaderScreen({
         setError(`Error reading folder metadata: ${err}`);
       } finally {
         setIsLoadingMetadata(false);
+
+        // Ensure loading screen shows for at least 1 second
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 200 - elapsed);
+
+        setTimeout(() => {
+          setShowLoading(false);
+        }, remaining);
       }
     };
 
@@ -541,6 +552,18 @@ export function FileReaderScreen({
 
   return (
     <div className="flex h-screen flex-col">
+      {/* Full-screen loading overlay */}
+      <div
+        className={`absolute inset-0 z-50 flex items-center justify-center bg-background transition-opacity duration-500 ${
+          showLoading ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <div className="text-muted-foreground text-sm">Loading...</div>
+        </div>
+      </div>
+
       <div className="mx-auto w-full max-w-4xl px-6 pt-4">
         <div className="flex items-start justify-between gap-4">
           {/* Filter controls on the left */}
