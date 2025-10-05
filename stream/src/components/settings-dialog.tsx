@@ -1,18 +1,15 @@
 "use client";
 
-import { Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import RepoConnector from "@/components/repo-connector";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import type { CommitsByDate } from "../utils/gitReader";
-import type { MarkdownFileMetadata } from "../utils/markdownReader";
-import RepoConnector from "./RepoConnector";
+import type { CommitsByDate } from "@/utils/git-reader";
+import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 
 interface SettingsDialogProps {
   folderPath: string;
@@ -24,7 +21,6 @@ interface SettingsDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-// Folder path display component
 function FolderInfo({ folderPath }: { folderPath: string }) {
   return (
     <div className="space-y-3">
@@ -39,7 +35,6 @@ function FolderInfo({ folderPath }: { folderPath: string }) {
   );
 }
 
-// Status information component
 function StatusInfo({
   fileCount,
   commitsByDate,
@@ -81,7 +76,6 @@ function StatusInfo({
   );
 }
 
-// Loading state component
 function LoadingState() {
   return (
     <div className="flex items-center justify-center py-12">
@@ -111,12 +105,6 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Settings className="h-4 w-4" />
-          <span className="sr-only">Open settings</span>
-        </Button>
-      </DialogTrigger>
       <DialogContent className="max-h-[85vh] min-w-[66vw] overflow-y-scroll">
         <DialogHeader className="pb-6">
           <DialogTitle className="text-xl">Settings & Information</DialogTitle>
@@ -126,12 +114,10 @@ export function SettingsDialog({
         </DialogHeader>
 
         <div className="space-y-8">
-          {/* Folder Information */}
           <div className="rounded-lg border bg-muted/30 p-4">
             <FolderInfo folderPath={folderPath} />
           </div>
 
-          {/* Status Information */}
           <div className="rounded-lg border bg-muted/30 p-4">
             {isLoadingMetadata ? (
               <LoadingState />
@@ -144,7 +130,6 @@ export function SettingsDialog({
             )}
           </div>
 
-          {/* Repository Connector */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-foreground text-lg">

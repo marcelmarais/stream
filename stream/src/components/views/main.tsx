@@ -2,7 +2,19 @@
 
 import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Virtuoso } from "react-virtuoso";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
+import {
+  DateHeader,
+  FileCard,
+  FileReaderFooter,
+  FileReaderHeader,
+} from "@/components/markdown-file-card";
+import { getConnectedRepos } from "@/components/repo-connector";
+import {
+  formatDisplayDate,
+  getDateFromFilename,
+  getDateKey,
+} from "@/utils/date-utils";
 import {
   type CommitFilters,
   type CommitsByDate,
@@ -11,19 +23,15 @@ import {
   getCommitsForDate,
   getGitCommitsForRepos,
   groupCommitsByDate,
-} from "../utils/gitReader";
+} from "@/utils/git-reader";
 import {
   ensureTodayMarkdownFile,
   type MarkdownFileMetadata,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
   writeMarkdownFileContent,
-} from "../utils/markdownReader";
-import CommitFilter from "./CommitFilter";
-import { DateHeader, FileCard } from "./FileReaderComponents";
-import FileReaderFooter from "./FileReaderFooter";
-import FileReaderHeader from "./FileReaderHeader";
-import { getConnectedRepos } from "./RepoConnector";
+} from "@/utils/markdown-reader";
+import CommitFilter from "../commit-filter";
 
 interface FileReaderScreenProps {
   folderPath: string;
@@ -45,28 +53,26 @@ interface FileItem {
 
 type VirtualizedItem = DateHeaderItem | FileItem;
 
-// Configuration for git commit refresh interval (in milliseconds)
-const GIT_COMMIT_REFRESH_INTERVAL = 5000; // 30 seconds - adjust as needed
+const GIT_COMMIT_REFRESH_INTERVAL = 5000;
 
-// Create grouped items from files metadata - moved outside component for stability
 function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
-  // Group files by date
   const filesByDate = new Map<string, MarkdownFileMetadata[]>();
 
   files.forEach((file) => {
-    const dateStr = getDateKeyFromDate(file.createdAt);
+    // Try to get date from filename first, fall back to creation date
+    const dateFromFilename = getDateFromFilename(file.fileName);
+    const dateStr = dateFromFilename || getDateKey(file.createdAt);
+
     if (!filesByDate.has(dateStr)) {
       filesByDate.set(dateStr, []);
     }
     filesByDate.get(dateStr)?.push(file);
   });
 
-  // Sort dates in descending order (newest first)
   const sortedDates = Array.from(filesByDate.keys()).sort((a, b) =>
     b.localeCompare(a),
   );
 
-  // Create flattened list with headers and files
   const items: VirtualizedItem[] = [];
   let fileIndex = 0;
 
@@ -74,17 +80,14 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
     const filesForDate = filesByDate.get(dateStr);
     if (!filesForDate) return;
 
-    // Format date for display
-    const displayDate = formatDisplayDateFromKey(dateStr);
+    const displayDate = formatDisplayDate(dateStr);
 
-    // Add date header
     items.push({
       type: "header",
       date: dateStr,
       displayDate,
     });
 
-    // Add files for this date
     filesForDate.forEach((file) => {
       items.push({
         type: "file",
@@ -97,31 +100,12 @@ function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
   return items;
 }
 
-// Simplified - virtualization handles efficient loading
-
-// Helpers
-function getDateKeyFromDate(date: Date): string {
-  return date.toISOString().split("T")[0];
-}
-
-function formatDisplayDateFromKey(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date
-    .toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    })
-    .replace(", ", " — ")
-    .toLowerCase();
-}
-
 export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
-  const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+  const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
+  const [showLoading, setShowLoading] = useState(true);
   const [allFilesMetadata, setAllFilesMetadata] = useState<
     MarkdownFileMetadata[]
   >([]);
@@ -130,7 +114,6 @@ export function FileReaderScreen({
     new Map(),
   );
   const [error, setError] = useState<string | null>(null);
-  const [saveErrors, setSaveErrors] = useState<Map<string, string>>(new Map());
   const [commitsByDate, setCommitsByDate] = useState<CommitsByDate>({});
   const [commitError, setCommitError] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
@@ -149,15 +132,12 @@ export function FileReaderScreen({
     commitsByDateRef.current = commitsByDate;
   }, [commitsByDate]);
 
+  // Virtuoso ref for scrolling
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+
   // Create debounced save function
   const debouncedSave = useCallback(
     debounce(async (filePath: string, content: string) => {
-      setSaveErrors((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(filePath);
-        return newMap;
-      });
-
       try {
         await writeMarkdownFileContent(filePath, content);
         // Update the loaded content to reflect the saved changes
@@ -168,11 +148,6 @@ export function FileReaderScreen({
         });
       } catch (error) {
         console.error(`Error saving file ${filePath}:`, error);
-        setSaveErrors((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(filePath, `Failed to save: ${error}`);
-          return newMap;
-        });
       }
     }, 500),
     [],
@@ -184,12 +159,6 @@ export function FileReaderScreen({
       const content = loadedContent.get(filePath);
       if (!content) return;
 
-      setSaveErrors((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(filePath);
-        return newMap;
-      });
-
       try {
         await writeMarkdownFileContent(filePath, content);
         // Update the loaded content to reflect the saved changes
@@ -200,20 +169,29 @@ export function FileReaderScreen({
         });
       } catch (error) {
         console.error(`Error saving file ${filePath}:`, error);
-        setSaveErrors((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(filePath, `Failed to save: ${error}`);
-          return newMap;
-        });
         throw error; // Re-throw so the editor can show the error
       }
     },
     [loadedContent],
   );
 
-  const handleOpenSettings = useCallback(() => {
-    setSettingsOpen(true);
-  }, []);
+  const handleScrollToDate = useCallback(
+    (date: Date) => {
+      const dateStr = getDateKey(date);
+      const index = groupedItems.findIndex(
+        (item) => item.type === "header" && item.date === dateStr,
+      );
+
+      if (index !== -1 && virtuosoRef.current) {
+        virtuosoRef.current.scrollToIndex({
+          index,
+          align: "start",
+          behavior: "auto",
+        });
+      }
+    },
+    [groupedItems],
+  );
 
   const refreshMetadata = useCallback(async () => {
     setIsLoadingMetadata(true);
@@ -257,6 +235,13 @@ export function FileReaderScreen({
   // Handle content changes during editing
   const handleContentChange = useCallback(
     (filePath: string, newContent: string) => {
+      // Update state immediately for responsive editing
+      setLoadedContent((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(filePath, newContent);
+        return newMap;
+      });
+      // Debounce the actual file save
       debouncedSave(filePath, newContent);
     },
     [debouncedSave],
@@ -305,10 +290,13 @@ export function FileReaderScreen({
         setConnectedReposCount(connectedRepos.length);
         if (connectedRepos.length === 0) return;
 
-        // Unique date keys for visible files
+        // Unique date keys for visible files (use filename date if available)
         const visibleDates = Array.from(
           new Set(
-            visibleFiles.map((file) => getDateKeyFromDate(file.createdAt)),
+            visibleFiles.map((file) => {
+              const dateFromFilename = getDateFromFilename(file.fileName);
+              return dateFromFilename || getDateKey(file.createdAt);
+            }),
           ),
         );
 
@@ -422,7 +410,9 @@ export function FileReaderScreen({
   // Load metadata when component mounts
   useEffect(() => {
     const loadMetadata = async () => {
+      const startTime = Date.now();
       setIsLoadingMetadata(true);
+      setShowLoading(true);
       setError(null);
       setLoadedContent(new Map());
 
@@ -449,6 +439,14 @@ export function FileReaderScreen({
         setError(`Error reading folder metadata: ${err}`);
       } finally {
         setIsLoadingMetadata(false);
+
+        // Ensure loading screen shows for at least 1 second
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 200 - elapsed);
+
+        setTimeout(() => {
+          setShowLoading(false);
+        }, remaining);
       }
     };
 
@@ -521,10 +519,13 @@ export function FileReaderScreen({
       const { file } = item;
       const content = loadedContent.get(file.filePath);
       const isLoading = !content && loadingFiles.has(file.filePath);
-      const saveError = saveErrors.get(file.filePath);
 
-      // Get commits for this file's creation date and apply filters
-      const allFileCommits = getCommitsForDate(commitsByDate, file.createdAt);
+      // Get commits for this file's date (use filename date if available)
+      const dateFromFilename = getDateFromFilename(file.fileName);
+      const fileDate = dateFromFilename
+        ? new Date(dateFromFilename)
+        : file.createdAt;
+      const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
       const fileCommits = filterCommits(allFileCommits, commitFilters);
 
       return (
@@ -532,7 +533,6 @@ export function FileReaderScreen({
           file={file}
           content={content}
           isLoading={isLoading}
-          saveError={saveError}
           commits={fileCommits}
           onContentChange={handleContentChange}
           onSave={handleImmediateSave}
@@ -543,7 +543,6 @@ export function FileReaderScreen({
       groupedItems,
       loadedContent,
       loadingFiles,
-      saveErrors,
       commitsByDate,
       commitFilters,
       handleContentChange,
@@ -553,6 +552,18 @@ export function FileReaderScreen({
 
   return (
     <div className="flex h-screen flex-col">
+      {/* Full-screen loading overlay */}
+      <div
+        className={`absolute inset-0 z-50 flex items-center justify-center bg-background transition-opacity duration-500 ${
+          showLoading ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <div className="text-muted-foreground text-sm">Loading...</div>
+        </div>
+      </div>
+
       <div className="mx-auto w-full max-w-4xl px-6 pt-4">
         <div className="flex items-start justify-between gap-4">
           {/* Filter controls on the left */}
@@ -568,19 +579,15 @@ export function FileReaderScreen({
             </div>
           )}
 
-          {/* Settings button on the right */}
+          {/* Navigation buttons on the right */}
           <div className="flex flex-1 justify-end">
             <FileReaderHeader
-              folderPath={folderPath}
               isLoadingMetadata={isLoadingMetadata}
               allFilesMetadata={allFilesMetadata}
-              commitsByDate={commitsByDate}
-              commitError={commitError}
               error={error}
-              settingsOpen={settingsOpen}
-              onSettingsOpenChange={setSettingsOpen}
               onCreateToday={handleCreateToday}
               creatingToday={creatingToday}
+              onScrollToDate={handleScrollToDate}
             />
           </div>
         </div>
@@ -590,6 +597,7 @@ export function FileReaderScreen({
       {!isLoadingMetadata && groupedItems.length > 0 && (
         <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-6">
           <Virtuoso
+            ref={virtuosoRef}
             totalCount={groupedItems.length}
             itemContent={renderItem}
             rangeChanged={handleRangeChanged}
@@ -618,8 +626,13 @@ export function FileReaderScreen({
         folderPath={folderPath}
         fileCount={allFilesMetadata.length}
         connectedReposCount={connectedReposCount}
-        onSettingsClick={handleOpenSettings}
         onFolderClick={onBack}
+        isLoadingMetadata={isLoadingMetadata}
+        allFilesMetadata={allFilesMetadata}
+        commitsByDate={commitsByDate}
+        commitError={commitError}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={setSettingsOpen}
       />
     </div>
   );
