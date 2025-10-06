@@ -1,6 +1,8 @@
 import {
   Calendar as CalendarIcon,
   CalendarPlus,
+  Eye,
+  EyeOff,
   FileText,
   Folder,
   GitBranch,
@@ -34,10 +36,35 @@ export function DateHeader({ displayDate }: { displayDate: string }) {
   );
 }
 
-function FileName({ fileName }: { fileName: string }) {
+export function FileName({
+  fileName,
+  isFocused,
+  onToggleFocus,
+}: {
+  fileName: string;
+  isFocused: boolean;
+  onToggleFocus: () => void;
+}) {
   return (
-    <div className="flex items-center justify-end">
-      <h4 className="font-base text-muted-foreground text-sm">{fileName}</h4>
+    <div className="group flex items-center justify-end">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onToggleFocus}
+        className={cn(
+          "flex items-center justify-end gap-2 font-base text-sm transition-colors hover:bg-transparent",
+          isFocused
+            ? "text-primary"
+            : "text-muted-foreground hover:text-primary",
+        )}
+      >
+        {isFocused ? (
+          <EyeOff className="size-4" />
+        ) : (
+          <Eye className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+        )}
+        {fileName}
+      </Button>
     </div>
   );
 }
@@ -49,6 +76,8 @@ interface FileCardProps {
   commits: GitCommit[];
   onContentChange: (filePath: string, content: string) => void;
   onSave: (filePath: string) => void;
+  onToggleFocus?: () => void;
+  isFocused?: boolean;
 }
 
 export function FileCard({
@@ -58,6 +87,8 @@ export function FileCard({
   commits,
   onContentChange,
   onSave,
+  onToggleFocus,
+  isFocused = false,
 }: FileCardProps) {
   if (isLoading) {
     return (
@@ -77,7 +108,11 @@ export function FileCard({
         onSave={() => onSave(file.filePath)}
       />
 
-      <FileName fileName={file.fileName} />
+      <FileName
+        fileName={file.fileName}
+        isFocused={isFocused}
+        onToggleFocus={onToggleFocus || (() => {})}
+      />
       {commits.length > 0 && (
         <div className="mt-4">
           <CommitOverlay

@@ -3,9 +3,12 @@
 import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
+import CommitOverlay from "@/components/commit-overlay";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import {
   DateHeader,
   FileCard,
+  FileName,
   FileReaderFooter,
   FileReaderHeader,
 } from "@/components/markdown-file-card";
@@ -125,6 +128,9 @@ export function FileReaderScreen({
     searchTerm: "",
   });
   const [creatingToday, setCreatingToday] = useState<boolean>(false);
+  const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
+    null,
+  );
 
   // Keep a ref of commitsByDate to avoid stale closures in async code
   const commitsByDateRef = useRef<CommitsByDate>({});
@@ -536,6 +542,12 @@ export function FileReaderScreen({
           commits={fileCommits}
           onContentChange={handleContentChange}
           onSave={handleImmediateSave}
+          onToggleFocus={() =>
+            setFocusedFile(
+              focusedFile?.filePath === file.filePath ? null : file,
+            )
+          }
+          isFocused={focusedFile?.filePath === file.filePath}
         />
       );
     },
@@ -547,6 +559,7 @@ export function FileReaderScreen({
       commitFilters,
       handleContentChange,
       handleImmediateSave,
+      focusedFile,
     ],
   );
 
@@ -634,6 +647,66 @@ export function FileReaderScreen({
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
       />
+
+      {/* Focused File Overlay */}
+      {focusedFile &&
+        (() => {
+          const dateFromFilename = getDateFromFilename(focusedFile.fileName);
+          const dateStr = dateFromFilename || getDateKey(focusedFile.createdAt);
+          const displayDate = formatDisplayDate(dateStr);
+          const fileDate = dateFromFilename
+            ? new Date(dateFromFilename)
+            : focusedFile.createdAt;
+          const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
+          const fileCommits = filterCommits(allFileCommits, commitFilters);
+
+          return (
+            <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
+              <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-18">
+                <DateHeader displayDate={displayDate} />
+                <div className="p-6">
+                  <MarkdownEditor
+                    value={loadedContent.get(focusedFile.filePath) ?? ""}
+                    onChange={(value: string) =>
+                      handleContentChange(focusedFile.filePath, value)
+                    }
+                    onSave={() => handleImmediateSave(focusedFile.filePath)}
+                  />
+                </div>
+              </div>
+              <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="mx-auto w-full max-w-4xl px-6 py-6">
+                  <FileName
+                    fileName={focusedFile.fileName}
+                    isFocused={true}
+                    onToggleFocus={() => setFocusedFile(null)}
+                  />
+                  {fileCommits.length > 0 && (
+                    <div className="mt-4">
+                      <CommitOverlay
+                        commits={fileCommits}
+                        date={focusedFile.createdAt}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <FileReaderFooter
+                folderPath={folderPath}
+                fileCount={allFilesMetadata.length}
+                connectedReposCount={connectedReposCount}
+                onFolderClick={onBack}
+                isLoadingMetadata={isLoadingMetadata}
+                allFilesMetadata={allFilesMetadata}
+                commitsByDate={commitsByDate}
+                commitError={commitError}
+                settingsOpen={settingsOpen}
+                onSettingsOpenChange={setSettingsOpen}
+              />
+            </div>
+          );
+        })()}
     </div>
   );
 }
