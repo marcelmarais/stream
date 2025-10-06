@@ -1,10 +1,20 @@
 "use client";
 
+import { FolderOpen, GitBranch, Loader2, RefreshCw } from "lucide-react";
+import { useState } from "react";
 import RepoConnector from "@/components/repo-connector";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -21,76 +31,50 @@ interface SettingsDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-function FolderInfo({ folderPath }: { folderPath: string }) {
-  return (
-    <div className="space-y-3">
-      <h3 className="font-semibold text-foreground text-lg">Current Folder</h3>
-      <div className="text-muted-foreground">
-        <div className="mb-2 text-sm">Reading from:</div>
-        <code className="block break-all rounded-md bg-background px-3 py-2 font-mono text-sm">
-          {folderPath}
-        </code>
-      </div>
-    </div>
-  );
-}
-
-function StatusInfo({
+function OverviewCard({
+  folderPath,
   fileCount,
-  commitsByDate,
-  commitError,
+  isLoading,
 }: {
+  folderPath: string;
   fileCount: number;
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
+  isLoading: boolean;
 }) {
   return (
-    <div className="space-y-3">
-      <h3 className="font-semibold text-foreground text-lg">
-        Status Information
-      </h3>
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span className="font-medium">{fileCount}</span>
-          <span>markdown files found</span>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FolderOpen className="size-5" />
+          Overview
+        </CardTitle>
+        <CardDescription>Folder information and statistics</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="font-medium text-sm">Reading from:</div>
+          <code className="block break-all rounded-md bg-muted px-0.5 py-1 font-mono text-xs">
+            {folderPath}
+          </code>
         </div>
-
-        {/* Git Commits Status */}
-        {Object.keys(commitsByDate).length > 0 && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <span className="font-medium">
-              {Object.keys(commitsByDate).length}
-            </span>
-            <span>days with commits (loaded on-demand)</span>
-          </div>
-        )}
-
-        {commitError && (
-          <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-destructive text-sm">
-            <div className="mb-1 font-medium">Git Error</div>
-            <div>{commitError}</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="flex items-center justify-center py-12">
-      <div className="space-y-4 text-center">
-        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-foreground" />
-        <div>
-          <div className="font-semibold text-foreground text-lg">
-            Reading folder metadata...
-          </div>
-          <div className="mt-2 text-muted-foreground">
-            Please wait while we scan for markdown files
-          </div>
+        <div className="flex items-center gap-2 pt-2 text-muted-foreground">
+          {isLoading ? (
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+              <span>Scanning for markdown files...</span>
+            </div>
+          ) : (
+            <>
+              <span className="font-semibold text-foreground text-xs">
+                {fileCount}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                markdown files found
+              </span>
+            </>
+          )}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -98,46 +82,74 @@ export function SettingsDialog({
   folderPath,
   isLoadingMetadata,
   allFilesMetadata,
-  commitsByDate,
-  commitError,
+  commitsByDate: _commitsByDate,
+  commitError: _commitError,
   open,
   onOpenChange,
 }: SettingsDialogProps) {
+  const [fetchReposFn, setFetchReposFn] = useState<
+    (() => Promise<void>) | null
+  >(null);
+  const [isFetching, setIsFetching] = useState(false);
+
+  const handleFetchRepos = async () => {
+    if (fetchReposFn) {
+      setIsFetching(true);
+      await fetchReposFn();
+      setIsFetching(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] min-w-[66vw] overflow-y-scroll">
+      <DialogContent className="max-h-[85vh] min-w-[80vw] max-w-[90vw] overflow-y-scroll">
         <DialogHeader className="pb-6">
-          <DialogTitle className="text-xl">Settings & Information</DialogTitle>
-          <DialogDescription className="text-base">
-            Manage your folder settings and connected repositories
-          </DialogDescription>
+          <DialogTitle className="text-2xl">Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-8">
-          <div className="rounded-lg border bg-muted/30 p-4">
-            <FolderInfo folderPath={folderPath} />
-          </div>
+        <div className="space-y-6">
+          <OverviewCard
+            folderPath={folderPath}
+            fileCount={allFilesMetadata.length}
+            isLoading={isLoadingMetadata}
+          />
 
-          <div className="rounded-lg border bg-muted/30 p-4">
-            {isLoadingMetadata ? (
-              <LoadingState />
-            ) : (
-              <StatusInfo
-                fileCount={allFilesMetadata.length}
-                commitsByDate={commitsByDate}
-                commitError={commitError}
+          <Card className="pb-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="size-5" />
+                Connect Git Repositories
+              </CardTitle>
+              <CardDescription>
+                Show your commits with your notes
+              </CardDescription>
+              {fetchReposFn && (
+                <CardAction>
+                  <Button
+                    onClick={handleFetchRepos}
+                    disabled={isFetching}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    title="Git fetch all repositories"
+                  >
+                    {isFetching ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-4" />
+                    )}
+                  </Button>
+                </CardAction>
+              )}
+            </CardHeader>
+            <CardContent>
+              <RepoConnector
+                key={folderPath}
+                markdownDirectory={folderPath}
+                onFetchRepos={(fn) => setFetchReposFn(() => fn)}
               />
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-foreground text-lg">
-                Repository Management
-              </h3>
-            </div>
-            <RepoConnector markdownDirectory={folderPath} className="" />
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </DialogContent>
     </Dialog>

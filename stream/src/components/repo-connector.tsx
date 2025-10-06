@@ -3,27 +3,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
-import {
-  CheckCircle2,
-  CircleAlert,
-  Folder,
-  GitBranch,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { Folder, FolderPlus, Loader2, Plus } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
@@ -42,22 +25,17 @@ export interface FetchResult {
 
 interface RepoConnectorProps {
   markdownDirectory: string;
-  className?: string;
+  onFetchRepos?: (fetchFn: () => Promise<void>) => void;
 }
 
 export function RepoConnector({
   markdownDirectory,
-  className = "",
+  onFetchRepos,
 }: RepoConnectorProps) {
   const [connectedRepos, setConnectedRepos] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingRepo, setIsAddingRepo] = useState(false);
-  const [showConnector, setShowConnector] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
-  const [fetchResults, setFetchResults] = useState<FetchResult[]>([]);
-  const [showFetchResults, setShowFetchResults] = useState(false);
 
-  // Load existing repo mappings for this markdown directory
   useEffect(() => {
     const loadRepoMappings = async () => {
       try {
@@ -138,279 +116,122 @@ export function RepoConnector({
     await saveRepoMappings(updatedRepos);
   };
 
-  const handleClearAllRepos = async () => {
-    setConnectedRepos([]);
-    await saveRepoMappings([]);
-  };
-
-  const handleFetchRepos = async () => {
+  const handleFetchRepos = useCallback(async () => {
     if (connectedRepos.length === 0) return;
-
-    setIsFetching(true);
-    setFetchResults([]);
-    setShowFetchResults(true);
 
     try {
       const results: FetchResult[] = await invoke("fetch_repos", {
         repoPaths: connectedRepos,
       });
 
-      setFetchResults(results);
-
-      // Auto-hide results after 10 seconds if all successful
-      const allSuccessful = results.every((r) => r.success);
-      if (allSuccessful) {
-        setTimeout(() => {
-          setShowFetchResults(false);
-        }, 10000);
-      }
+      // Show toasts for each result
+      results.forEach((result) => {
+        if (result.success) {
+          toast.success(
+            `${result.repo_path.split("/").pop()}: ${result.message}`,
+          );
+        } else {
+          toast.error(
+            `${result.repo_path.split("/").pop()}: ${result.message}`,
+          );
+        }
+      });
     } catch (error) {
       console.error("Error fetching repositories:", error);
-      setFetchResults([
-        {
-          repo_path: "Error",
-          success: false,
-          message: `Failed to fetch repositories: ${error}`,
-        },
-      ]);
-    } finally {
-      setIsFetching(false);
+      toast.error(`Failed to fetch repositories: ${error}`);
     }
-  };
+  }, [connectedRepos]);
+
+  // Expose fetch function to parent
+  useEffect(() => {
+    if (onFetchRepos && connectedRepos.length > 0) {
+      onFetchRepos(handleFetchRepos);
+    }
+  }, [onFetchRepos, handleFetchRepos, connectedRepos]);
 
   if (isLoading) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <GitBranch className="size-4 text-muted-foreground" />
-            <CardTitle className="font-medium text-sm">
-              Connected Code Repositories
-            </CardTitle>
-          </div>
-          <CardDescription className="text-xs">
-            Loading repositories…
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-6 w-full animate-pulse rounded bg-muted" />
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <div className="h-6 w-full animate-pulse rounded bg-muted" />
+      </div>
     );
   }
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <GitBranch className="size-4 text-muted-foreground" />
-          <CardTitle className="font-medium text-sm">
-            Connected Code Repositories
-          </CardTitle>
-          {connectedRepos.length > 0 ? (
-            <Badge variant="secondary">{connectedRepos.length}</Badge>
-          ) : null}
-        </div>
-        <CardDescription className="text-xs">
-          Link code repositories to this markdown folder
-        </CardDescription>
-        <CardAction>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowConnector(!showConnector)}
-          >
-            {showConnector ? "Hide" : "Manage"}
-          </Button>
-        </CardAction>
-      </CardHeader>
+    <div className="space-y-4">
+      {connectedRepos.length > 0 ? (
+        <div className="space-y-2">
+          <ScrollArea className="mb-4 max-h-64 overflow-y-scroll">
+            <div className="space-y-1">
+              {connectedRepos.map((repo, index) => (
+                <Fragment key={repo}>
+                  <div className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-muted/50">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <Folder className="size-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <div className="truncate font-mono text-sm">
+                          {repo.split("/").pop()}
+                        </div>
+                        <div className="truncate text-muted-foreground text-xs">
+                          {repo}
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => handleRemoveRepo(repo)}
+                      variant="ghost"
+                      size="sm"
+                      className="ml-2 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                  {index !== connectedRepos.length - 1 && <Separator />}
+                </Fragment>
+              ))}
+            </div>
+          </ScrollArea>
 
-      <CardContent className="space-y-6">
-        {/* Summary (when collapsed) */}
-        {connectedRepos.length > 0 && !showConnector ? (
-          <div className="space-y-2">
-            {connectedRepos.slice(0, 2).map((repo) => (
-              <div
-                key={repo}
-                className="flex items-center gap-2 text-muted-foreground text-sm"
-              >
-                <span className="text-muted-foreground">📁</span>
-                <span>{repo.split("/").pop()}</span>
-              </div>
-            ))}
-            {connectedRepos.length > 2 ? (
-              <div className="text-muted-foreground text-sm">
-                +{connectedRepos.length - 2} more repositories
-              </div>
-            ) : null}
+          <div className="flex justify-center">
+            <Button
+              onClick={handleAddRepo}
+              disabled={isAddingRepo}
+              variant="outline"
+              size="sm"
+              className="cursor-pointer rounded-full"
+            >
+              {isAddingRepo ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Plus className="size-3" />
+              )}
+            </Button>
           </div>
-        ) : null}
-
-        {/* Empty (when collapsed) */}
-        {connectedRepos.length === 0 && !showConnector ? (
-          <div className="py-4 text-center">
-            <div className="text-muted-foreground text-sm">
-              No code repositories connected
+        </div>
+      ) : (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleAddRepo}
+          disabled={isAddingRepo}
+          className="mb-4 w-full cursor-pointer rounded-lg border border-muted-foreground/25 border-dashed py-15 text-center transition-colors hover:border-muted-foreground/50 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <div className="flex flex-col items-center">
+            {isAddingRepo ? (
+              <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground/50" />
+            ) : (
+              <FolderPlus className="mx-auto size-8 text-muted-foreground" />
+            )}
+            <div className="mt-3 text-muted-foreground text-sm">
+              No Git repositories connected
             </div>
             <div className="mt-1 text-muted-foreground text-xs">
-              Click "Manage" to connect repositories
+              Connect repositories to link your markdown notes with your commits
             </div>
           </div>
-        ) : null}
-
-        {/* Full interface (when expanded) */}
-        {showConnector ? (
-          <div className="space-y-6">
-            {/* Primary Actions */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={handleAddRepo} disabled={isAddingRepo} size="sm">
-                {isAddingRepo ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Adding…
-                  </>
-                ) : (
-                  <>
-                    <Plus className="size-4" />
-                    Connect Repository
-                  </>
-                )}
-              </Button>
-
-              {connectedRepos.length > 0 ? (
-                <>
-                  <Button
-                    onClick={handleFetchRepos}
-                    disabled={isFetching}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    {isFetching ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Fetching…
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="size-4" />
-                        Git Fetch All
-                      </>
-                    )}
-                  </Button>
-
-                  <Button
-                    onClick={handleClearAllRepos}
-                    variant="destructive"
-                    size="sm"
-                  >
-                    <Trash2 className="size-4" />
-                    Clear All
-                  </Button>
-                </>
-              ) : null}
-            </div>
-
-            {/* Fetch Results */}
-            {showFetchResults && fetchResults.length > 0 ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="font-medium text-sm">Fetch results</div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowFetchResults(false)}
-                  >
-                    Hide
-                  </Button>
-                </div>
-                <ScrollArea className="max-h-48 rounded-md border">
-                  <div className="space-y-2 p-4">
-                    {fetchResults.map((result) => (
-                      <div
-                        key={result.repo_path}
-                        className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3"
-                      >
-                        {result.success ? (
-                          <CheckCircle2 className="size-4 shrink-0 text-muted-foreground" />
-                        ) : (
-                          <CircleAlert className="size-4 shrink-0 text-muted-foreground" />
-                        )}
-                        <div className="min-w-0">
-                          <div className="truncate font-mono text-sm">
-                            {result.repo_path.split("/").pop()}
-                          </div>
-                          <div className="mt-0.5 text-muted-foreground text-xs">
-                            {result.message}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            ) : null}
-
-            {/* Connected Repositories */}
-            {connectedRepos.length > 0 ? (
-              <div className="space-y-2">
-                <div className="font-medium text-sm">
-                  Connected repositories
-                </div>
-                <ScrollArea className="max-h-64 overflow-y-scroll rounded-md border">
-                  <div className="space-y-2 p-4">
-                    {connectedRepos.map((repo) => (
-                      <div
-                        key={repo}
-                        className="flex items-center justify-between rounded-lg border bg-muted/30 p-3"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <Folder className="size-4 shrink-0 text-muted-foreground" />
-                          <div className="min-w-0">
-                            <div className="truncate font-mono text-sm">
-                              {repo.split("/").pop()}
-                            </div>
-                            <div className="truncate text-muted-foreground text-xs">
-                              {repo}
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={() => handleRemoveRepo(repo)}
-                          variant="ghost"
-                          size="sm"
-                          className="ml-2 shrink-0 text-destructive"
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            ) : null}
-
-            {/* Empty State */}
-            {connectedRepos.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-6 text-center">
-                <div className="text-muted-foreground text-sm">
-                  No code repositories connected
-                </div>
-                <div className="mt-1 text-muted-foreground text-xs">
-                  Connect repositories to link your markdown notes with your
-                  code
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {/* Visual separator when expanded and content exists */}
-        {showConnector &&
-        (connectedRepos.length > 0 || fetchResults.length > 0) ? (
-          <Separator />
-        ) : null}
-      </CardContent>
-    </Card>
+        </Button>
+      )}
+    </div>
   );
 }
 
