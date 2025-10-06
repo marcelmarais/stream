@@ -46,13 +46,17 @@ export function FileName({
   onToggleFocus: () => void;
 }) {
   return (
-    <div className="group flex items-center justify-end">
+    <div className="group relative flex items-center justify-end bg-transparent">
+      {/* Gradient fade effect */}
+      <div className="-top-32 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
+
+      {/* Button content */}
       <Button
         variant="ghost"
         size="sm"
         onClick={onToggleFocus}
         className={cn(
-          "flex items-center justify-end gap-2 font-base text-sm transition-colors hover:bg-transparent",
+          "relative z-10 flex items-center justify-end gap-2 font-base text-sm transition-colors hover:bg-transparent",
           isFocused
             ? "text-primary"
             : "text-muted-foreground hover:text-primary",
@@ -171,17 +175,24 @@ export function FileReaderFooter({
           <Button
             variant="ghost"
             size="sm"
-            className="h-auto text-xs"
-            disabled
-            title="Click to open settings"
+            className="h-auto p-1"
+            onClick={() => onSettingsOpenChange(true)}
+            title="Open settings"
           >
-            <FileText className="size-3" />
-            <span>
-              {fileCount} markdown file{fileCount === 1 ? "" : "s"}
-            </span>
+            <Settings className="size-3" />
           </Button>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto text-xs"
+            disabled
+            title="Markdown files"
+          >
+            <FileText className="size-3" />
+            {fileCount}
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -190,18 +201,7 @@ export function FileReaderFooter({
             title="Connected repositories"
           >
             <GitBranch className="size-3" />
-            <span>
-              {connectedReposCount} repo{connectedReposCount === 1 ? "" : "s"}
-            </span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto p-1"
-            onClick={() => onSettingsOpenChange(true)}
-            title="Open settings"
-          >
-            <Settings className="size-3" />
+            {connectedReposCount}
           </Button>
         </div>
       </div>

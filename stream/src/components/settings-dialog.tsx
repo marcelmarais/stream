@@ -102,7 +102,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] min-w-[80vw] max-w-[90vw] overflow-y-scroll">
+      <DialogContent className="max-h-[85vh] max-w-[90vw] overflow-y-scroll lg:max-w-[50vw]">
         <DialogHeader className="pb-6">
           <DialogTitle className="text-2xl">Settings</DialogTitle>
         </DialogHeader>
