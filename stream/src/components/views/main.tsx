@@ -577,7 +577,7 @@ export function FileReaderScreen({
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-4xl px-6 pt-4">
+      <div className="mx-auto w-full max-w-4xl px-6 pt-6">
         <div className="flex items-start justify-between gap-4">
           {/* Filter controls on the left */}
           {!isLoadingMetadata && (
@@ -608,7 +608,7 @@ export function FileReaderScreen({
 
       {/* Virtualized List */}
       {!isLoadingMetadata && groupedItems.length > 0 && (
-        <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-6">
+        <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-16">
           <Virtuoso
             ref={virtuosoRef}
             totalCount={groupedItems.length}
@@ -662,7 +662,7 @@ export function FileReaderScreen({
 
           return (
             <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
-              <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-18">
+              <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-30">
                 <DateHeader displayDate={displayDate} />
                 <div className="p-6">
                   <MarkdownEditor
@@ -686,7 +686,7 @@ export function FileReaderScreen({
                       <CommitOverlay
                         commits={fileCommits}
                         date={focusedFile.createdAt}
-                        className="w-full overflow-y-scroll"
+                        className="overflow-y-scroll"
                       />
                     </div>
                   )}
