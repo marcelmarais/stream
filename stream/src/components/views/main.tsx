@@ -686,7 +686,7 @@ export function FileReaderScreen({
                       <CommitOverlay
                         commits={fileCommits}
                         date={focusedFile.createdAt}
-                        className="w-full"
+                        className="w-full overflow-y-scroll"
                       />
                     </div>
                   )}
