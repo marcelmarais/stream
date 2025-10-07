@@ -221,7 +221,7 @@
 
     /* Paragraphs */
     & p {
-      @apply !mt-3 !mb-3;
+      @apply !mt-3 !mb-3 !text-base;
     }
 
     /* Nested lists - remove extra spacing, match parent indentation (more specific, comes first) */

@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  EyeIcon,
+  EyeOffIcon,
   FolderOpen,
   GitBranch,
   Loader2,
@@ -26,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import {
   getApiKey,
@@ -89,6 +92,7 @@ function OverviewCard({
 
 function AISettingsCard() {
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [originalApiKey, setOriginalApiKey] = useState("");
   const [isConfigured, setIsConfigured] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -104,6 +108,7 @@ function AISettingsCard() {
         if (configured) {
           const key = await getApiKey();
           setApiKeyInput(key || "");
+          setOriginalApiKey(key || "");
         }
       } catch (error) {
         console.error("Error loading API key:", error);
@@ -124,6 +129,7 @@ function AISettingsCard() {
     try {
       await setApiKey(apiKeyInput.trim());
       setIsConfigured(true);
+      setOriginalApiKey(apiKeyInput.trim());
       toast.success("API key saved successfully");
     } catch (error) {
       console.error("Error saving API key:", error);
@@ -138,6 +144,7 @@ function AISettingsCard() {
     try {
       await removeApiKey();
       setApiKeyInput("");
+      setOriginalApiKey("");
       setIsConfigured(false);
       toast.success("API key removed");
     } catch (error) {
@@ -156,7 +163,7 @@ function AISettingsCard() {
           AI Features
         </CardTitle>
         <CardDescription>
-          Configure Google Gemini API for AI-powered summaries
+          Configure Gemini for AI-powered features
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -168,9 +175,9 @@ function AISettingsCard() {
         ) : (
           <>
             <div className="space-y-2">
-              <label htmlFor={inputId} className="font-medium text-sm">
+              <Label htmlFor={inputId} className="font-medium text-sm">
                 Google Gemini API Key
-              </label>
+              </Label>
               <div className="flex gap-2">
                 <Input
                   id={inputId}
@@ -182,12 +189,12 @@ function AISettingsCard() {
                   className="font-mono text-xs"
                 />
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setShowKey(!showKey)}
                   disabled={isSaving}
                 >
-                  {showKey ? "Hide" : "Show"}
+                  {showKey ? <EyeIcon /> : <EyeOffIcon />}
                 </Button>
               </div>
               <p className="text-muted-foreground text-xs">
@@ -206,7 +213,11 @@ function AISettingsCard() {
             <div className="flex gap-2">
               <Button
                 onClick={handleSave}
-                disabled={isSaving || !apiKeyInput.trim()}
+                disabled={
+                  isSaving ||
+                  !apiKeyInput.trim() ||
+                  apiKeyInput.trim() === originalApiKey
+                }
                 size="sm"
               >
                 {isSaving ? (
@@ -215,7 +226,7 @@ function AISettingsCard() {
                     Saving...
                   </>
                 ) : (
-                  "Save API Key"
+                  "Save"
                 )}
               </Button>
               {isConfigured && (
@@ -229,19 +240,6 @@ function AISettingsCard() {
                 </Button>
               )}
             </div>
-
-            {isConfigured && (
-              <div className="flex items-center gap-2 rounded-md bg-green-500/10 px-3 py-2 text-green-600 dark:text-green-400">
-                <Sparkles className="size-4" />
-                <span className="text-sm">
-                  AI features are enabled. Use{" "}
-                  <code className="rounded bg-green-500/20 px-1 font-mono text-xs">
-                    /summary
-                  </code>{" "}
-                  in the editor.
-                </span>
-              </div>
-            )}
           </>
         )}
       </CardContent>
@@ -289,8 +287,6 @@ export function SettingsDialog({
             isLoading={isLoadingMetadata}
           />
 
-          <AISettingsCard />
-
           <Card className="pb-4">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -327,6 +323,7 @@ export function SettingsDialog({
               />
             </CardContent>
           </Card>
+          <AISettingsCard />
         </div>
       </DialogContent>
     </Dialog>
