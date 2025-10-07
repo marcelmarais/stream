@@ -4,12 +4,12 @@ import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import CommitOverlay from "@/components/commit-overlay";
+import { Footer } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import {
   DateHeader,
   FileCard,
   FileName,
-  FileReaderFooter,
   FileReaderHeader,
 } from "@/components/markdown-file-card";
 import { getConnectedRepos } from "@/components/repo-connector";
@@ -685,8 +685,7 @@ export function FileReaderScreen({
         </div>
       )}
 
-      {/* Footer */}
-      <FileReaderFooter
+      <Footer
         folderPath={folderPath}
         fileCount={allFilesMetadata.length}
         connectedReposCount={connectedReposCount}
@@ -699,7 +698,6 @@ export function FileReaderScreen({
         onSettingsOpenChange={setSettingsOpen}
       />
 
-      {/* Focused File Overlay */}
       {focusedFile &&
         (() => {
           const dateFromFilename = getDateFromFilename(focusedFile.fileName);
@@ -744,7 +742,7 @@ export function FileReaderScreen({
                   )}
                 </div>
               </div>
-              <FileReaderFooter
+              <Footer
                 folderPath={folderPath}
                 fileCount={allFilesMetadata.length}
                 connectedReposCount={connectedReposCount}

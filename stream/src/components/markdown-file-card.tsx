@@ -3,16 +3,11 @@ import {
   CalendarPlus,
   Eye,
   EyeOff,
-  FileText,
-  Folder,
-  GitBranch,
-  Settings,
 } from "lucide-react";
 import type { ComponentProps } from "react";
 import { useState } from "react";
 import CommitOverlay from "@/components/commit-overlay";
 import { MarkdownEditor } from "@/components/markdown-editor";
-import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
@@ -24,7 +19,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
-import type { CommitsByDate, GitCommit } from "@/utils/git-reader";
+import type { GitCommit } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 import { getTodayMarkdownFileName } from "@/utils/markdown-reader";
 
@@ -130,93 +125,6 @@ export function FileCard({
         </div>
       )}
       <Separator className="mt-12" />
-    </div>
-  );
-}
-
-interface FileReaderFooterProps {
-  folderPath: string;
-  fileCount: number;
-  connectedReposCount: number;
-  onFolderClick: () => void;
-  isLoadingMetadata: boolean;
-  allFilesMetadata: MarkdownFileMetadata[];
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
-  settingsOpen: boolean;
-  onSettingsOpenChange: (open: boolean) => void;
-}
-
-export function FileReaderFooter({
-  folderPath,
-  fileCount,
-  connectedReposCount,
-  onFolderClick,
-  isLoadingMetadata,
-  allFilesMetadata,
-  commitsByDate,
-  commitError,
-  settingsOpen,
-  onSettingsOpenChange,
-}: FileReaderFooterProps) {
-  const folderName = folderPath.split("/").pop() || folderPath;
-
-  return (
-    <div className="flex-shrink-0 border-border border-t bg-muted/30 px-4 py-1 text-muted-foreground text-xs">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
-            onClick={onFolderClick}
-            title="Click to go back to folder selection"
-          >
-            <Folder className="size-3" />
-            <span title={folderPath}>{folderName}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto p-1"
-            onClick={() => onSettingsOpenChange(true)}
-            title="Open settings"
-          >
-            <Settings className="size-3" />
-          </Button>
-        </div>
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
-            disabled
-            title="Markdown files"
-          >
-            <FileText className="size-3" />
-            {fileCount}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
-            disabled
-            title="Connected repositories"
-          >
-            <GitBranch className="size-3" />
-            {connectedReposCount}
-          </Button>
-        </div>
-      </div>
-      <SettingsDialog
-        folderPath={folderPath}
-        isLoadingMetadata={isLoadingMetadata}
-        allFilesMetadata={allFilesMetadata}
-        commitsByDate={commitsByDate}
-        commitError={commitError}
-        open={settingsOpen}
-        onOpenChange={onSettingsOpenChange}
-      />
     </div>
   );
 }
