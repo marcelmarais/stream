@@ -14,6 +14,11 @@ import {
 } from "@/components/markdown-file-card";
 import { getConnectedRepos } from "@/components/repo-connector";
 import {
+  generateYesterdaySummary,
+  getYesterdayDateString,
+  getYesterdayMarkdownFileName,
+} from "@/utils/ai-summary";
+import {
   formatDisplayDate,
   getDateFromFilename,
   getDateKey,
@@ -252,6 +257,50 @@ export function FileReaderScreen({
     },
     [debouncedSave],
   );
+
+  // Generate AI summary of yesterday's activities
+  const handleGenerateSummary = useCallback(async (): Promise<string> => {
+    try {
+      // Get yesterday's date and filename
+      const yesterdayDateStr = getYesterdayDateString();
+      const yesterdayFileName = getYesterdayMarkdownFileName();
+
+      // Find yesterday's markdown file
+      const yesterdayFile = allFilesMetadata.find(
+        (file) => file.fileName === yesterdayFileName,
+      );
+
+      // Get yesterday's markdown content
+      let markdownContent = "";
+      if (yesterdayFile) {
+        // Check if content is already loaded
+        const cachedContent = loadedContent.get(yesterdayFile.filePath);
+        if (cachedContent !== undefined) {
+          markdownContent = cachedContent;
+        } else {
+          // Load the content
+          const contentMap = await readMarkdownFilesContentByPaths([
+            yesterdayFile.filePath,
+          ]);
+          markdownContent = contentMap.get(yesterdayFile.filePath) ?? "";
+        }
+      }
+
+      // Get yesterday's commits
+      const yesterdayCommits = commitsByDate[yesterdayDateStr]?.commits || [];
+
+      // Generate the summary
+      const summary = await generateYesterdaySummary(
+        markdownContent,
+        yesterdayCommits,
+      );
+
+      return summary;
+    } catch (error) {
+      console.error("Error in handleGenerateSummary:", error);
+      throw error;
+    }
+  }, [allFilesMetadata, loadedContent, commitsByDate]);
 
   // Load content for files that aren't loaded yet
   const loadFileContent = useCallback(
@@ -548,6 +597,7 @@ export function FileReaderScreen({
             )
           }
           isFocused={focusedFile?.filePath === file.filePath}
+          onGenerateSummary={handleGenerateSummary}
         />
       );
     },
@@ -560,6 +610,7 @@ export function FileReaderScreen({
       handleContentChange,
       handleImmediateSave,
       focusedFile,
+      handleGenerateSummary,
     ],
   );
 
@@ -671,6 +722,7 @@ export function FileReaderScreen({
                       handleContentChange(focusedFile.filePath, value)
                     }
                     onSave={() => handleImmediateSave(focusedFile.filePath)}
+                    onGenerateSummary={handleGenerateSummary}
                   />
                 </div>
               </div>

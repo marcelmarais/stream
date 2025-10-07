@@ -111,10 +111,22 @@ const SlashCommandList = forwardRef<
 
 SlashCommandList.displayName = "SlashCommandList";
 
-export const SlashCommand = Extension.create({
+interface SlashCommandOptions {
+  onGenerateSummary?: () => Promise<string>;
+}
+
+export const SlashCommand = Extension.create<SlashCommandOptions>({
   name: "slashCommand",
 
+  addOptions() {
+    return {
+      onGenerateSummary: undefined,
+    };
+  },
+
   addProseMirrorPlugins() {
+    const onGenerateSummary = this.options.onGenerateSummary;
+
     return [
       Suggestion({
         editor: this.editor,
@@ -125,15 +137,92 @@ export const SlashCommand = Extension.create({
         items: ({ query }) => {
           const items: SlashCommandItem[] = [
             {
-              title: "yesterday",
-              description: "Insert test text",
-              command: ({ editor, range }) => {
+              title: "summary",
+              description: "AI summary of yesterday's activities",
+              command: async ({ editor, range }) => {
+                if (!onGenerateSummary) {
+                  editor
+                    .chain()
+                    .focus()
+                    .deleteRange(range)
+                    .insertContent(
+                      "❌ AI summary not available (no callback configured)",
+                    )
+                    .run();
+                  return;
+                }
+
+                // Show loading indicator
                 editor
                   .chain()
                   .focus()
                   .deleteRange(range)
-                  .insertContent("# life\n- test")
+                  .insertContent("⏳ Generating AI summary...")
                   .run();
+
+                try {
+                  const summary = await onGenerateSummary();
+                  // Find and replace the loading text
+                  const { state } = editor;
+                  const { doc } = state;
+                  let loadingPos = -1;
+
+                  // Find the loading text position
+                  doc.descendants((node, pos) => {
+                    if (
+                      node.isText &&
+                      node.text?.includes("⏳ Generating AI summary...")
+                    ) {
+                      loadingPos = pos;
+                      return false;
+                    }
+                    return true;
+                  });
+
+                  if (loadingPos !== -1) {
+                    editor
+                      .chain()
+                      .focus()
+                      .deleteRange({
+                        from: loadingPos,
+                        to: loadingPos + "⏳ Generating AI summary...".length,
+                      })
+                      .insertContent(`## Yesterday's Summary\n\n${summary}\n\n`)
+                      .run();
+                  }
+                } catch (error) {
+                  console.error("Error generating summary:", error);
+                  const { state } = editor;
+                  const { doc } = state;
+                  let loadingPos = -1;
+
+                  doc.descendants((node, pos) => {
+                    if (
+                      node.isText &&
+                      node.text?.includes("⏳ Generating AI summary...")
+                    ) {
+                      loadingPos = pos;
+                      return false;
+                    }
+                    return true;
+                  });
+
+                  if (loadingPos !== -1) {
+                    const errorMessage =
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to generate summary";
+                    editor
+                      .chain()
+                      .focus()
+                      .deleteRange({
+                        from: loadingPos,
+                        to: loadingPos + "⏳ Generating AI summary...".length,
+                      })
+                      .insertContent(`❌ Error: ${errorMessage}`)
+                      .run();
+                  }
+                }
               },
             },
             {

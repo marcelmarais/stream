@@ -14,12 +14,14 @@ interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   onSave: () => void | Promise<void>;
+  onGenerateSummary?: () => Promise<string>;
 }
 
 export function MarkdownEditor({
   value,
   onChange,
   onSave,
+  onGenerateSummary,
 }: MarkdownEditorProps) {
   const isUpdatingFromProp = useRef(false);
   const isSavingRef = useRef(false);
@@ -41,7 +43,9 @@ export function MarkdownEditor({
       Placeholder.configure({
         placeholder: "Start typing...",
       }),
-      SlashCommand,
+      SlashCommand.configure({
+        onGenerateSummary,
+      }),
     ],
     content: value,
     editorProps: {

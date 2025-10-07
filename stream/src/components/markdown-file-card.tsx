@@ -82,6 +82,7 @@ interface FileCardProps {
   onSave: (filePath: string) => void;
   onToggleFocus?: () => void;
   isFocused?: boolean;
+  onGenerateSummary?: () => Promise<string>;
 }
 
 export function FileCard({
@@ -93,6 +94,7 @@ export function FileCard({
   onSave,
   onToggleFocus,
   isFocused = false,
+  onGenerateSummary,
 }: FileCardProps) {
   if (isLoading) {
     return (
@@ -110,6 +112,7 @@ export function FileCard({
         value={content ?? ""}
         onChange={(value: string) => onContentChange(file.filePath, value)}
         onSave={() => onSave(file.filePath)}
+        onGenerateSummary={onGenerateSummary}
       />
 
       <FileName

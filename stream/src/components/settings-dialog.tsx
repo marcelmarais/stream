@@ -1,7 +1,14 @@
 "use client";
 
-import { FolderOpen, GitBranch, Loader2, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import {
+  FolderOpen,
+  GitBranch,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { toast } from "sonner";
 import RepoConnector from "@/components/repo-connector";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +25,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type { CommitsByDate } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
+import {
+  getApiKey,
+  hasApiKey,
+  removeApiKey,
+  setApiKey,
+} from "@/utils/settings-store";
 
 interface SettingsDialogProps {
   folderPath: string;
@@ -78,6 +92,168 @@ function OverviewCard({
   );
 }
 
+function AISettingsCard() {
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const inputId = useId();
+
+  useEffect(() => {
+    const loadApiKey = async () => {
+      setIsLoading(true);
+      try {
+        const configured = await hasApiKey();
+        setIsConfigured(configured);
+        if (configured) {
+          const key = await getApiKey();
+          setApiKeyInput(key || "");
+        }
+      } catch (error) {
+        console.error("Error loading API key:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadApiKey();
+  }, []);
+
+  const handleSave = async () => {
+    if (!apiKeyInput.trim()) {
+      toast.error("Please enter an API key");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await setApiKey(apiKeyInput.trim());
+      setIsConfigured(true);
+      toast.success("API key saved successfully");
+    } catch (error) {
+      console.error("Error saving API key:", error);
+      toast.error("Failed to save API key");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setIsSaving(true);
+    try {
+      await removeApiKey();
+      setApiKeyInput("");
+      setIsConfigured(false);
+      toast.success("API key removed");
+    } catch (error) {
+      console.error("Error removing API key:", error);
+      toast.error("Failed to remove API key");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="size-5" />
+          AI Features
+        </CardTitle>
+        <CardDescription>
+          Configure Google Gemini API for AI-powered summaries
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+            <span>Loading settings...</span>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <label htmlFor={inputId} className="font-medium text-sm">
+                Google Gemini API Key
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id={inputId}
+                  type={showKey ? "text" : "password"}
+                  placeholder="Enter your API key..."
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  disabled={isSaving}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowKey(!showKey)}
+                  disabled={isSaving}
+                >
+                  {showKey ? "Hide" : "Show"}
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Get your API key from{" "}
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:text-primary/80"
+                >
+                  Google AI Studio
+                </a>
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || !apiKeyInput.trim()}
+                size="sm"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save API Key"
+                )}
+              </Button>
+              {isConfigured && (
+                <Button
+                  onClick={handleRemove}
+                  disabled={isSaving}
+                  variant="outline"
+                  size="sm"
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+
+            {isConfigured && (
+              <div className="flex items-center gap-2 rounded-md bg-green-500/10 px-3 py-2 text-green-600 dark:text-green-400">
+                <Sparkles className="size-4" />
+                <span className="text-sm">
+                  AI features are enabled. Use{" "}
+                  <code className="rounded bg-green-500/20 px-1 font-mono text-xs">
+                    /summary
+                  </code>{" "}
+                  in the editor.
+                </span>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SettingsDialog({
   folderPath,
   isLoadingMetadata,
@@ -113,6 +289,8 @@ export function SettingsDialog({
             fileCount={allFilesMetadata.length}
             isLoading={isLoadingMetadata}
           />
+
+          <AISettingsCard />
 
           <Card className="pb-4">
             <CardHeader>
