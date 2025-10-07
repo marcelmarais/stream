@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
+@import "tippy.js/dist/tippy.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -122,8 +123,20 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans overflow-x-hidden;
+    width: 100%;
+    position: relative;
+  }
+  
+  /* Ensure body and html don't allow horizontal scroll */
+  html {
+    overflow-x: hidden;
+  }
+  
+  body {
+    overflow-x: hidden;
   }
 
   /* Hide scrollbars for all elements */
@@ -158,6 +171,24 @@
 
   /* Obsidian-like prose overrides */
   .prose.prose-obsidian {
+    /* Prevent overflow */
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    
+    /* Ensure code blocks don't cause horizontal overflow */
+    & pre {
+      overflow-x: auto;
+      max-width: 100%;
+    }
+    
+    & code {
+      word-break: break-all;
+    }
+    
+    & pre code {
+      word-break: normal;
+    }
     /* Headings - consistent spacing */
     & h1 {
       @apply !text-3xl !font-medium !mt-6 !mb-3 !text-heading/100;
@@ -231,4 +262,16 @@
     pointer-events: none;
     height: 0;
   }
+}
+
+/* Tippy.js custom styling for slash commands */
+.tippy-box[data-theme~="slash-command"] {
+  background: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+}
+
+.tippy-box[data-theme~="slash-command"] .tippy-content {
+  padding: 0;
 }

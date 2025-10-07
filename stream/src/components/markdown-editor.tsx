@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Markdown } from "tiptap-markdown";
 import { formatMarkdown } from "@/utils/markdown-formatter";
+import { SlashCommand } from "./slash-command";
 
 interface MarkdownEditorProps {
   value: string;
@@ -40,6 +41,7 @@ export function MarkdownEditor({
       Placeholder.configure({
         placeholder: "Start typing...",
       }),
+      SlashCommand,
     ],
     content: value,
     editorProps: {
