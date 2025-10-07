@@ -26,7 +26,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { CommitsByDate } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 import {
   getApiKey,
@@ -39,8 +38,6 @@ interface SettingsDialogProps {
   folderPath: string;
   isLoadingMetadata: boolean;
   allFilesMetadata: MarkdownFileMetadata[];
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -258,8 +255,6 @@ export function SettingsDialog({
   folderPath,
   isLoadingMetadata,
   allFilesMetadata,
-  commitsByDate: _commitsByDate,
-  commitError: _commitError,
   open,
   onOpenChange,
 }: SettingsDialogProps) {

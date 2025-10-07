@@ -129,12 +129,12 @@
     width: 100%;
     position: relative;
   }
-  
+
   /* Ensure body and html don't allow horizontal scroll */
   html {
     overflow-x: hidden;
   }
-  
+
   body {
     overflow-x: hidden;
   }
@@ -175,17 +175,17 @@
     overflow-wrap: break-word;
     word-wrap: break-word;
     word-break: break-word;
-    
+
     /* Ensure code blocks don't cause horizontal overflow */
     & pre {
       overflow-x: auto;
       max-width: 100%;
     }
-    
+
     & code {
       word-break: break-all;
     }
-    
+
     & pre code {
       word-break: normal;
     }

@@ -12,7 +12,7 @@ import {
   FileName,
   FileReaderHeader,
 } from "@/components/markdown-file-card";
-import { getConnectedRepos } from "@/components/repo-connector";
+import { useGitCommitsStore } from "@/stores/git-commits-store";
 import {
   generateYesterdaySummary,
   getYesterdayDateString,
@@ -23,15 +23,7 @@ import {
   getDateFromFilename,
   getDateKey,
 } from "@/utils/date-utils";
-import {
-  type CommitFilters,
-  type CommitsByDate,
-  createDateRange,
-  filterCommits,
-  getCommitsForDate,
-  getGitCommitsForRepos,
-  groupCommitsByDate,
-} from "@/utils/git-reader";
+import { filterCommits, getCommitsForDate } from "@/utils/git-reader";
 import {
   ensureTodayMarkdownFile,
   type MarkdownFileMetadata,
@@ -112,6 +104,7 @@ export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
+  // File/content state (keep local for now)
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
   const [showLoading, setShowLoading] = useState(true);
   const [allFilesMetadata, setAllFilesMetadata] = useState<
@@ -122,23 +115,28 @@ export function FileReaderScreen({
     new Map(),
   );
   const [error, setError] = useState<string | null>(null);
-  const [commitsByDate, setCommitsByDate] = useState<CommitsByDate>({});
-  const [commitError, setCommitError] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
-  const [connectedReposCount, setConnectedReposCount] = useState<number>(0);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
-  const [commitFilters, setCommitFilters] = useState<CommitFilters>({
-    authors: [],
-    repos: [],
-    searchTerm: "",
-  });
   const [creatingToday, setCreatingToday] = useState<boolean>(false);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,
   );
 
+  // Git commits state from store
+  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
+  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
+  const loadConnectedReposCount = useGitCommitsStore(
+    (state) => state.loadConnectedReposCount,
+  );
+  const loadCommitsForVisibleFiles = useGitCommitsStore(
+    (state) => state.loadCommitsForVisibleFiles,
+  );
+  const refreshAllCommits = useGitCommitsStore(
+    (state) => state.refreshAllCommits,
+  );
+
   // Keep a ref of commitsByDate to avoid stale closures in async code
-  const commitsByDateRef = useRef<CommitsByDate>({});
+  const commitsByDateRef = useRef(commitsByDate);
   useEffect(() => {
     commitsByDateRef.current = commitsByDate;
   }, [commitsByDate]);
@@ -335,132 +333,18 @@ export function FileReaderScreen({
     [loadingFiles, loadedContent],
   );
 
-  // Load git commits for currently visible files only
-  const loadCommitsForVisibleFiles = useCallback(
+  // Wrap store actions to match component needs
+  const handleLoadCommitsForVisibleFiles = useCallback(
     async (visibleFiles: MarkdownFileMetadata[]) => {
-      if (visibleFiles.length === 0) return;
-
-      try {
-        const connectedRepos = await getConnectedRepos(folderPath);
-        setConnectedReposCount(connectedRepos.length);
-        if (connectedRepos.length === 0) return;
-
-        // Unique date keys for visible files (use filename date if available)
-        const visibleDates = Array.from(
-          new Set(
-            visibleFiles.map((file) => {
-              const dateFromFilename = getDateFromFilename(file.fileName);
-              return dateFromFilename || getDateKey(file.createdAt);
-            }),
-          ),
-        );
-
-        // Filter out dates we already have
-        const datesToLoad = visibleDates.filter(
-          (dateStr) => !commitsByDateRef.current[dateStr],
-        );
-
-        if (datesToLoad.length === 0) return;
-
-        // Build date ranges
-        const dateRanges = datesToLoad.map((dateStr) => {
-          const date = new Date(dateStr);
-          const startOfDay = new Date(date);
-          startOfDay.setHours(0, 0, 0, 0);
-          const endOfDay = new Date(date);
-          endOfDay.setHours(23, 59, 59, 999);
-          return {
-            dateStr,
-            range: createDateRange.custom(startOfDay, endOfDay),
-          };
-        });
-
-        // Fetch in parallel
-        const results = await Promise.all(
-          dateRanges.map(async ({ range }) => {
-            try {
-              const repoCommits = await getGitCommitsForRepos(
-                connectedRepos,
-                range,
-              );
-              return groupCommitsByDate(repoCommits);
-            } catch (error) {
-              console.error("Error loading commits for date range:", error);
-              return {} as CommitsByDate;
-            }
-          }),
-        );
-
-        const merged: CommitsByDate = {};
-        for (const partial of results) {
-          for (const [key, value] of Object.entries(partial)) {
-            merged[key] = value;
-          }
-        }
-
-        if (Object.keys(merged).length > 0) {
-          setCommitsByDate((prev) => ({ ...prev, ...merged }));
-        }
-      } catch (error) {
-        console.error("Error loading commits for visible files:", error);
-        setCommitError(`Failed to load git commits: ${error}`);
-      }
+      await loadCommitsForVisibleFiles(folderPath, visibleFiles);
     },
-    [folderPath],
+    [folderPath, loadCommitsForVisibleFiles],
   );
 
-  // Refresh all currently loaded commits
-  const refreshAllCommits = useCallback(async () => {
+  const handleRefreshAllCommits = useCallback(async () => {
     const loadedDates = Object.keys(commitsByDateRef.current);
-    if (loadedDates.length === 0) return;
-
-    try {
-      const connectedRepos = await getConnectedRepos(folderPath);
-      if (connectedRepos.length === 0) return;
-
-      // Build date ranges for all loaded dates
-      const dateRanges = loadedDates.map((dateStr) => {
-        const date = new Date(dateStr);
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
-        return {
-          dateStr,
-          range: createDateRange.custom(startOfDay, endOfDay),
-        };
-      });
-
-      // Fetch in parallel
-      const results = await Promise.all(
-        dateRanges.map(async ({ range }) => {
-          try {
-            const repoCommits = await getGitCommitsForRepos(
-              connectedRepos,
-              range,
-            );
-            return groupCommitsByDate(repoCommits);
-          } catch (error) {
-            console.error("Error refreshing commits for date range:", error);
-            return {} as CommitsByDate;
-          }
-        }),
-      );
-
-      const merged: CommitsByDate = {};
-      for (const partial of results) {
-        for (const [key, value] of Object.entries(partial)) {
-          merged[key] = value;
-        }
-      }
-
-      if (Object.keys(merged).length > 0) {
-        setCommitsByDate((prev) => ({ ...prev, ...merged }));
-      }
-    } catch (error) {
-      console.error("Error refreshing commits:", error);
-    }
-  }, [folderPath]);
+    await refreshAllCommits(folderPath, loadedDates);
+  }, [folderPath, refreshAllCommits]);
 
   // Load metadata when component mounts
   useEffect(() => {
@@ -483,13 +367,7 @@ export function FileReaderScreen({
         setGroupedItems(grouped);
 
         // Load connected repos count
-        try {
-          const connectedRepos = await getConnectedRepos(folderPath);
-          setConnectedReposCount(connectedRepos.length);
-        } catch (repoError) {
-          console.error("Error loading connected repos:", repoError);
-          setConnectedReposCount(0);
-        }
+        await loadConnectedReposCount(folderPath);
       } catch (err) {
         setError(`Error reading folder metadata: ${err}`);
       } finally {
@@ -506,16 +384,16 @@ export function FileReaderScreen({
     };
 
     loadMetadata();
-  }, [folderPath]);
+  }, [folderPath, loadConnectedReposCount]);
 
   // Load git commits for initially visible files when metadata is loaded
   useEffect(() => {
     if (!isLoadingMetadata && allFilesMetadata.length > 0) {
       // Load commits for the first few files
       const initialFiles = allFilesMetadata.slice(0, 10);
-      loadCommitsForVisibleFiles(initialFiles);
+      handleLoadCommitsForVisibleFiles(initialFiles);
     }
-  }, [isLoadingMetadata, allFilesMetadata, loadCommitsForVisibleFiles]);
+  }, [isLoadingMetadata, allFilesMetadata, handleLoadCommitsForVisibleFiles]);
 
   // Set up automatic git commit refresh
   useEffect(() => {
@@ -523,14 +401,14 @@ export function FileReaderScreen({
     if (Object.keys(commitsByDate).length === 0) return;
 
     const intervalId = setInterval(() => {
-      refreshAllCommits();
+      handleRefreshAllCommits();
     }, GIT_COMMIT_REFRESH_INTERVAL);
 
     // Cleanup interval on unmount
     return () => {
       clearInterval(intervalId);
     };
-  }, [commitsByDate, refreshAllCommits]);
+  }, [commitsByDate, handleRefreshAllCommits]);
 
   // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
@@ -553,10 +431,15 @@ export function FileReaderScreen({
 
       // Load git commits for visible files
       if (visibleFiles.length > 0) {
-        loadCommitsForVisibleFiles(visibleFiles);
+        handleLoadCommitsForVisibleFiles(visibleFiles);
       }
     },
-    [groupedItems, loadedContent, loadFileContent, loadCommitsForVisibleFiles],
+    [
+      groupedItems,
+      loadedContent,
+      loadFileContent,
+      handleLoadCommitsForVisibleFiles,
+    ],
   );
 
   // Render individual item (header or file)
@@ -633,13 +516,7 @@ export function FileReaderScreen({
           {/* Filter controls on the left */}
           {!isLoadingMetadata && (
             <div className="flex-shrink-0">
-              <CommitFilter
-                commits={Object.values(commitsByDate).flatMap(
-                  (dateData) => dateData.commits,
-                )}
-                filters={commitFilters}
-                onFiltersChange={setCommitFilters}
-              />
+              <CommitFilter />
             </div>
           )}
 
@@ -688,12 +565,9 @@ export function FileReaderScreen({
       <Footer
         folderPath={folderPath}
         fileCount={allFilesMetadata.length}
-        connectedReposCount={connectedReposCount}
         onFolderClick={onBack}
         isLoadingMetadata={isLoadingMetadata}
         allFilesMetadata={allFilesMetadata}
-        commitsByDate={commitsByDate}
-        commitError={commitError}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
       />
@@ -745,12 +619,9 @@ export function FileReaderScreen({
               <Footer
                 folderPath={folderPath}
                 fileCount={allFilesMetadata.length}
-                connectedReposCount={connectedReposCount}
                 onFolderClick={onBack}
                 isLoadingMetadata={isLoadingMetadata}
                 allFilesMetadata={allFilesMetadata}
-                commitsByDate={commitsByDate}
-                commitError={commitError}
                 settingsOpen={settingsOpen}
                 onSettingsOpenChange={setSettingsOpen}
               />
