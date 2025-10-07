@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@plugin "@tailwindcss/typography";
 @import "tippy.js/dist/tippy.css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -182,12 +182,12 @@
       max-width: 100%;
     }
 
-    & code {
-      word-break: break-all;
-    }
-
     & pre code {
       word-break: normal;
+    }
+
+    & code {
+      word-break: break-all;
     }
     /* Headings - consistent spacing */
     & h1 {
