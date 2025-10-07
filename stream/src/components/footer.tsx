@@ -2,31 +2,29 @@ import { FileText, Folder, GitBranch, Settings } from "lucide-react";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
-import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
+import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 
 interface FooterProps {
   folderPath: string;
-  fileCount: number;
   onFolderClick: () => void;
-  isLoadingMetadata: boolean;
-  allFilesMetadata: MarkdownFileMetadata[];
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
 }
 
 export function Footer({
   folderPath,
-  fileCount,
   onFolderClick,
-  isLoadingMetadata,
-  allFilesMetadata,
   settingsOpen,
   onSettingsOpenChange,
 }: FooterProps) {
-  // Get commit data from store
+  // Get data from stores
   const connectedReposCount = useGitCommitsStore(
     (state) => state.connectedReposCount,
   );
+  const fileCount = useMarkdownFilesStore(
+    (state) => state.allFilesMetadata.length,
+  );
+
   const folderName = folderPath.split("/").pop() || folderPath;
 
   return (
@@ -78,8 +76,6 @@ export function Footer({
       </div>
       <SettingsDialog
         folderPath={folderPath}
-        isLoadingMetadata={isLoadingMetadata}
-        allFilesMetadata={allFilesMetadata}
         open={settingsOpen}
         onOpenChange={onSettingsOpenChange}
       />

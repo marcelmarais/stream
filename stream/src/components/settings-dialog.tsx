@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
+import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import {
   getApiKey,
   hasApiKey,
@@ -36,8 +36,6 @@ import {
 
 interface SettingsDialogProps {
   folderPath: string;
-  isLoadingMetadata: boolean;
-  allFilesMetadata: MarkdownFileMetadata[];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -253,11 +251,17 @@ function AISettingsCard() {
 
 export function SettingsDialog({
   folderPath,
-  isLoadingMetadata,
-  allFilesMetadata,
   open,
   onOpenChange,
 }: SettingsDialogProps) {
+  // Get data from store
+  const isLoadingMetadata = useMarkdownFilesStore(
+    (state) => state.isLoadingMetadata,
+  );
+  const allFilesMetadata = useMarkdownFilesStore(
+    (state) => state.allFilesMetadata,
+  );
+
   const [fetchReposFn, setFetchReposFn] = useState<
     (() => Promise<void>) | null
   >(null);

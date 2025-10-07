@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
-import CommitOverlay from "@/components/commit-overlay";
 import { Footer } from "@/components/footer";
-import { MarkdownEditor } from "@/components/markdown-editor";
 import {
   DateHeader,
   FileCard,
-  FileName,
   FileReaderHeader,
+  FocusedFileOverlay,
 } from "@/components/markdown-file-card";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
@@ -23,7 +21,6 @@ import {
   getDateFromFilename,
   getDateKey,
 } from "@/utils/date-utils";
-import { filterCommits, getCommitsForDate } from "@/utils/git-reader";
 import {
   type MarkdownFileMetadata,
   readMarkdownFilesContentByPaths,
@@ -113,35 +110,18 @@ export function FileReaderScreen({
   const allFilesMetadata = useMarkdownFilesStore(
     (state) => state.allFilesMetadata,
   );
-  const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
-  const loadingFiles = useMarkdownFilesStore((state) => state.loadingFiles);
   const isLoadingMetadata = useMarkdownFilesStore(
     (state) => state.isLoadingMetadata,
   );
   const error = useMarkdownFilesStore((state) => state.error);
-  const creatingToday = useMarkdownFilesStore((state) => state.creatingToday);
 
   // Markdown files actions from store
   const loadMetadata = useMarkdownFilesStore((state) => state.loadMetadata);
   const loadFileContent = useMarkdownFilesStore(
     (state) => state.loadFileContent,
   );
-  const saveFileContent = useMarkdownFilesStore(
-    (state) => state.saveFileContent,
-  );
-  const saveFileContentDebounced = useMarkdownFilesStore(
-    (state) => state.saveFileContentDebounced,
-  );
-  const updateContentOptimistically = useMarkdownFilesStore(
-    (state) => state.updateContentOptimistically,
-  );
-  const createTodayFile = useMarkdownFilesStore(
-    (state) => state.createTodayFile,
-  );
 
   // Git commits state from store
-  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
-  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
   const loadConnectedReposCount = useGitCommitsStore(
     (state) => state.loadConnectedReposCount,
   );
@@ -151,12 +131,6 @@ export function FileReaderScreen({
   const refreshAllCommits = useGitCommitsStore(
     (state) => state.refreshAllCommits,
   );
-
-  // Keep a ref of commitsByDate to avoid stale closures in async code
-  const commitsByDateRef = useRef(commitsByDate);
-  useEffect(() => {
-    commitsByDateRef.current = commitsByDate;
-  }, [commitsByDate]);
 
   // Virtuoso ref for scrolling
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -179,44 +153,6 @@ export function FileReaderScreen({
     [groupedItems],
   );
 
-  const handleCreateToday = useCallback(async () => {
-    if (!folderPath) return;
-    const filePath = await createTodayFile(folderPath);
-    if (filePath) {
-      // Update grouped items after creating new file
-      const metadata = useMarkdownFilesStore.getState().allFilesMetadata;
-      const grouped = createGroupedItems(metadata);
-      setGroupedItems(grouped);
-    }
-  }, [folderPath, createTodayFile]);
-
-  // Handle content changes during editing
-  const handleContentChange = useCallback(
-    (filePath: string, newContent: string) => {
-      // Update state immediately for responsive editing
-      updateContentOptimistically(filePath, newContent);
-      // Debounce the actual file save
-      saveFileContentDebounced(filePath, newContent);
-    },
-    [updateContentOptimistically, saveFileContentDebounced],
-  );
-
-  // Create immediate save function for Cmd+S
-  const handleImmediateSave = useCallback(
-    async (filePath: string) => {
-      const content = loadedContent.get(filePath);
-      if (!content) return;
-
-      try {
-        await saveFileContent(filePath, content);
-      } catch (error) {
-        console.error(`Error saving file ${filePath}:`, error);
-        throw error; // Re-throw so the editor can show the error
-      }
-    },
-    [loadedContent, saveFileContent],
-  );
-
   // Generate AI summary of yesterday's activities
   const handleGenerateSummary = useCallback(async (): Promise<string> => {
     try {
@@ -233,6 +169,7 @@ export function FileReaderScreen({
       let markdownContent = "";
       if (yesterdayFile) {
         // Check if content is already loaded
+        const loadedContent = useMarkdownFilesStore.getState().loadedContent;
         const cachedContent = loadedContent.get(yesterdayFile.filePath);
         if (cachedContent !== undefined) {
           markdownContent = cachedContent;
@@ -246,6 +183,7 @@ export function FileReaderScreen({
       }
 
       // Get yesterday's commits
+      const commitsByDate = useGitCommitsStore.getState().commitsByDate;
       const yesterdayCommits = commitsByDate[yesterdayDateStr]?.commits || [];
 
       // Generate the summary
@@ -259,7 +197,7 @@ export function FileReaderScreen({
       console.error("Error in handleGenerateSummary:", error);
       throw error;
     }
-  }, [allFilesMetadata, loadedContent, commitsByDate]);
+  }, [allFilesMetadata]);
 
   // Wrap store action for easier use in component
   const handleLoadFileContent = useCallback(
@@ -278,7 +216,8 @@ export function FileReaderScreen({
   );
 
   const handleRefreshAllCommits = useCallback(async () => {
-    const loadedDates = Object.keys(commitsByDateRef.current);
+    const commitsByDate = useGitCommitsStore.getState().commitsByDate;
+    const loadedDates = Object.keys(commitsByDate);
     await refreshAllCommits(folderPath, loadedDates);
   }, [folderPath, refreshAllCommits]);
 
@@ -325,6 +264,7 @@ export function FileReaderScreen({
   // Set up automatic git commit refresh
   useEffect(() => {
     // Only start refreshing if we have loaded some commits
+    const commitsByDate = useGitCommitsStore.getState().commitsByDate;
     if (Object.keys(commitsByDate).length === 0) return;
 
     const intervalId = setInterval(() => {
@@ -335,7 +275,7 @@ export function FileReaderScreen({
     return () => {
       clearInterval(intervalId);
     };
-  }, [commitsByDate, handleRefreshAllCommits]);
+  }, [handleRefreshAllCommits]);
 
   // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
@@ -350,6 +290,7 @@ export function FileReaderScreen({
         .map((item) => item.file);
 
       // Load content for visible files that aren't loaded yet
+      const loadedContent = useMarkdownFilesStore.getState().loadedContent;
       visibleFiles.forEach((file) => {
         if (!loadedContent.has(file.filePath)) {
           handleLoadFileContent(file.filePath);
@@ -361,12 +302,7 @@ export function FileReaderScreen({
         handleLoadCommitsForVisibleFiles(visibleFiles);
       }
     },
-    [
-      groupedItems,
-      loadedContent,
-      handleLoadFileContent,
-      handleLoadCommitsForVisibleFiles,
-    ],
+    [groupedItems, handleLoadFileContent, handleLoadCommitsForVisibleFiles],
   );
 
   // Render individual item (header or file)
@@ -382,25 +318,10 @@ export function FileReaderScreen({
 
       // Render file item
       const { file } = item;
-      const content = loadedContent.get(file.filePath);
-      const isLoading = !content && loadingFiles.has(file.filePath);
-
-      // Get commits for this file's date (use filename date if available)
-      const dateFromFilename = getDateFromFilename(file.fileName);
-      const fileDate = dateFromFilename
-        ? new Date(dateFromFilename)
-        : file.createdAt;
-      const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
-      const fileCommits = filterCommits(allFileCommits, commitFilters);
 
       return (
         <FileCard
           file={file}
-          content={content}
-          isLoading={isLoading}
-          commits={fileCommits}
-          onContentChange={handleContentChange}
-          onSave={handleImmediateSave}
           onToggleFocus={() =>
             setFocusedFile(
               focusedFile?.filePath === file.filePath ? null : file,
@@ -411,17 +332,7 @@ export function FileReaderScreen({
         />
       );
     },
-    [
-      groupedItems,
-      loadedContent,
-      loadingFiles,
-      commitsByDate,
-      commitFilters,
-      handleContentChange,
-      handleImmediateSave,
-      focusedFile,
-      handleGenerateSummary,
-    ],
+    [groupedItems, focusedFile, handleGenerateSummary],
   );
 
   return (
@@ -450,11 +361,7 @@ export function FileReaderScreen({
           {/* Navigation buttons on the right */}
           <div className="flex flex-1 justify-end">
             <FileReaderHeader
-              isLoadingMetadata={isLoadingMetadata}
-              allFilesMetadata={allFilesMetadata}
-              error={error}
-              onCreateToday={handleCreateToday}
-              creatingToday={creatingToday}
+              folderPath={folderPath}
               onScrollToDate={handleScrollToDate}
             />
           </div>
@@ -491,70 +398,26 @@ export function FileReaderScreen({
 
       <Footer
         folderPath={folderPath}
-        fileCount={allFilesMetadata.length}
         onFolderClick={onBack}
-        isLoadingMetadata={isLoadingMetadata}
-        allFilesMetadata={allFilesMetadata}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
       />
 
-      {focusedFile &&
-        (() => {
-          const dateFromFilename = getDateFromFilename(focusedFile.fileName);
-          const dateStr = dateFromFilename || getDateKey(focusedFile.createdAt);
-          const displayDate = formatDisplayDate(dateStr);
-          const fileDate = dateFromFilename
-            ? new Date(dateFromFilename)
-            : focusedFile.createdAt;
-          const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
-          const fileCommits = filterCommits(allFileCommits, commitFilters);
-
-          return (
-            <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
-              <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-30">
-                <DateHeader displayDate={displayDate} />
-                <div className="p-6">
-                  <MarkdownEditor
-                    value={loadedContent.get(focusedFile.filePath) ?? ""}
-                    onChange={(value: string) =>
-                      handleContentChange(focusedFile.filePath, value)
-                    }
-                    onSave={() => handleImmediateSave(focusedFile.filePath)}
-                    onGenerateSummary={handleGenerateSummary}
-                  />
-                </div>
-              </div>
-              <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="mx-auto w-full max-w-4xl px-6 py-6">
-                  <FileName
-                    fileName={focusedFile.fileName}
-                    isFocused={true}
-                    onToggleFocus={() => setFocusedFile(null)}
-                  />
-                  {fileCommits.length > 0 && (
-                    <div className="mt-4">
-                      <CommitOverlay
-                        commits={fileCommits}
-                        date={focusedFile.createdAt}
-                        className="overflow-y-scroll"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Footer
-                folderPath={folderPath}
-                fileCount={allFilesMetadata.length}
-                onFolderClick={onBack}
-                isLoadingMetadata={isLoadingMetadata}
-                allFilesMetadata={allFilesMetadata}
-                settingsOpen={settingsOpen}
-                onSettingsOpenChange={setSettingsOpen}
-              />
-            </div>
-          );
-        })()}
+      {focusedFile && (
+        <FocusedFileOverlay
+          file={focusedFile}
+          onClose={() => setFocusedFile(null)}
+          onGenerateSummary={handleGenerateSummary}
+          footerComponent={
+            <Footer
+              folderPath={folderPath}
+              onFolderClick={onBack}
+              settingsOpen={settingsOpen}
+              onSettingsOpenChange={setSettingsOpen}
+            />
+          }
+        />
+      )}
     </div>
   );
 }
