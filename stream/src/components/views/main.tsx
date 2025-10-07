@@ -1,6 +1,5 @@
 "use client";
 
-import { debounce } from "lodash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import CommitOverlay from "@/components/commit-overlay";
@@ -13,6 +12,7 @@ import {
   FileReaderHeader,
 } from "@/components/markdown-file-card";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
+import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import {
   generateYesterdaySummary,
   getYesterdayDateString,
@@ -25,11 +25,8 @@ import {
 } from "@/utils/date-utils";
 import { filterCommits, getCommitsForDate } from "@/utils/git-reader";
 import {
-  ensureTodayMarkdownFile,
   type MarkdownFileMetadata,
-  readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
-  writeMarkdownFileContent,
 } from "@/utils/markdown-reader";
 import CommitFilter from "../commit-filter";
 
@@ -104,22 +101,42 @@ export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
-  // File/content state (keep local for now)
-  const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
+  // Local UI state
   const [showLoading, setShowLoading] = useState(true);
-  const [allFilesMetadata, setAllFilesMetadata] = useState<
-    MarkdownFileMetadata[]
-  >([]);
   const [groupedItems, setGroupedItems] = useState<VirtualizedItem[]>([]);
-  const [loadedContent, setLoadedContent] = useState<Map<string, string>>(
-    new Map(),
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [loadingFiles, setLoadingFiles] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
-  const [creatingToday, setCreatingToday] = useState<boolean>(false);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,
+  );
+
+  // Markdown files state from store
+  const allFilesMetadata = useMarkdownFilesStore(
+    (state) => state.allFilesMetadata,
+  );
+  const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
+  const loadingFiles = useMarkdownFilesStore((state) => state.loadingFiles);
+  const isLoadingMetadata = useMarkdownFilesStore(
+    (state) => state.isLoadingMetadata,
+  );
+  const error = useMarkdownFilesStore((state) => state.error);
+  const creatingToday = useMarkdownFilesStore((state) => state.creatingToday);
+
+  // Markdown files actions from store
+  const loadMetadata = useMarkdownFilesStore((state) => state.loadMetadata);
+  const loadFileContent = useMarkdownFilesStore(
+    (state) => state.loadFileContent,
+  );
+  const saveFileContent = useMarkdownFilesStore(
+    (state) => state.saveFileContent,
+  );
+  const saveFileContentDebounced = useMarkdownFilesStore(
+    (state) => state.saveFileContentDebounced,
+  );
+  const updateContentOptimistically = useMarkdownFilesStore(
+    (state) => state.updateContentOptimistically,
+  );
+  const createTodayFile = useMarkdownFilesStore(
+    (state) => state.createTodayFile,
   );
 
   // Git commits state from store
@@ -144,46 +161,6 @@ export function FileReaderScreen({
   // Virtuoso ref for scrolling
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
-  // Create debounced save function
-  const debouncedSave = useCallback(
-    debounce(async (filePath: string, content: string) => {
-      try {
-        await writeMarkdownFileContent(filePath, content);
-        // Update the loaded content to reflect the saved changes
-        setLoadedContent((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(filePath, content);
-          return newMap;
-        });
-      } catch (error) {
-        console.error(`Error saving file ${filePath}:`, error);
-      }
-    }, 500),
-    [],
-  );
-
-  // Create immediate save function for Cmd+S
-  const handleImmediateSave = useCallback(
-    async (filePath: string) => {
-      const content = loadedContent.get(filePath);
-      if (!content) return;
-
-      try {
-        await writeMarkdownFileContent(filePath, content);
-        // Update the loaded content to reflect the saved changes
-        setLoadedContent((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(filePath, content);
-          return newMap;
-        });
-      } catch (error) {
-        console.error(`Error saving file ${filePath}:`, error);
-        throw error; // Re-throw so the editor can show the error
-      }
-    },
-    [loadedContent],
-  );
-
   const handleScrollToDate = useCallback(
     (date: Date) => {
       const dateStr = getDateKey(date);
@@ -202,58 +179,42 @@ export function FileReaderScreen({
     [groupedItems],
   );
 
-  const refreshMetadata = useCallback(async () => {
-    setIsLoadingMetadata(true);
-    setError(null);
-    try {
-      const metadata = await readAllMarkdownFilesMetadata(folderPath, {
-        maxFileSize: 5 * 1024 * 1024,
-      });
-      setAllFilesMetadata(metadata);
-      const grouped = createGroupedItems(metadata);
-      setGroupedItems(grouped);
-    } catch (err) {
-      setError(`Error reading folder metadata: ${err}`);
-    } finally {
-      setIsLoadingMetadata(false);
-    }
-  }, [folderPath]);
-
   const handleCreateToday = useCallback(async () => {
     if (!folderPath) return;
-    setCreatingToday(true);
-    try {
-      const { filePath } = await ensureTodayMarkdownFile(folderPath);
-      // Load content for the new file into cache so it renders immediately
-      const contentMap = await readMarkdownFilesContentByPaths([filePath]);
-      const content = contentMap.get(filePath) ?? "";
-      setLoadedContent((prev) => {
-        const map = new Map(prev);
-        map.set(filePath, content);
-        return map;
-      });
-      await refreshMetadata();
-    } catch (e) {
-      console.error("Failed to create today's file:", e);
-      setError(`Failed to create today's file: ${e}`);
-    } finally {
-      setCreatingToday(false);
+    const filePath = await createTodayFile(folderPath);
+    if (filePath) {
+      // Update grouped items after creating new file
+      const metadata = useMarkdownFilesStore.getState().allFilesMetadata;
+      const grouped = createGroupedItems(metadata);
+      setGroupedItems(grouped);
     }
-  }, [folderPath, refreshMetadata]);
+  }, [folderPath, createTodayFile]);
 
   // Handle content changes during editing
   const handleContentChange = useCallback(
     (filePath: string, newContent: string) => {
       // Update state immediately for responsive editing
-      setLoadedContent((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(filePath, newContent);
-        return newMap;
-      });
+      updateContentOptimistically(filePath, newContent);
       // Debounce the actual file save
-      debouncedSave(filePath, newContent);
+      saveFileContentDebounced(filePath, newContent);
     },
-    [debouncedSave],
+    [updateContentOptimistically, saveFileContentDebounced],
+  );
+
+  // Create immediate save function for Cmd+S
+  const handleImmediateSave = useCallback(
+    async (filePath: string) => {
+      const content = loadedContent.get(filePath);
+      if (!content) return;
+
+      try {
+        await saveFileContent(filePath, content);
+      } catch (error) {
+        console.error(`Error saving file ${filePath}:`, error);
+        throw error; // Re-throw so the editor can show the error
+      }
+    },
+    [loadedContent, saveFileContent],
   );
 
   // Generate AI summary of yesterday's activities
@@ -300,37 +261,12 @@ export function FileReaderScreen({
     }
   }, [allFilesMetadata, loadedContent, commitsByDate]);
 
-  // Load content for files that aren't loaded yet
-  const loadFileContent = useCallback(
+  // Wrap store action for easier use in component
+  const handleLoadFileContent = useCallback(
     async (filePath: string) => {
-      if (loadingFiles.has(filePath) || loadedContent.has(filePath)) {
-        return;
-      }
-
-      setLoadingFiles((prev) => new Set(prev).add(filePath));
-
-      try {
-        const contentMap = await readMarkdownFilesContentByPaths([filePath]);
-        const content = contentMap.get(filePath);
-
-        if (content !== undefined) {
-          setLoadedContent((prev) => {
-            const newMap = new Map(prev);
-            newMap.set(filePath, content);
-            return newMap;
-          });
-        }
-      } catch (err) {
-        console.error(`Error loading content for file ${filePath}:`, err);
-      } finally {
-        setLoadingFiles((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(filePath);
-          return newSet;
-        });
-      }
+      await loadFileContent(filePath);
     },
-    [loadingFiles, loadedContent],
+    [loadFileContent],
   );
 
   // Wrap store actions to match component needs
@@ -348,32 +284,23 @@ export function FileReaderScreen({
 
   // Load metadata when component mounts
   useEffect(() => {
-    const loadMetadata = async () => {
+    const loadData = async () => {
       const startTime = Date.now();
-      setIsLoadingMetadata(true);
       setShowLoading(true);
-      setError(null);
-      setLoadedContent(new Map());
 
       try {
-        const metadata = await readAllMarkdownFilesMetadata(folderPath, {
-          maxFileSize: 5 * 1024 * 1024, // 5MB limit
-        });
+        // Load markdown files metadata
+        await loadMetadata(folderPath);
 
-        setAllFilesMetadata(metadata);
-
-        // Create grouped items
+        // Get metadata and create grouped items
+        const metadata = useMarkdownFilesStore.getState().allFilesMetadata;
         const grouped = createGroupedItems(metadata);
         setGroupedItems(grouped);
 
         // Load connected repos count
         await loadConnectedReposCount(folderPath);
-      } catch (err) {
-        setError(`Error reading folder metadata: ${err}`);
       } finally {
-        setIsLoadingMetadata(false);
-
-        // Ensure loading screen shows for at least 1 second
+        // Ensure loading screen shows for at least 200ms
         const elapsed = Date.now() - startTime;
         const remaining = Math.max(0, 200 - elapsed);
 
@@ -383,8 +310,8 @@ export function FileReaderScreen({
       }
     };
 
-    loadMetadata();
-  }, [folderPath, loadConnectedReposCount]);
+    loadData();
+  }, [folderPath, loadMetadata, loadConnectedReposCount]);
 
   // Load git commits for initially visible files when metadata is loaded
   useEffect(() => {
@@ -425,7 +352,7 @@ export function FileReaderScreen({
       // Load content for visible files that aren't loaded yet
       visibleFiles.forEach((file) => {
         if (!loadedContent.has(file.filePath)) {
-          loadFileContent(file.filePath);
+          handleLoadFileContent(file.filePath);
         }
       });
 
@@ -437,7 +364,7 @@ export function FileReaderScreen({
     [
       groupedItems,
       loadedContent,
-      loadFileContent,
+      handleLoadFileContent,
       handleLoadCommitsForVisibleFiles,
     ],
   );
