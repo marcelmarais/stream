@@ -4,8 +4,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import type { ComponentProps } from "react";
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 import CommitOverlay from "@/components/commit-overlay";
 import type { Footer as FooterComponent } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
@@ -79,14 +78,12 @@ interface FileCardProps {
   file: MarkdownFileMetadata;
   onToggleFocus?: () => void;
   isFocused?: boolean;
-  onGenerateSummary?: () => Promise<string>;
 }
 
 export function FileCard({
   file,
   onToggleFocus,
   isFocused = false,
-  onGenerateSummary,
 }: FileCardProps) {
   // Get data from markdown files store
   const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
@@ -143,7 +140,6 @@ export function FileCard({
         value={content ?? ""}
         onChange={handleContentChange}
         onSave={handleSave}
-        onGenerateSummary={onGenerateSummary}
       />
 
       <FileName
@@ -335,14 +331,12 @@ export function FileReaderHeader({
 interface FocusedFileOverlayProps {
   file: MarkdownFileMetadata;
   onClose: () => void;
-  onGenerateSummary?: () => Promise<string>;
   footerComponent: React.ReactElement<typeof FooterComponent>;
 }
 
 export function FocusedFileOverlay({
   file,
   onClose,
-  onGenerateSummary,
   footerComponent,
 }: FocusedFileOverlayProps) {
   // Get data from markdown files store
@@ -396,7 +390,6 @@ export function FocusedFileOverlay({
             value={content ?? ""}
             onChange={handleContentChange}
             onSave={handleSave}
-            onGenerateSummary={onGenerateSummary}
           />
         </div>
       </div>

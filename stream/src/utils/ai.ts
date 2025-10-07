@@ -55,7 +55,7 @@ export async function generateYesterdaySummary(
             .join("\n")
         : "No commits recorded.";
 
-    const prompt = `You are a helpful assistant that summarizes daily journal entries and git commits.
+    const prompt = `You are a helpful assistant that extracts open todos, unfinished points, and action items from daily journal entries and git commits.
 
 Here is yesterday's markdown journal entry:
 
@@ -65,16 +65,28 @@ Here are yesterday's git commits:
 
 ${commitsSummary}
 
-Please provide a concise summary of yesterday's activities, combining insights from both the journal entry and the git commits. Focus on:
-1. Key accomplishments and tasks completed
-2. Important decisions or notes
-3. Development work based on commits
+Extract all open todos, unfinished tasks, pending decisions, questions, and action items from yesterday. Use VERBATIM TEXT from the journal entry wherever possible.
 
-Keep the summary brief and actionable (2-4 paragraphs).`;
+Return ONLY a markdown list with the following structure:
+- Use top-level bullets (-) for main categories or themes. Whenever possible these categories should be copied VERBATIM from the journal entry and not inferred.
+- Use one level of nesting (  -) to show related sub-points
+- If there are commit-related open items, include them under a relevant category eg. the repo name
+- DO NOT copy all bullets across. Only the ones that are clearly todos or action items ie. avoid copying general remarks.
+- DO NOT copy across completed tasks (look for lines that have [x], ~~ or semantic cues).
+
+Example format:
+- work
+  - OAuth vs JWT approach
+- Open questions about database design
+  - Should we normalize the user_preferences table?
+- Pending code reviews
+  - PR #123 needs attention
+
+Return ONLY the markdown list, no additional commentary or explanation.`;
 
     // Generate summary using Google Gemini
     const { text } = await generateText({
-      model: google("gemini-2.5-flash-lite"),
+      model: google("gemini-2.5-flash"),
       prompt,
     });
 

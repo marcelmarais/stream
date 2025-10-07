@@ -7,24 +7,26 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Markdown } from "tiptap-markdown";
+import { SlashCommand } from "@/components/slash-command";
+import { useAICommands } from "@/hooks/use-ai-commands";
 import { formatMarkdown } from "@/utils/markdown-formatter";
-import { SlashCommand } from "./slash-command";
 
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   onSave: () => void | Promise<void>;
-  onGenerateSummary?: () => Promise<string>;
 }
 
 export function MarkdownEditor({
   value,
   onChange,
   onSave,
-  onGenerateSummary,
 }: MarkdownEditorProps) {
   const isUpdatingFromProp = useRef(false);
   const isSavingRef = useRef(false);
+
+  // Get AI commands configuration
+  const aiCommands = useAICommands();
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -44,7 +46,7 @@ export function MarkdownEditor({
         placeholder: "Start typing...",
       }),
       SlashCommand.configure({
-        onGenerateSummary,
+        aiCommands,
       }),
     ],
     content: value,

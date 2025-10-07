@@ -111,8 +111,15 @@ const SlashCommandList = forwardRef<
 
 SlashCommandList.displayName = "SlashCommandList";
 
+export interface AICommand {
+  title: string;
+  description: string;
+  execute: () => Promise<string>;
+  insertionTemplate?: (result: string) => string;
+}
+
 interface SlashCommandOptions {
-  onGenerateSummary?: () => Promise<string>;
+  aiCommands?: AICommand[];
 }
 
 export const SlashCommand = Extension.create<SlashCommandOptions>({
@@ -120,12 +127,12 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
 
   addOptions() {
     return {
-      onGenerateSummary: undefined,
+      aiCommands: [],
     };
   },
 
   addProseMirrorPlugins() {
-    const onGenerateSummary = this.options.onGenerateSummary;
+    const aiCommands = this.options.aiCommands || [];
 
     return [
       Suggestion({
@@ -136,43 +143,36 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
         },
         items: ({ query }) => {
           const items: SlashCommandItem[] = [
-            {
-              title: "summary",
-              description: "AI summary of yesterday's activities",
-              command: async ({ editor, range }) => {
-                if (!onGenerateSummary) {
-                  editor
-                    .chain()
-                    .focus()
-                    .deleteRange(range)
-                    .insertContent(
-                      "❌ AI summary not available (no callback configured)",
-                    )
-                    .run();
-                  return;
-                }
+            // Add AI commands dynamically
+            ...aiCommands.map((aiCommand) => ({
+              title: aiCommand.title,
+              description: aiCommand.description,
+              command: async ({
+                editor,
+                range,
+              }: {
+                editor: Editor;
+                range: { from: number; to: number };
+              }) => {
+                const loadingText = `⏳ Generating ${aiCommand.title}...`;
 
                 // Show loading indicator
                 editor
                   .chain()
                   .focus()
                   .deleteRange(range)
-                  .insertContent("⏳ Generating AI summary...")
+                  .insertContent(loadingText)
                   .run();
 
                 try {
-                  const summary = await onGenerateSummary();
-                  // Find and replace the loading text
+                  const result = await aiCommand.execute();
                   const { state } = editor;
                   const { doc } = state;
                   let loadingPos = -1;
 
                   // Find the loading text position
                   doc.descendants((node, pos) => {
-                    if (
-                      node.isText &&
-                      node.text?.includes("⏳ Generating AI summary...")
-                    ) {
+                    if (node.isText && node.text?.includes(loadingText)) {
                       loadingPos = pos;
                       return false;
                     }
@@ -180,27 +180,28 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                   });
 
                   if (loadingPos !== -1) {
+                    const insertContent = aiCommand.insertionTemplate
+                      ? aiCommand.insertionTemplate(result)
+                      : result;
+
                     editor
                       .chain()
                       .focus()
                       .deleteRange({
                         from: loadingPos,
-                        to: loadingPos + "⏳ Generating AI summary...".length,
+                        to: loadingPos + loadingText.length,
                       })
-                      .insertContent(`## Yesterday's Summary\n\n${summary}\n\n`)
+                      .insertContent(insertContent)
                       .run();
                   }
                 } catch (error) {
-                  console.error("Error generating summary:", error);
+                  console.error(`Error executing ${aiCommand.title}:`, error);
                   const { state } = editor;
                   const { doc } = state;
                   let loadingPos = -1;
 
                   doc.descendants((node, pos) => {
-                    if (
-                      node.isText &&
-                      node.text?.includes("⏳ Generating AI summary...")
-                    ) {
+                    if (node.isText && node.text?.includes(loadingText)) {
                       loadingPos = pos;
                       return false;
                     }
@@ -211,20 +212,20 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                     const errorMessage =
                       error instanceof Error
                         ? error.message
-                        : "Failed to generate summary";
+                        : `Failed to generate ${aiCommand.title}`;
                     editor
                       .chain()
                       .focus()
                       .deleteRange({
                         from: loadingPos,
-                        to: loadingPos + "⏳ Generating AI summary...".length,
+                        to: loadingPos + loadingText.length,
                       })
                       .insertContent(`❌ Error: ${errorMessage}`)
                       .run();
                   }
                 }
               },
-            },
+            })),
             {
               title: "today",
               description: "Insert today's date",
