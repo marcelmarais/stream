@@ -49,7 +49,7 @@ export function FileName({
   return (
     <div className="group relative flex items-center justify-end bg-transparent">
       {/* Gradient fade effect */}
-      <div className="-top-32 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
+      <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
 
       {/* Button content */}
       <Button
@@ -78,12 +78,14 @@ interface FileCardProps {
   file: MarkdownFileMetadata;
   onToggleFocus?: () => void;
   isFocused?: boolean;
+  onEditorFocus?: () => void;
 }
 
 export function FileCard({
   file,
   onToggleFocus,
   isFocused = false,
+  onEditorFocus,
 }: FileCardProps) {
   // Get data from markdown files store
   const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
@@ -140,6 +142,7 @@ export function FileCard({
         value={content ?? ""}
         onChange={handleContentChange}
         onSave={handleSave}
+        onFocus={onEditorFocus || (() => {})}
       />
 
       <FileName
@@ -332,12 +335,14 @@ interface FocusedFileOverlayProps {
   file: MarkdownFileMetadata;
   onClose: () => void;
   footerComponent: React.ReactElement<typeof FooterComponent>;
+  onEditorFocus?: () => void;
 }
 
 export function FocusedFileOverlay({
   file,
   onClose,
   footerComponent,
+  onEditorFocus,
 }: FocusedFileOverlayProps) {
   // Get data from markdown files store
   const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
@@ -383,13 +388,15 @@ export function FocusedFileOverlay({
 
   return (
     <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
-      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-30">
+      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-16">
         <DateHeader displayDate={displayDate} />
         <div className="p-6">
           <MarkdownEditor
             value={content ?? ""}
             onChange={handleContentChange}
             onSave={handleSave}
+            onFocus={onEditorFocus || (() => {})}
+            autoFocus={true}
           />
         </div>
       </div>

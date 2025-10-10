@@ -15,12 +15,16 @@ interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   onSave: () => void | Promise<void>;
+  onFocus?: () => void;
+  autoFocus?: boolean;
 }
 
 export function MarkdownEditor({
   value,
   onChange,
   onSave,
+  onFocus,
+  autoFocus = false,
 }: MarkdownEditorProps) {
   const isUpdatingFromProp = useRef(false);
   const isSavingRef = useRef(false);
@@ -63,6 +67,9 @@ export function MarkdownEditor({
         const markdown = storage.markdown.getMarkdown();
         onChange(markdown);
       }
+    },
+    onFocus: () => {
+      onFocus?.();
     },
   });
 
@@ -117,6 +124,17 @@ export function MarkdownEditor({
       }
     }
   }, [value, editor]);
+
+  // Auto-focus the editor when requested
+  useEffect(() => {
+    if (autoFocus && editor) {
+      // Use a small delay to ensure the DOM is ready
+      const timer = setTimeout(() => {
+        editor.commands.focus("end");
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [autoFocus, editor]);
 
   return (
     <div className="markdown-editor-wrapper pb-12">

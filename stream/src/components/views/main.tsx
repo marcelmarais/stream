@@ -97,6 +97,8 @@ export function FileReaderScreen({
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,
   );
+  const [activeEditingFile, setActiveEditingFile] =
+    useState<MarkdownFileMetadata | null>(null);
 
   // Markdown files state from store
   const allFilesMetadata = useMarkdownFilesStore(
@@ -199,6 +201,25 @@ export function FileReaderScreen({
     setGroupedItems(grouped);
   }, [allFilesMetadata]);
 
+  // Add keyboard shortcut for Command + I to focus the active editing file
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Handle Cmd+I (Mac) or Ctrl+I (Windows/Linux)
+      if ((event.metaKey || event.ctrlKey) && event.key === "i") {
+        event.preventDefault();
+        if (focusedFile && activeEditingFile) {
+          setFocusedFile(null);
+        }
+        if (activeEditingFile && !focusedFile) {
+          setFocusedFile(activeEditingFile);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [activeEditingFile, focusedFile]);
+
   // Load git commits for initially visible files when metadata is loaded
   useEffect(() => {
     if (!isLoadingMetadata && allFilesMetadata.length > 0) {
@@ -275,6 +296,7 @@ export function FileReaderScreen({
             )
           }
           isFocused={focusedFile?.filePath === file.filePath}
+          onEditorFocus={() => setActiveEditingFile(file)}
         />
       );
     },
@@ -353,6 +375,7 @@ export function FileReaderScreen({
         <FocusedFileOverlay
           file={focusedFile}
           onClose={() => setFocusedFile(null)}
+          onEditorFocus={() => setActiveEditingFile(focusedFile)}
           footerComponent={
             <Footer
               folderPath={folderPath}
