@@ -177,11 +177,6 @@ export function FileReaderScreen({
         // Load markdown files metadata
         await loadMetadata(folderPath);
 
-        // Get metadata and create grouped items
-        const metadata = useMarkdownFilesStore.getState().allFilesMetadata;
-        const grouped = createGroupedItems(metadata);
-        setGroupedItems(grouped);
-
         // Load connected repos count
         await loadConnectedReposCount(folderPath);
       } finally {
@@ -197,6 +192,12 @@ export function FileReaderScreen({
 
     loadData();
   }, [folderPath, loadMetadata, loadConnectedReposCount]);
+
+  // Update grouped items whenever metadata changes
+  useEffect(() => {
+    const grouped = createGroupedItems(allFilesMetadata);
+    setGroupedItems(grouped);
+  }, [allFilesMetadata]);
 
   // Load git commits for initially visible files when metadata is loaded
   useEffect(() => {
