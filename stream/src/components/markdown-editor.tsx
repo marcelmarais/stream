@@ -125,10 +125,8 @@ export function MarkdownEditor({
     }
   }, [value, editor]);
 
-  // Auto-focus the editor when requested
   useEffect(() => {
     if (autoFocus && editor) {
-      // Use a small delay to ensure the DOM is ready
       const timer = setTimeout(() => {
         editor.commands.focus("end");
       }, 100);
