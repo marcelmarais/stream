@@ -166,9 +166,9 @@ export function MarkdownEditor({
   // Update editable state when isEditable or isAIGenerating changes
   useEffect(() => {
     if (editor) {
-      editor.setEditable(isEditable && !isAIGenerating);
+      editor.setEditable(isEditable);
     }
-  }, [editor, isEditable, isAIGenerating]);
+  }, [editor, isEditable]);
 
   return (
     <div

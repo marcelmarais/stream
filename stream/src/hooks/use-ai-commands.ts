@@ -3,9 +3,9 @@ import type { AICommand } from "@/components/slash-command";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import {
-  generateYesterdaySummary,
   getYesterdayDateString,
   getYesterdayMarkdownFileName,
+  streamYesterdaySummary,
 } from "@/utils/ai";
 import { readMarkdownFilesContentByPaths } from "@/utils/markdown-reader";
 
@@ -19,7 +19,7 @@ export function useAICommands(): AICommand[] {
       {
         title: "todos",
         description: "Collect yesterday's todos & open points",
-        execute: async (): Promise<string> => {
+        executeStream: async (onToken) => {
           try {
             // Get yesterday's date and filename
             const yesterdayDateStr = getYesterdayDateString();
@@ -33,14 +33,12 @@ export function useAICommands(): AICommand[] {
             // Get yesterday's markdown content
             let markdownContent = "";
             if (yesterdayFile) {
-              // Check if content is already loaded
               const loadedContent =
                 useMarkdownFilesStore.getState().loadedContent;
               const cachedContent = loadedContent.get(yesterdayFile.filePath);
               if (cachedContent !== undefined) {
                 markdownContent = cachedContent;
               } else {
-                // Load the content
                 const contentMap = await readMarkdownFilesContentByPaths([
                   yesterdayFile.filePath,
                 ]);
@@ -53,19 +51,19 @@ export function useAICommands(): AICommand[] {
             const yesterdayCommits =
               commitsByDate[yesterdayDateStr]?.commits || [];
 
-            // Generate the summary
-            const summary = await generateYesterdaySummary(
+            // Stream the summary
+            await streamYesterdaySummary(
               markdownContent,
               yesterdayCommits,
+              onToken,
             );
-
-            return summary;
           } catch (error) {
-            console.error("Error in generateSummary:", error);
+            console.error("Error in streamSummary:", error);
             throw error;
           }
         },
-        insertionTemplate: (result) => `## todo\n\n${result}\n\n`,
+        streamingPrefix: "## todo\n\n",
+        streamingSuffix: "\n\n",
       },
       // Future AI commands can be added here
     ],

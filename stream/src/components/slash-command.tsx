@@ -114,8 +114,9 @@ SlashCommandList.displayName = "SlashCommandList";
 export interface AICommand {
   title: string;
   description: string;
-  execute: () => Promise<string>;
-  insertionTemplate?: (result: string) => string;
+  executeStream: (onToken: (delta: string) => void) => Promise<void>;
+  streamingPrefix?: string;
+  streamingSuffix?: string;
 }
 
 interface SlashCommandOptions {
@@ -171,12 +172,11 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                   .run();
 
                 try {
-                  const result = await aiCommand.execute();
                   const { state } = editor;
                   const { doc } = state;
                   let loadingPos = -1;
 
-                  // Find the loading text position
+                  // Locate loading text position
                   doc.descendants((node, pos) => {
                     if (node.isText && node.text?.includes(loadingText)) {
                       loadingPos = pos;
@@ -185,11 +185,9 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                     return true;
                   });
 
+                  // Replace loading with optional prefix
                   if (loadingPos !== -1) {
-                    const insertContent = aiCommand.insertionTemplate
-                      ? aiCommand.insertionTemplate(result)
-                      : result;
-
+                    const prefix = aiCommand.streamingPrefix ?? "";
                     editor
                       .chain()
                       .focus()
@@ -197,7 +195,39 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                         from: loadingPos,
                         to: loadingPos + loadingText.length,
                       })
-                      .insertContent(insertContent)
+                      .insertContent(prefix)
+                      .run();
+                  }
+
+                  // Buffer streaming tokens and flush periodically to avoid excessive reflows
+                  let buffer = "";
+                  let flushTimer: number | null = null;
+                  const flush = () => {
+                    if (!buffer) return;
+                    editor.chain().focus().insertContent(buffer).run();
+                    buffer = "";
+                  };
+                  const scheduleFlush = () => {
+                    if (flushTimer !== null) return;
+                    // Flush at ~60ms cadence
+                    flushTimer = window.setTimeout(() => {
+                      flush();
+                      flushTimer = null;
+                    }, 60);
+                  };
+
+                  await aiCommand.executeStream((delta) => {
+                    buffer += delta;
+                    scheduleFlush();
+                  });
+
+                  // Final flush and optional suffix
+                  flush();
+                  if (aiCommand.streamingSuffix) {
+                    editor
+                      .chain()
+                      .focus()
+                      .insertContent(aiCommand.streamingSuffix)
                       .run();
                   }
 
@@ -230,6 +260,17 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                         to: loadingPos + loadingText.length,
                       })
                       .insertContent(`❌ Error: ${errorMessage}`)
+                      .run();
+                  } else {
+                    // If loading text was already replaced (streaming), append error message
+                    const errorMessage =
+                      error instanceof Error
+                        ? error.message
+                        : `Failed to generate ${aiCommand.title}`;
+                    editor
+                      .chain()
+                      .focus()
+                      .insertContent(`\n\n❌ Error: ${errorMessage}`)
                       .run();
                   }
 

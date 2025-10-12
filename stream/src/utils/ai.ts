@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
+import { streamText } from "ai";
 import { getApiKey } from "@/utils/settings-store";
 import type { GitCommit } from "./git-reader";
 
@@ -23,14 +23,14 @@ export function getYesterdayMarkdownFileName(): string {
 }
 
 /**
- * Generate AI summary of yesterday's activities (client-side)
+ * Stream AI summary of yesterday's activities (client-side)
  */
-export async function generateYesterdaySummary(
+export async function streamYesterdaySummary(
   markdownContent: string,
   commits: GitCommit[],
-): Promise<string> {
+  onToken: (delta: string) => void,
+): Promise<void> {
   try {
-    // Get API key from Tauri store
     const apiKey = await getApiKey();
 
     if (!apiKey) {
@@ -39,12 +39,10 @@ export async function generateYesterdaySummary(
       );
     }
 
-    // Create Google AI instance with API key
     const google = createGoogleGenerativeAI({
       apiKey,
     });
 
-    // Build the prompt
     const commitsSummary =
       commits.length > 0
         ? commits
@@ -84,15 +82,16 @@ Example format:
 
 Return ONLY the markdown list, no additional commentary or explanation.`;
 
-    // Generate summary using Google Gemini
-    const { text } = await generateText({
+    const result = await streamText({
       model: google("gemini-2.5-flash"),
       prompt,
     });
 
-    return text;
+    for await (const delta of result.textStream) {
+      onToken(delta);
+    }
   } catch (error) {
-    console.error("Error generating summary:", error);
+    console.error("Error streaming summary:", error);
     throw error;
   }
 }
