@@ -4,11 +4,12 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "tiptap-markdown";
 import { SlashCommand } from "@/components/slash-command";
 import { useAICommands } from "@/hooks/use-ai-commands";
+import { cn } from "@/lib/utils";
 import { formatMarkdown } from "@/utils/markdown-formatter";
 
 interface MarkdownEditorProps {
@@ -17,6 +18,7 @@ interface MarkdownEditorProps {
   onSave: () => void | Promise<void>;
   onFocus?: () => void;
   autoFocus?: boolean;
+  isEditable: boolean;
 }
 
 export function MarkdownEditor({
@@ -25,9 +27,11 @@ export function MarkdownEditor({
   onSave,
   onFocus,
   autoFocus = false,
+  isEditable = true,
 }: MarkdownEditorProps) {
   const isUpdatingFromProp = useRef(false);
   const isSavingRef = useRef(false);
+  const [isAIGenerating, setIsAIGenerating] = useState(false);
 
   // Get AI commands configuration
   const aiCommands = useAICommands();
@@ -51,6 +55,7 @@ export function MarkdownEditor({
       }),
       SlashCommand.configure({
         aiCommands,
+        onAIGenerationChange: setIsAIGenerating,
       }),
     ],
     content: value,
@@ -71,6 +76,7 @@ export function MarkdownEditor({
     onFocus: () => {
       onFocus?.();
     },
+    editable: isEditable,
   });
 
   useEffect(() => {
@@ -157,8 +163,20 @@ export function MarkdownEditor({
     }
   }, [autoFocus, editor]);
 
+  // Update editable state when isEditable or isAIGenerating changes
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(isEditable && !isAIGenerating);
+    }
+  }, [editor, isEditable, isAIGenerating]);
+
   return (
-    <div className="markdown-editor-wrapper pb-12">
+    <div
+      className={cn(
+        "markdown-editor-wrapper pb-12",
+        isAIGenerating && "animate-pulse",
+      )}
+    >
       <EditorContent editor={editor} />
     </div>
   );

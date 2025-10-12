@@ -173,6 +173,7 @@ export function FileCard({
           onChange={handleContentChange}
           onSave={handleSave}
           onFocus={onEditorFocus || (() => {})}
+          isEditable={!isFocused}
         />
 
         <FileName
@@ -428,6 +429,7 @@ export function FocusedFileOverlay({
             onSave={handleSave}
             onFocus={onEditorFocus || (() => {})}
             autoFocus={true}
+            isEditable={true}
           />
         </div>
       </div>

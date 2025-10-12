@@ -120,6 +120,7 @@ export interface AICommand {
 
 interface SlashCommandOptions {
   aiCommands?: AICommand[];
+  onAIGenerationChange?: (isGenerating: boolean) => void;
 }
 
 export const SlashCommand = Extension.create<SlashCommandOptions>({
@@ -128,11 +129,13 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
   addOptions() {
     return {
       aiCommands: [],
+      onAIGenerationChange: undefined,
     };
   },
 
   addProseMirrorPlugins() {
     const aiCommands = this.options.aiCommands || [];
+    const onAIGenerationChange = this.options.onAIGenerationChange;
 
     return [
       Suggestion({
@@ -154,7 +157,10 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                 editor: Editor;
                 range: { from: number; to: number };
               }) => {
-                const loadingText = `⏳ Generating ${aiCommand.title}...`;
+                const loadingText = `Generating ${aiCommand.title}...`;
+
+                // Notify that AI generation has started
+                onAIGenerationChange?.(true);
 
                 // Show loading indicator
                 editor
@@ -194,6 +200,9 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                       .insertContent(insertContent)
                       .run();
                   }
+
+                  // Notify that AI generation has completed successfully
+                  onAIGenerationChange?.(false);
                 } catch (error) {
                   console.error(`Error executing ${aiCommand.title}:`, error);
                   const { state } = editor;
@@ -223,6 +232,9 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                       .insertContent(`❌ Error: ${errorMessage}`)
                       .run();
                   }
+
+                  // Notify that AI generation has completed (with error)
+                  onAIGenerationChange?.(false);
                 }
               },
             })),
