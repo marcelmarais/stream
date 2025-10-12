@@ -87,15 +87,27 @@ export function MarkdownEditor({
         return;
       }
 
+      // Update the editor content directly, preserving cursor position
+      const { from, to } = editor.state.selection;
+
       isUpdatingFromProp.current = true;
-      onChange(formatted);
       editor.commands.setContent(formatted);
+
+      // Restore cursor position
+      const newDocSize = editor.state.doc.content.size;
+      const safeFrom = Math.min(from, newDocSize);
+      const safeTo = Math.min(to, newDocSize);
+      editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
+
+      // Update the store
+      onChange(formatted);
+      isUpdatingFromProp.current = false;
+
       await onSave();
       toast.success("Saved successfully", {
         description: "Markdown formatted and saved",
         duration: 1000,
       });
-      isUpdatingFromProp.current = false;
 
       isSavingRef.current = false;
     };
@@ -113,13 +125,24 @@ export function MarkdownEditor({
   }, [editor, value, onChange, onSave]);
 
   useEffect(() => {
-    if (editor && !editor.isFocused) {
+    if (editor) {
       // biome-ignore lint/suspicious/noExplicitAny: TipTap markdown storage type not exported
       const storage = editor.storage as any;
       const currentMarkdown = storage.markdown.getMarkdown();
-      if (value !== currentMarkdown) {
+      // Only update if the value is different and we're not already updating
+      // Allow updates when focused if they're coming from external sources (like formatting)
+      if (value !== currentMarkdown && !isUpdatingFromProp.current) {
+        // If editor is focused, we need to preserve cursor position
+        const { from, to } = editor.state.selection;
         isUpdatingFromProp.current = true;
         editor.commands.setContent(value);
+        // Try to restore cursor position if editor was focused
+        if (editor.isFocused) {
+          const newDocSize = editor.state.doc.content.size;
+          const safeFrom = Math.min(from, newDocSize);
+          const safeTo = Math.min(to, newDocSize);
+          editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
+        }
         isUpdatingFromProp.current = false;
       }
     }
