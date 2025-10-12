@@ -1,3 +1,4 @@
+@import url("https://webfonts.artsy.net/all-webfonts.css");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tippy.js/dist/tippy.css";
@@ -9,7 +10,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-heading: var(--heading);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "ll-unica77", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono:
     var(--font-fira-code), ui-monospace, "Cascadia Code", "Source Code Pro",
     Menlo, Monaco, Consolas, "Courier New", monospace;
@@ -128,6 +129,7 @@
     @apply bg-background text-foreground font-sans overflow-x-hidden;
     width: 100%;
     position: relative;
+    font-size: 18px;
   }
 
   /* Ensure body and html don't allow horizontal scroll */
@@ -137,6 +139,11 @@
 
   body {
     overflow-x: hidden;
+  }
+
+  /* Global heading styles */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.01em;
   }
 
   /* Hide scrollbars for all elements */
@@ -189,7 +196,7 @@
     & code {
       word-break: break-all;
     }
-    /* Headings - consistent spacing */
+    
     & h1 {
       @apply !text-3xl !font-medium !mt-6 !mb-3 !text-heading/100;
     }
@@ -221,7 +228,7 @@
 
     /* Paragraphs */
     & p {
-      @apply !mt-3 !mb-3 !text-base;
+      @apply !mt-3 !mb-3 !text-base !text-foreground;
     }
 
     /* Nested lists - remove extra spacing, match parent indentation (more specific, comes first) */

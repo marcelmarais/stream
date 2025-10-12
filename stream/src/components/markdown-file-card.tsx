@@ -1,10 +1,12 @@
 import {
   Calendar as CalendarIcon,
   CalendarPlus,
+  Copy,
   Eye,
   EyeOff,
 } from "lucide-react";
 import { type ComponentProps, useState } from "react";
+import { toast } from "sonner";
 import CommitOverlay from "@/components/commit-overlay";
 import type { Footer as FooterComponent } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
@@ -29,11 +31,33 @@ import { filterCommits, getCommitsForDate } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 import { getTodayMarkdownFileName } from "@/utils/markdown-reader";
 
-export function DateHeader({ displayDate }: { displayDate: string }) {
+export function DateHeader({
+  displayDate,
+  content,
+}: {
+  displayDate: string;
+  content: string | undefined;
+}) {
+  const handleCopyToClipboard = async () => {
+    if (!content) {
+      toast.error("No content to copy");
+      return;
+    }
+    await navigator.clipboard.writeText(`# ${displayDate}\n\n${content}`);
+    toast.success("File content copied to clipboard");
+  };
+
   return (
-    <div className="mx-6 mt-8 first:mt-0">
-      <h1 className="font-semibold text-4xl">{displayDate}</h1>
-    </div>
+    <Button
+      className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
+      variant="default"
+      onClick={handleCopyToClipboard}
+    >
+      <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
+        {displayDate}
+      </h1>
+      <Copy className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+    </Button>
   );
 }
 
@@ -114,6 +138,10 @@ export function FileCard({
   const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
   const commits = filterCommits(allFileCommits, commitFilters);
 
+  // Calculate display date for the header
+  const dateStr = dateFromFilename || getDateKey(file.createdAt);
+  const displayDate = formatDisplayDate(dateStr);
+
   // Handlers
   const handleContentChange = (newContent: string) => {
     updateContent(file.filePath, newContent);
@@ -137,29 +165,32 @@ export function FileCard({
     );
   }
   return (
-    <div className="p-6">
-      <MarkdownEditor
-        value={content ?? ""}
-        onChange={handleContentChange}
-        onSave={handleSave}
-        onFocus={onEditorFocus || (() => {})}
-      />
+    <div>
+      <DateHeader displayDate={displayDate} content={content} />
+      <div className="p-6">
+        <MarkdownEditor
+          value={content ?? ""}
+          onChange={handleContentChange}
+          onSave={handleSave}
+          onFocus={onEditorFocus || (() => {})}
+        />
 
-      <FileName
-        fileName={file.fileName}
-        isFocused={isFocused}
-        onToggleFocus={onToggleFocus || (() => {})}
-      />
-      {commits.length > 0 && (
-        <div className="mt-4">
-          <CommitOverlay
-            commits={commits}
-            date={file.createdAt}
-            className="w-full"
-          />
-        </div>
-      )}
-      <Separator className="mt-12" />
+        <FileName
+          fileName={file.fileName}
+          isFocused={isFocused}
+          onToggleFocus={onToggleFocus || (() => {})}
+        />
+        {commits.length > 0 && (
+          <div className="mt-4">
+            <CommitOverlay
+              commits={commits}
+              date={file.createdAt}
+              className="w-full"
+            />
+          </div>
+        )}
+        <Separator className="mt-12" />
+      </div>
     </div>
   );
 }
@@ -389,7 +420,7 @@ export function FocusedFileOverlay({
   return (
     <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-16">
-        <DateHeader displayDate={displayDate} />
+        <DateHeader displayDate={displayDate} content={content} />
         <div className="p-6">
           <MarkdownEditor
             value={content ?? ""}

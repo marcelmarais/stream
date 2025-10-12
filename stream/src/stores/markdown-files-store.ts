@@ -58,10 +58,8 @@ const getDebouncedSave = (filePath: string) => {
     const debouncedFn = debounce(async (content: string) => {
       try {
         await writeMarkdownFileContent(filePath, content);
-        console.log(`Debounced save completed for ${filePath}`);
       } catch (error) {
-        console.error(`Error in debounced save for ${filePath}:`, error);
-        // Update store error state
+        console.error(`Error in save for ${filePath}:`, error);
         useMarkdownFilesStore
           .getState()
           .setError(`Failed to save ${filePath}: ${error}`);

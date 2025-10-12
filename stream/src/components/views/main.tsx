@@ -4,18 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
 import {
-  DateHeader,
   FileCard,
   FileReaderHeader,
   FocusedFileOverlay,
 } from "@/components/markdown-file-card";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
-import {
-  formatDisplayDate,
-  getDateFromFilename,
-  getDateKey,
-} from "@/utils/date-utils";
+import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 import CommitFilter from "../commit-filter";
 
@@ -24,67 +19,7 @@ interface FileReaderScreenProps {
   onBack: () => void;
 }
 
-// Types for grouped items
-interface DateHeaderItem {
-  type: "header";
-  date: string;
-  displayDate: string;
-}
-
-interface FileItem {
-  type: "file";
-  file: MarkdownFileMetadata;
-  originalIndex: number;
-}
-
-type VirtualizedItem = DateHeaderItem | FileItem;
-
 const GIT_COMMIT_REFRESH_INTERVAL = 5000;
-
-function createGroupedItems(files: MarkdownFileMetadata[]): VirtualizedItem[] {
-  const filesByDate = new Map<string, MarkdownFileMetadata[]>();
-
-  files.forEach((file) => {
-    // Try to get date from filename first, fall back to creation date
-    const dateFromFilename = getDateFromFilename(file.fileName);
-    const dateStr = dateFromFilename || getDateKey(file.createdAt);
-
-    if (!filesByDate.has(dateStr)) {
-      filesByDate.set(dateStr, []);
-    }
-    filesByDate.get(dateStr)?.push(file);
-  });
-
-  const sortedDates = Array.from(filesByDate.keys()).sort((a, b) =>
-    b.localeCompare(a),
-  );
-
-  const items: VirtualizedItem[] = [];
-  let fileIndex = 0;
-
-  sortedDates.forEach((dateStr) => {
-    const filesForDate = filesByDate.get(dateStr);
-    if (!filesForDate) return;
-
-    const displayDate = formatDisplayDate(dateStr);
-
-    items.push({
-      type: "header",
-      date: dateStr,
-      displayDate,
-    });
-
-    filesForDate.forEach((file) => {
-      items.push({
-        type: "file",
-        file,
-        originalIndex: fileIndex++,
-      });
-    });
-  });
-
-  return items;
-}
 
 export function FileReaderScreen({
   folderPath,
@@ -92,7 +27,6 @@ export function FileReaderScreen({
 }: FileReaderScreenProps) {
   // Local UI state
   const [showLoading, setShowLoading] = useState(true);
-  const [groupedItems, setGroupedItems] = useState<VirtualizedItem[]>([]);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,
@@ -132,9 +66,11 @@ export function FileReaderScreen({
   const handleScrollToDate = useCallback(
     (date: Date) => {
       const dateStr = getDateKey(date);
-      const index = groupedItems.findIndex(
-        (item) => item.type === "header" && item.date === dateStr,
-      );
+      const index = allFilesMetadata.findIndex((file) => {
+        const dateFromFilename = getDateFromFilename(file.fileName);
+        const fileDateStr = dateFromFilename || getDateKey(file.createdAt);
+        return fileDateStr === dateStr;
+      });
 
       if (index !== -1 && virtuosoRef.current) {
         virtuosoRef.current.scrollToIndex({
@@ -144,7 +80,7 @@ export function FileReaderScreen({
         });
       }
     },
-    [groupedItems],
+    [allFilesMetadata],
   );
 
   // Wrap store action for easier use in component
@@ -195,12 +131,6 @@ export function FileReaderScreen({
     loadData();
   }, [folderPath, loadMetadata, loadConnectedReposCount]);
 
-  // Update grouped items whenever metadata changes
-  useEffect(() => {
-    const grouped = createGroupedItems(allFilesMetadata);
-    setGroupedItems(grouped);
-  }, [allFilesMetadata]);
-
   // Add keyboard shortcut for Command + I to focus the active editing file
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -248,14 +178,11 @@ export function FileReaderScreen({
   // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
     (range: { startIndex: number; endIndex: number }) => {
-      // Get visible items and extract files
-      const visibleItems = groupedItems.slice(
+      // Get visible files
+      const visibleFiles = allFilesMetadata.slice(
         range.startIndex,
         range.endIndex + 1,
       );
-      const visibleFiles = visibleItems
-        .filter((item): item is FileItem => item.type === "file")
-        .map((item) => item.file);
 
       // Load content for visible files that aren't loaded yet
       const loadedContent = useMarkdownFilesStore.getState().loadedContent;
@@ -270,22 +197,14 @@ export function FileReaderScreen({
         handleLoadCommitsForVisibleFiles(visibleFiles);
       }
     },
-    [groupedItems, handleLoadFileContent, handleLoadCommitsForVisibleFiles],
+    [allFilesMetadata, handleLoadFileContent, handleLoadCommitsForVisibleFiles],
   );
 
-  // Render individual item (header or file)
+  // Render individual item
   const renderItem = useCallback(
     (index: number) => {
-      const item = groupedItems[index];
-      if (!item) return null;
-
-      // Render date header
-      if (item.type === "header") {
-        return <DateHeader displayDate={item.displayDate} />;
-      }
-
-      // Render file item
-      const { file } = item;
+      const file = allFilesMetadata[index];
+      if (!file) return null;
 
       return (
         <FileCard
@@ -300,7 +219,7 @@ export function FileReaderScreen({
         />
       );
     },
-    [groupedItems, focusedFile],
+    [allFilesMetadata, focusedFile],
   );
 
   return (
@@ -337,11 +256,11 @@ export function FileReaderScreen({
       </div>
 
       {/* Virtualized List */}
-      {!isLoadingMetadata && groupedItems.length > 0 && (
+      {!isLoadingMetadata && allFilesMetadata.length > 0 && (
         <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-16">
           <Virtuoso
             ref={virtuosoRef}
-            totalCount={groupedItems.length}
+            totalCount={allFilesMetadata.length}
             itemContent={renderItem}
             rangeChanged={handleRangeChanged}
             overscan={2}
