@@ -43,7 +43,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: stream
-        run: pnpm tauri build --bundles dmg
+        run: pnpm tauri build --bundles dmg,updater
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
@@ -63,6 +63,8 @@ jobs:
         with:
           files: |
             stream/src-tauri/target/release/bundle/dmg/*.dmg
+            stream/src-tauri/target/release/bundle/macos/*.tar.gz
+            stream/src-tauri/target/release/bundle/macos/*.tar.gz.sig
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -78,6 +80,9 @@ jobs:
             2. Open the DMG and drag the app to Applications
             3. **First time only**: Right-click the app → Select "Open" → Click "Open" again
             4. macOS will remember your choice and you can open normally afterward
+            
+            ### Auto-Update
+            The app will automatically check for updates on startup and notify you when a new version is available.
             
             ### What's Changed
             See below for automatically generated release notes.
