@@ -41,35 +41,17 @@ jobs:
         working-directory: stream
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri app
-        working-directory: stream
-        run: pnpm tauri build --bundles dmg,updater
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-
-      - name: Rename and prepare artifacts
-        working-directory: stream
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          ARCH=$(uname -m)
-          cd src-tauri/target/release/bundle/dmg
-          for file in *.dmg; do
-            mv "$file" "stream-${VERSION}-macos-${ARCH}.dmg"
-          done
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
         with:
-          files: |
-            stream/src-tauri/target/release/bundle/dmg/*.dmg
-            stream/src-tauri/target/release/bundle/macos/*.tar.gz
-            stream/src-tauri/target/release/bundle/macos/*.tar.gz.sig
-            stream/src-tauri/target/release/bundle/macos/latest.json
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          body: |
+          projectPath: stream
+          tagName: ${{ github.ref_name }}
+          releaseName: "v__VERSION__"
+          releaseBody: |
             ## Installation Instructions (macOS - Unsigned)
             
             ⚠️ **Important**: This app is not signed with an Apple Developer certificate.
@@ -85,8 +67,8 @@ jobs:
             ### Auto-Update
             The app will automatically check for updates on startup and notify you when a new version is available.
             
-            ### What's Changed
-            See below for automatically generated release notes.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            See release notes below for what's changed.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
 
