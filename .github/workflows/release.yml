@@ -29,14 +29,6 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: "stream/pnpm-lock.yaml"
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: stream/src-tauri -> target
-
       - name: Install dependencies
         working-directory: stream
         run: pnpm install --frozen-lockfile
@@ -70,6 +62,7 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+          tauriScript: pnpm tauri
       
       - name: Create latest download link
         run: |
