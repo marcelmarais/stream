@@ -142,7 +142,12 @@
   }
 
   /* Global heading styles */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     letter-spacing: -0.01em;
   }
 
@@ -196,7 +201,7 @@
     & code {
       word-break: break-all;
     }
-    
+
     & h1 {
       @apply !text-3xl !font-medium !mt-6 !mb-3 !text-heading/100;
     }
