@@ -24,7 +24,7 @@ export function AutoUpdater() {
     try {
       const update = await check();
 
-      if (update?.available) {
+      if (update) {
         console.log(
           `Update available: ${update.version} (current: ${update.currentVersion})`,
         );
