@@ -1,16 +1,15 @@
 import {
   Calendar as CalendarIcon,
   CalendarPlus,
-  FileText,
-  Folder,
-  GitBranch,
-  Settings,
+  Copy,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import type { ComponentProps } from "react";
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
+import { toast } from "sonner";
 import CommitOverlay from "@/components/commit-overlay";
+import type { Footer as FooterComponent } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
-import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
@@ -21,44 +20,140 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
-import type { CommitsByDate, GitCommit } from "@/utils/git-reader";
+import { useGitCommitsStore } from "@/stores/git-commits-store";
+import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
+import {
+  formatDisplayDate,
+  getDateFromFilename,
+  getDateKey,
+} from "@/utils/date-utils";
+import { filterCommits, getCommitsForDate } from "@/utils/git-reader";
 import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 import { getTodayMarkdownFileName } from "@/utils/markdown-reader";
 
-export function DateHeader({ displayDate }: { displayDate: string }) {
+export function DateHeader({
+  displayDate,
+  content,
+}: {
+  displayDate: string;
+  content: string | undefined;
+}) {
+  const handleCopyToClipboard = async () => {
+    if (!content) {
+      toast.error("No content to copy");
+      return;
+    }
+    await navigator.clipboard.writeText(`# ${displayDate}\n\n${content}`);
+    toast.success("File content copied to clipboard");
+  };
+
   return (
-    <div className="mx-6 mt-8 first:mt-0">
-      <h1 className="font-semibold text-4xl">{displayDate}</h1>
-    </div>
+    <Button
+      className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
+      variant="default"
+      onClick={handleCopyToClipboard}
+    >
+      <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
+        {displayDate}
+      </h1>
+      <Copy className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+    </Button>
   );
 }
 
-function FileName({ fileName }: { fileName: string }) {
+export function FileName({
+  fileName,
+  isFocused,
+  onToggleFocus,
+}: {
+  fileName: string;
+  isFocused: boolean;
+  onToggleFocus: () => void;
+}) {
   return (
-    <div className="flex items-center justify-end">
-      <h4 className="font-base text-muted-foreground text-sm">{fileName}</h4>
+    <div className="group relative flex items-center justify-end bg-transparent">
+      {/* Gradient fade effect */}
+      <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
+
+      {/* Button content */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onToggleFocus}
+        className={cn(
+          "relative z-10 flex items-center justify-end gap-2 font-base text-sm transition-colors hover:bg-transparent",
+          isFocused
+            ? "text-primary"
+            : "text-muted-foreground hover:text-primary",
+        )}
+      >
+        {isFocused ? (
+          <EyeOff className="size-4" />
+        ) : (
+          <Eye className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+        )}
+        {fileName}
+      </Button>
     </div>
   );
 }
 
 interface FileCardProps {
   file: MarkdownFileMetadata;
-  content?: string;
-  isLoading: boolean;
-  commits: GitCommit[];
-  onContentChange: (filePath: string, content: string) => void;
-  onSave: (filePath: string) => void;
+  onToggleFocus?: () => void;
+  isFocused?: boolean;
+  onEditorFocus?: () => void;
 }
 
 export function FileCard({
   file,
-  content,
-  isLoading,
-  commits,
-  onContentChange,
-  onSave,
+  onToggleFocus,
+  isFocused = false,
+  onEditorFocus,
 }: FileCardProps) {
+  // Get data from markdown files store
+  const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
+  const loadingFiles = useMarkdownFilesStore((state) => state.loadingFiles);
+  const updateContent = useMarkdownFilesStore(
+    (state) => state.updateContentOptimistically,
+  );
+  const saveDebounced = useMarkdownFilesStore(
+    (state) => state.saveFileContentDebounced,
+  );
+  const saveImmediate = useMarkdownFilesStore((state) => state.saveFileContent);
+
+  // Get data from git commits store
+  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
+  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
+
+  // Compute locally
+  const content = loadedContent.get(file.filePath);
+  const isLoading = !content && loadingFiles.has(file.filePath);
+
+  // Get commits for this file's date
+  const dateFromFilename = getDateFromFilename(file.fileName);
+  const fileDate = dateFromFilename
+    ? new Date(dateFromFilename)
+    : file.createdAt;
+  const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
+  const commits = filterCommits(allFileCommits, commitFilters);
+
+  // Calculate display date for the header
+  const dateStr = dateFromFilename || getDateKey(file.createdAt);
+  const displayDate = formatDisplayDate(dateStr);
+
+  // Handlers
+  const handleContentChange = (newContent: string) => {
+    updateContent(file.filePath, newContent);
+    saveDebounced(file.filePath, newContent);
+  };
+
+  const handleSave = async () => {
+    const currentContent = loadedContent.get(file.filePath);
+    if (currentContent) {
+      await saveImmediate(file.filePath, currentContent);
+    }
+  };
   if (isLoading) {
     return (
       <div className="flex items-center justify-center pt-4 pb-8">
@@ -70,125 +165,39 @@ export function FileCard({
     );
   }
   return (
-    <div className="p-6">
-      <MarkdownEditor
-        value={content ?? ""}
-        onChange={(value: string) => onContentChange(file.filePath, value)}
-        onSave={() => onSave(file.filePath)}
-      />
+    <div>
+      <DateHeader displayDate={displayDate} content={content} />
+      <div className="p-6">
+        <MarkdownEditor
+          value={content ?? ""}
+          onChange={handleContentChange}
+          onSave={handleSave}
+          onFocus={onEditorFocus || (() => {})}
+          isEditable={!isFocused}
+        />
 
-      <FileName fileName={file.fileName} />
-      {commits.length > 0 && (
-        <div className="mt-4">
-          <CommitOverlay
-            commits={commits}
-            date={file.createdAt}
-            className="w-full"
-          />
-        </div>
-      )}
-      <Separator className="mt-12" />
-    </div>
-  );
-}
-
-interface FileReaderFooterProps {
-  folderPath: string;
-  fileCount: number;
-  connectedReposCount: number;
-  onFolderClick: () => void;
-  isLoadingMetadata: boolean;
-  allFilesMetadata: MarkdownFileMetadata[];
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
-  settingsOpen: boolean;
-  onSettingsOpenChange: (open: boolean) => void;
-}
-
-export function FileReaderFooter({
-  folderPath,
-  fileCount,
-  connectedReposCount,
-  onFolderClick,
-  isLoadingMetadata,
-  allFilesMetadata,
-  commitsByDate,
-  commitError,
-  settingsOpen,
-  onSettingsOpenChange,
-}: FileReaderFooterProps) {
-  const folderName = folderPath.split("/").pop() || folderPath;
-
-  return (
-    <div className="flex-shrink-0 border-border border-t bg-muted/30 px-4 py-1 text-muted-foreground text-xs">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
-            onClick={onFolderClick}
-            title="Click to go back to folder selection"
-          >
-            <Folder className="size-3" />
-            <span title={folderPath}>{folderName}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
-            disabled
-            title="Click to open settings"
-          >
-            <FileText className="size-3" />
-            <span>
-              {fileCount} markdown file{fileCount === 1 ? "" : "s"}
-            </span>
-          </Button>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
-            disabled
-            title="Connected repositories"
-          >
-            <GitBranch className="size-3" />
-            <span>
-              {connectedReposCount} repo{connectedReposCount === 1 ? "" : "s"}
-            </span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto p-1"
-            onClick={() => onSettingsOpenChange(true)}
-            title="Open settings"
-          >
-            <Settings className="size-3" />
-          </Button>
-        </div>
+        <FileName
+          fileName={file.fileName}
+          isFocused={isFocused}
+          onToggleFocus={onToggleFocus || (() => {})}
+        />
+        {commits.length > 0 && (
+          <div className="mt-4">
+            <CommitOverlay
+              commits={commits}
+              date={file.createdAt}
+              className="w-full"
+            />
+          </div>
+        )}
+        <Separator className="mt-12" />
       </div>
-      <SettingsDialog
-        folderPath={folderPath}
-        isLoadingMetadata={isLoadingMetadata}
-        allFilesMetadata={allFilesMetadata}
-        commitsByDate={commitsByDate}
-        commitError={commitError}
-        open={settingsOpen}
-        onOpenChange={onSettingsOpenChange}
-      />
     </div>
   );
 }
 
 interface FileReaderHeaderProps {
-  isLoadingMetadata: boolean;
-  allFilesMetadata: MarkdownFileMetadata[];
-  error: string | null;
-  onCreateToday: () => void | Promise<void>;
-  creatingToday?: boolean;
+  folderPath: string;
   onScrollToDate: (date: Date) => void;
 }
 
@@ -226,18 +235,27 @@ function createDayButtonWithDots(hasMarkdownFile: (date: Date) => boolean) {
 }
 
 export function HeaderNavigation({
-  isLoadingMetadata,
-  allFilesMetadata,
-  onCreateToday,
-  creatingToday,
+  folderPath,
   onScrollToDate,
 }: {
-  isLoadingMetadata: boolean;
-  allFilesMetadata: MarkdownFileMetadata[];
-  onCreateToday: () => void | Promise<void>;
-  creatingToday?: boolean;
+  folderPath: string;
   onScrollToDate: (date: Date) => void;
 }) {
+  // Get data from stores
+  const isLoadingMetadata = useMarkdownFilesStore(
+    (state) => state.isLoadingMetadata,
+  );
+  const allFilesMetadata = useMarkdownFilesStore(
+    (state) => state.allFilesMetadata,
+  );
+  const creatingToday = useMarkdownFilesStore((state) => state.creatingToday);
+  const createTodayFile = useMarkdownFilesStore(
+    (state) => state.createTodayFile,
+  );
+
+  const handleCreateToday = async () => {
+    await createTodayFile(folderPath);
+  };
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const todayFileName = getTodayMarkdownFileName();
@@ -279,7 +297,7 @@ export function HeaderNavigation({
             type="button"
             size="sm"
             variant="secondary"
-            onClick={onCreateToday}
+            onClick={handleCreateToday}
             disabled={isLoadingMetadata || Boolean(creatingToday)}
           >
             <CalendarPlus className="size-4" />
@@ -326,24 +344,114 @@ function ErrorDisplay({ error }: { error: string }) {
 
 // Main header component that combines all sub-components
 export function FileReaderHeader({
-  isLoadingMetadata,
-  allFilesMetadata,
-  error,
-  onCreateToday,
-  creatingToday,
+  folderPath,
   onScrollToDate,
 }: FileReaderHeaderProps) {
+  // Get error from store
+  const error = useMarkdownFilesStore((state) => state.error);
+
   return (
     <div className="!bg-transparent flex-shrink-0">
       <HeaderNavigation
-        isLoadingMetadata={isLoadingMetadata}
-        allFilesMetadata={allFilesMetadata}
-        onCreateToday={onCreateToday}
-        creatingToday={creatingToday}
+        folderPath={folderPath}
         onScrollToDate={onScrollToDate}
       />
 
       {error && <ErrorDisplay error={error} />}
+    </div>
+  );
+}
+
+// Focused file overlay component
+interface FocusedFileOverlayProps {
+  file: MarkdownFileMetadata;
+  onClose: () => void;
+  footerComponent: React.ReactElement<typeof FooterComponent>;
+  onEditorFocus?: () => void;
+}
+
+export function FocusedFileOverlay({
+  file,
+  onClose,
+  footerComponent,
+  onEditorFocus,
+}: FocusedFileOverlayProps) {
+  // Get data from markdown files store
+  const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
+  const updateContent = useMarkdownFilesStore(
+    (state) => state.updateContentOptimistically,
+  );
+  const saveDebounced = useMarkdownFilesStore(
+    (state) => state.saveFileContentDebounced,
+  );
+  const saveImmediate = useMarkdownFilesStore((state) => state.saveFileContent);
+
+  // Get data from git commits store
+  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
+  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
+
+  // Compute date and display
+  const dateFromFilename = getDateFromFilename(file.fileName);
+  const dateStr = dateFromFilename || getDateKey(file.createdAt);
+  const displayDate = formatDisplayDate(dateStr);
+  const fileDate = dateFromFilename
+    ? new Date(dateFromFilename)
+    : file.createdAt;
+
+  // Get commits for this file's date
+  const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
+  const commits = filterCommits(allFileCommits, commitFilters);
+
+  // Get content
+  const content = loadedContent.get(file.filePath);
+
+  // Handlers
+  const handleContentChange = (newContent: string) => {
+    updateContent(file.filePath, newContent);
+    saveDebounced(file.filePath, newContent);
+  };
+
+  const handleSave = async () => {
+    const currentContent = loadedContent.get(file.filePath);
+    if (currentContent) {
+      await saveImmediate(file.filePath, currentContent);
+    }
+  };
+
+  return (
+    <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
+      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-16">
+        <DateHeader displayDate={displayDate} content={content} />
+        <div className="p-6">
+          <MarkdownEditor
+            value={content ?? ""}
+            onChange={handleContentChange}
+            onSave={handleSave}
+            onFocus={onEditorFocus || (() => {})}
+            autoFocus={true}
+            isEditable={true}
+          />
+        </div>
+      </div>
+      <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto w-full max-w-4xl px-6 py-6">
+          <FileName
+            fileName={file.fileName}
+            isFocused={true}
+            onToggleFocus={onClose}
+          />
+          {commits.length > 0 && (
+            <div className="mt-4">
+              <CommitOverlay
+                commits={commits}
+                date={file.createdAt}
+                className="overflow-y-scroll"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+      {footerComponent}
     </div>
   );
 }

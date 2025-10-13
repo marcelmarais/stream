@@ -17,23 +17,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useGitCommitsStore } from "@/stores/git-commits-store";
 import { formatCommitAuthor } from "@/utils/git-reader";
-import type { CommitFilters, GitCommit } from "../utils/git-reader";
 
-interface CommitFilterProps {
-  commits: GitCommit[];
-  filters: CommitFilters;
-  onFiltersChange: (filters: CommitFilters) => void;
-}
-
-export function CommitFilter({
-  commits,
-  filters,
-  onFiltersChange,
-}: CommitFilterProps) {
+export function CommitFilter() {
+  // Get state directly from store
+  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
+  const filters = useGitCommitsStore((state) => state.commitFilters);
+  const setFilters = useGitCommitsStore((state) => state.setCommitFilters);
   const searchId = useId();
   const authorSelectId = useId();
   const repoSelectId = useId();
+
+  // Compute all commits from commitsByDate
+  const commits = useMemo(
+    () => Object.values(commitsByDate).flatMap((dateData) => dateData.commits),
+    [commitsByDate],
+  );
 
   const { uniqueAuthors, uniqueRepos } = useMemo(() => {
     const authorsSet = new Set<string>();
@@ -62,12 +62,12 @@ export function CommitFilter({
         ? filters.authors.filter((a) => a !== author)
         : [...filters.authors, author];
 
-      onFiltersChange({
+      setFilters({
         ...filters,
         authors: newAuthors,
       });
     },
-    [filters, onFiltersChange],
+    [filters, setFilters],
   );
 
   const handleRepoChange = useCallback(
@@ -76,31 +76,31 @@ export function CommitFilter({
         ? filters.repos.filter((r) => r !== repo)
         : [...filters.repos, repo];
 
-      onFiltersChange({
+      setFilters({
         ...filters,
         repos: newRepos,
       });
     },
-    [filters, onFiltersChange],
+    [filters, setFilters],
   );
 
   const handleSearchChange = useCallback(
     (searchTerm: string) => {
-      onFiltersChange({
+      setFilters({
         ...filters,
         searchTerm,
       });
     },
-    [filters, onFiltersChange],
+    [filters, setFilters],
   );
 
   const handleClearFilters = useCallback(() => {
-    onFiltersChange({
+    setFilters({
       authors: [],
       repos: [],
       searchTerm: "",
     });
-  }, [onFiltersChange]);
+  }, [setFilters]);
 
   // Check if any filters are active
   const hasActiveFilters =

@@ -1,143 +1,329 @@
 "use client";
 
+import {
+  EyeIcon,
+  EyeOffIcon,
+  FolderOpen,
+  GitBranch,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { toast } from "sonner";
 import RepoConnector from "@/components/repo-connector";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { CommitsByDate } from "@/utils/git-reader";
-import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
+import {
+  getApiKey,
+  hasApiKey,
+  removeApiKey,
+  setApiKey,
+} from "@/utils/settings-store";
 
 interface SettingsDialogProps {
   folderPath: string;
-  isLoadingMetadata: boolean;
-  allFilesMetadata: MarkdownFileMetadata[];
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
-function FolderInfo({ folderPath }: { folderPath: string }) {
-  return (
-    <div className="space-y-3">
-      <h3 className="font-semibold text-foreground text-lg">Current Folder</h3>
-      <div className="text-muted-foreground">
-        <div className="mb-2 text-sm">Reading from:</div>
-        <code className="block break-all rounded-md bg-background px-3 py-2 font-mono text-sm">
-          {folderPath}
-        </code>
-      </div>
-    </div>
-  );
-}
-
-function StatusInfo({
+function OverviewCard({
+  folderPath,
   fileCount,
-  commitsByDate,
-  commitError,
+  isLoading,
 }: {
+  folderPath: string;
   fileCount: number;
-  commitsByDate: CommitsByDate;
-  commitError: string | null;
+  isLoading: boolean;
 }) {
   return (
-    <div className="space-y-3">
-      <h3 className="font-semibold text-foreground text-lg">
-        Status Information
-      </h3>
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span className="font-medium">{fileCount}</span>
-          <span>markdown files found</span>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FolderOpen className="size-5" />
+          Overview
+        </CardTitle>
+        <CardDescription>Folder information and statistics</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="font-medium text-sm">Reading from:</div>
+          <code className="block break-all rounded-md bg-muted px-0.5 py-1 font-mono text-xs">
+            {folderPath}
+          </code>
         </div>
-
-        {/* Git Commits Status */}
-        {Object.keys(commitsByDate).length > 0 && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <span className="font-medium">
-              {Object.keys(commitsByDate).length}
-            </span>
-            <span>days with commits (loaded on-demand)</span>
-          </div>
-        )}
-
-        {commitError && (
-          <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-destructive text-sm">
-            <div className="mb-1 font-medium">Git Error</div>
-            <div>{commitError}</div>
-          </div>
-        )}
-      </div>
-    </div>
+        <div className="flex items-center gap-2 pt-2 text-muted-foreground">
+          {isLoading ? (
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+              <span>Scanning for markdown files...</span>
+            </div>
+          ) : (
+            <>
+              <span className="font-semibold text-foreground text-xs">
+                {fileCount}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                markdown files found
+              </span>
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-function LoadingState() {
+function AISettingsCard() {
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [originalApiKey, setOriginalApiKey] = useState("");
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const inputId = useId();
+
+  useEffect(() => {
+    const loadApiKey = async () => {
+      setIsLoading(true);
+      try {
+        const configured = await hasApiKey();
+        setIsConfigured(configured);
+        if (configured) {
+          const key = await getApiKey();
+          setApiKeyInput(key || "");
+          setOriginalApiKey(key || "");
+        }
+      } catch (error) {
+        console.error("Error loading API key:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadApiKey();
+  }, []);
+
+  const handleSave = async () => {
+    if (!apiKeyInput.trim()) {
+      toast.error("Please enter an API key");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await setApiKey(apiKeyInput.trim());
+      setIsConfigured(true);
+      setOriginalApiKey(apiKeyInput.trim());
+      toast.success("API key saved successfully");
+    } catch (error) {
+      console.error("Error saving API key:", error);
+      toast.error("Failed to save API key");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setIsSaving(true);
+    try {
+      await removeApiKey();
+      setApiKeyInput("");
+      setOriginalApiKey("");
+      setIsConfigured(false);
+      toast.success("API key removed");
+    } catch (error) {
+      console.error("Error removing API key:", error);
+      toast.error("Failed to remove API key");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="flex items-center justify-center py-12">
-      <div className="space-y-4 text-center">
-        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-foreground" />
-        <div>
-          <div className="font-semibold text-foreground text-lg">
-            Reading folder metadata...
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="size-5" />
+          AI Features
+        </CardTitle>
+        <CardDescription>
+          Configure Gemini for AI-powered features
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+            <span>Loading settings...</span>
           </div>
-          <div className="mt-2 text-muted-foreground">
-            Please wait while we scan for markdown files
-          </div>
-        </div>
-      </div>
-    </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor={inputId} className="font-medium text-sm">
+                Google Gemini API Key
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id={inputId}
+                  type={showKey ? "text" : "password"}
+                  placeholder="Enter your API key..."
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  disabled={isSaving}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowKey(!showKey)}
+                  disabled={isSaving}
+                >
+                  {showKey ? <EyeIcon /> : <EyeOffIcon />}
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Get your API key from{" "}
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:text-primary/80"
+                >
+                  Google AI Studio
+                </a>
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSave}
+                disabled={
+                  isSaving ||
+                  !apiKeyInput.trim() ||
+                  apiKeyInput.trim() === originalApiKey
+                }
+                size="sm"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </Button>
+              {isConfigured && (
+                <Button
+                  onClick={handleRemove}
+                  disabled={isSaving}
+                  variant="outline"
+                  size="sm"
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 export function SettingsDialog({
   folderPath,
-  isLoadingMetadata,
-  allFilesMetadata,
-  commitsByDate,
-  commitError,
   open,
   onOpenChange,
 }: SettingsDialogProps) {
+  // Get data from store
+  const isLoadingMetadata = useMarkdownFilesStore(
+    (state) => state.isLoadingMetadata,
+  );
+  const allFilesMetadata = useMarkdownFilesStore(
+    (state) => state.allFilesMetadata,
+  );
+
+  const [fetchReposFn, setFetchReposFn] = useState<
+    (() => Promise<void>) | null
+  >(null);
+  const [isFetching, setIsFetching] = useState(false);
+
+  const handleFetchRepos = async () => {
+    if (fetchReposFn) {
+      setIsFetching(true);
+      await fetchReposFn();
+      setIsFetching(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] min-w-[66vw] overflow-y-scroll">
+      <DialogContent className="max-h-[85vh] max-w-[90vw] overflow-y-scroll lg:max-w-[50vw]">
         <DialogHeader className="pb-6">
-          <DialogTitle className="text-xl">Settings & Information</DialogTitle>
-          <DialogDescription className="text-base">
-            Manage your folder settings and connected repositories
-          </DialogDescription>
+          <DialogTitle className="text-2xl">Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-8">
-          <div className="rounded-lg border bg-muted/30 p-4">
-            <FolderInfo folderPath={folderPath} />
-          </div>
+        <div className="space-y-6">
+          <OverviewCard
+            folderPath={folderPath}
+            fileCount={allFilesMetadata.length}
+            isLoading={isLoadingMetadata}
+          />
 
-          <div className="rounded-lg border bg-muted/30 p-4">
-            {isLoadingMetadata ? (
-              <LoadingState />
-            ) : (
-              <StatusInfo
-                fileCount={allFilesMetadata.length}
-                commitsByDate={commitsByDate}
-                commitError={commitError}
+          <Card className="pb-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="size-5" />
+                Connect Git Repositories
+              </CardTitle>
+              <CardDescription>
+                Show your commits with your notes
+              </CardDescription>
+              {fetchReposFn && (
+                <CardAction>
+                  <Button
+                    onClick={handleFetchRepos}
+                    disabled={isFetching}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    title="Git fetch all repositories"
+                  >
+                    {isFetching ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-4" />
+                    )}
+                  </Button>
+                </CardAction>
+              )}
+            </CardHeader>
+            <CardContent>
+              <RepoConnector
+                key={folderPath}
+                markdownDirectory={folderPath}
+                onFetchRepos={(fn) => setFetchReposFn(() => fn)}
               />
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-foreground text-lg">
-                Repository Management
-              </h3>
-            </div>
-            <RepoConnector markdownDirectory={folderPath} className="" />
-          </div>
+            </CardContent>
+          </Card>
+          <AISettingsCard />
         </div>
       </DialogContent>
     </Dialog>

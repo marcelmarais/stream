@@ -4,24 +4,37 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "tiptap-markdown";
+import { SlashCommand } from "@/components/slash-command";
+import { useAICommands } from "@/hooks/use-ai-commands";
+import { cn } from "@/lib/utils";
 import { formatMarkdown } from "@/utils/markdown-formatter";
 
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   onSave: () => void | Promise<void>;
+  onFocus?: () => void;
+  autoFocus?: boolean;
+  isEditable: boolean;
 }
 
 export function MarkdownEditor({
   value,
   onChange,
   onSave,
+  onFocus,
+  autoFocus = false,
+  isEditable = true,
 }: MarkdownEditorProps) {
   const isUpdatingFromProp = useRef(false);
   const isSavingRef = useRef(false);
+  const [isAIGenerating, setIsAIGenerating] = useState(false);
+
+  // Get AI commands configuration
+  const aiCommands = useAICommands();
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -40,6 +53,10 @@ export function MarkdownEditor({
       Placeholder.configure({
         placeholder: "Start typing...",
       }),
+      SlashCommand.configure({
+        aiCommands,
+        onAIGenerationChange: setIsAIGenerating,
+      }),
     ],
     content: value,
     editorProps: {
@@ -56,6 +73,10 @@ export function MarkdownEditor({
         onChange(markdown);
       }
     },
+    onFocus: () => {
+      onFocus?.();
+    },
+    editable: isEditable,
   });
 
   useEffect(() => {
@@ -72,15 +93,27 @@ export function MarkdownEditor({
         return;
       }
 
+      // Update the editor content directly, preserving cursor position
+      const { from, to } = editor.state.selection;
+
       isUpdatingFromProp.current = true;
-      onChange(formatted);
       editor.commands.setContent(formatted);
+
+      // Restore cursor position
+      const newDocSize = editor.state.doc.content.size;
+      const safeFrom = Math.min(from, newDocSize);
+      const safeTo = Math.min(to, newDocSize);
+      editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
+
+      // Update the store
+      onChange(formatted);
+      isUpdatingFromProp.current = false;
+
       await onSave();
       toast.success("Saved successfully", {
         description: "Markdown formatted and saved",
         duration: 1000,
       });
-      isUpdatingFromProp.current = false;
 
       isSavingRef.current = false;
     };
@@ -98,20 +131,52 @@ export function MarkdownEditor({
   }, [editor, value, onChange, onSave]);
 
   useEffect(() => {
-    if (editor && !editor.isFocused) {
+    if (editor) {
       // biome-ignore lint/suspicious/noExplicitAny: TipTap markdown storage type not exported
       const storage = editor.storage as any;
       const currentMarkdown = storage.markdown.getMarkdown();
-      if (value !== currentMarkdown) {
+      // Only update if the value is different and we're not already updating
+      // Allow updates when focused if they're coming from external sources (like formatting)
+      if (value !== currentMarkdown && !isUpdatingFromProp.current) {
+        // If editor is focused, we need to preserve cursor position
+        const { from, to } = editor.state.selection;
         isUpdatingFromProp.current = true;
         editor.commands.setContent(value);
+        // Try to restore cursor position if editor was focused
+        if (editor.isFocused) {
+          const newDocSize = editor.state.doc.content.size;
+          const safeFrom = Math.min(from, newDocSize);
+          const safeTo = Math.min(to, newDocSize);
+          editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
+        }
         isUpdatingFromProp.current = false;
       }
     }
   }, [value, editor]);
 
+  useEffect(() => {
+    if (autoFocus && editor) {
+      const timer = setTimeout(() => {
+        editor.commands.focus("end");
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [autoFocus, editor]);
+
+  // Update editable state when isEditable or isAIGenerating changes
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(isEditable);
+    }
+  }, [editor, isEditable]);
+
   return (
-    <div className="markdown-editor-wrapper pb-12">
+    <div
+      className={cn(
+        "markdown-editor-wrapper pb-12",
+        isAIGenerating && "animate-pulse",
+      )}
+    >
       <EditorContent editor={editor} />
     </div>
   );

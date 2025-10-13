@@ -1,5 +1,7 @@
+@import url("https://webfonts.artsy.net/all-webfonts.css");
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "tippy.js/dist/tippy.css";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
@@ -8,7 +10,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-heading: var(--heading);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "ll-unica77", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono:
     var(--font-fira-code), ui-monospace, "Cascadia Code", "Source Code Pro",
     Menlo, Monaco, Consolas, "Courier New", monospace;
@@ -122,8 +124,31 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans overflow-x-hidden antialiased;
+    width: 100%;
+    position: relative;
+    font-size: 18px;
+  }
+
+  /* Ensure body and html don't allow horizontal scroll */
+  html {
+    overflow-x: hidden;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Global heading styles */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    letter-spacing: -0.01em;
   }
 
   /* Hide scrollbars for all elements */
@@ -158,7 +183,25 @@
 
   /* Obsidian-like prose overrides */
   .prose.prose-obsidian {
-    /* Headings - consistent spacing */
+    /* Prevent overflow */
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+
+    /* Ensure code blocks don't cause horizontal overflow */
+    & pre {
+      overflow-x: auto;
+      max-width: 100%;
+    }
+
+    & pre code {
+      word-break: normal;
+    }
+
+    & code {
+      word-break: break-all;
+    }
+
     & h1 {
       @apply !text-3xl !font-medium !mt-6 !mb-3 !text-heading/100;
     }
@@ -190,7 +233,7 @@
 
     /* Paragraphs */
     & p {
-      @apply !mt-3 !mb-3;
+      @apply !mt-3 !mb-3 !text-base !text-foreground;
     }
 
     /* Nested lists - remove extra spacing, match parent indentation (more specific, comes first) */
@@ -231,4 +274,16 @@
     pointer-events: none;
     height: 0;
   }
+}
+
+/* Tippy.js custom styling for slash commands */
+.tippy-box[data-theme~="slash-command"] {
+  background: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+}
+
+.tippy-box[data-theme~="slash-command"] .tippy-content {
+  padding: 0;
 }

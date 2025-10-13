@@ -66,7 +66,7 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
           </AccordionTrigger>
           <AccordionContent>
             <CardContent className="pt-0">
-              <div className="space-y-2">
+              <div className="max-h-[250px] space-y-2 overflow-y-scroll">
                 {commits.map((commit) => {
                   const time = new Date(commit.timestamp).toLocaleTimeString();
                   return (
