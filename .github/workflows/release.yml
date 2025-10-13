@@ -65,6 +65,7 @@ jobs:
             stream/src-tauri/target/release/bundle/dmg/*.dmg
             stream/src-tauri/target/release/bundle/macos/*.tar.gz
             stream/src-tauri/target/release/bundle/macos/*.tar.gz.sig
+            stream/src-tauri/target/release/bundle/macos/latest.json
           draft: false
           prerelease: false
           generate_release_notes: true
