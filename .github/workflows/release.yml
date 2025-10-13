@@ -29,44 +29,22 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: "stream/pnpm-lock.yaml"
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: stream/src-tauri -> target
-
       - name: Install dependencies
         working-directory: stream
         run: pnpm install --frozen-lockfile
 
       - name: Build Tauri app
-        working-directory: stream
-        run: pnpm tauri build --bundles dmg
+        uses: tauri-apps/tauri-action@v0
+        id: tauri-build
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-
-      - name: Rename and prepare artifacts
-        working-directory: stream
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          ARCH=$(uname -m)
-          cd src-tauri/target/release/bundle/dmg
-          for file in *.dmg; do
-            mv "$file" "stream-${VERSION}-macos-${ARCH}.dmg"
-          done
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          files: |
-            stream/src-tauri/target/release/bundle/dmg/*.dmg
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          body: |
+          projectPath: stream
+          tagName: ${{ github.ref_name }}
+          releaseName: "v__VERSION__"
+          releaseBody: |
             ## Installation Instructions (macOS - Unsigned)
             
             ⚠️ **Important**: This app is not signed with an Apple Developer certificate.
@@ -79,8 +57,25 @@ jobs:
             3. **First time only**: Right-click the app → Select "Open" → Click "Open" again
             4. macOS will remember your choice and you can open normally afterward
             
-            ### What's Changed
-            See below for automatically generated release notes.
+            ### Auto-Update
+            The app will automatically check for updates on startup and notify you when a new version is available.
+            
+            See release notes below for what's changed.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          tauriScript: pnpm tauri
+      
+      - name: Create latest download link
+        run: |
+          cd stream/src-tauri/target/release/bundle/dmg
+          ARCH=$(uname -m)
+          cp stream_*.dmg stream-latest-macos-${ARCH}.dmg
+      
+      - name: Upload latest DMG
+        uses: softprops/action-gh-release@v2
+        with:
+          files: stream/src-tauri/target/release/bundle/dmg/stream-latest-macos-*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

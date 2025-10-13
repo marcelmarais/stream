@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fira_Code, Inter } from "next/font/google";
+import { AutoUpdater } from "@/components/auto-updater";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -37,6 +38,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster />
+          <AutoUpdater />
         </ThemeProvider>
       </body>
     </html>

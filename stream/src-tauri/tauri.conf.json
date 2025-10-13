@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "stream",
-  "version": "0.1.0",
+  "version": "0.1.9",
   "identifier": "com.marcelmarais.stream",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -24,6 +24,20 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/marcelmarais/stream/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVCMTBCRjhCRkRBRDYyNTgKUldSWVlxMzlpNzhRNjF0QXBSR3VnUTRXY1pTemdYQWs5dmhVTVhsTXp3WDlRbm9VOFZsVTYyR2QK"
+    },
+    "process": {
+      "all": true,
+      "cmd": true,
+      "sidecar": true
+    }
   }
 }
