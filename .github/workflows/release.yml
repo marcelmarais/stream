@@ -41,8 +41,9 @@ jobs:
         working-directory: stream
         run: pnpm install --frozen-lockfile
 
-      - name: Build and Release
+      - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
+        id: tauri-build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ""
@@ -71,4 +72,17 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+      
+      - name: Create latest download link
+        run: |
+          cd stream/src-tauri/target/release/bundle/dmg
+          ARCH=$(uname -m)
+          cp stream_*.dmg stream-latest-macos-${ARCH}.dmg
+      
+      - name: Upload latest DMG
+        uses: softprops/action-gh-release@v2
+        with:
+          files: stream/src-tauri/target/release/bundle/dmg/stream-latest-macos-*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
