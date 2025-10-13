@@ -1,5 +1,6 @@
 "use client";
 
+import { getVersion } from "@tauri-apps/api/app";
 import {
   EyeIcon,
   EyeOffIcon,
@@ -264,6 +265,19 @@ export function SettingsDialog({
     (() => Promise<void>) | null
   >(null);
   const [isFetching, setIsFetching] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("");
+
+  useEffect(() => {
+    const loadVersion = async () => {
+      try {
+        const version = await getVersion();
+        setAppVersion(version);
+      } catch (error) {
+        console.error("Error loading app version:", error);
+      }
+    };
+    loadVersion();
+  }, []);
 
   const handleFetchRepos = async () => {
     if (fetchReposFn) {
@@ -324,6 +338,12 @@ export function SettingsDialog({
             </CardContent>
           </Card>
           <AISettingsCard />
+
+          {appVersion && (
+            <div className="flex justify-center pt-2 text-muted-foreground text-xs">
+              stream {appVersion}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
