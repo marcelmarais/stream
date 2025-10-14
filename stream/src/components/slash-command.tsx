@@ -279,23 +279,6 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                 }
               },
             })),
-            {
-              title: "today",
-              description: "Insert today's date",
-              command: ({ editor, range }) => {
-                const today = new Date().toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                });
-                editor
-                  .chain()
-                  .focus()
-                  .deleteRange(range)
-                  .insertContent(today)
-                  .run();
-              },
-            },
           ];
 
           return items.filter((item) =>
