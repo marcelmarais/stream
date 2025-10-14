@@ -1,13 +1,13 @@
 import { create } from "zustand";
 import { getConnectedRepos } from "@/components/repo-connector";
-import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
-import type { CommitFilters, CommitsByDate } from "@/utils/git-reader";
+import type { CommitFilters, CommitsByDate } from "@/ipc/git-reader";
 import {
   createDateRange,
   getGitCommitsForRepos,
   groupCommitsByDate,
-} from "@/utils/git-reader";
-import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
+} from "@/ipc/git-reader";
+import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
+import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
 interface GitCommitsState {
   // Data

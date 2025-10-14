@@ -8,7 +8,6 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "tiptap-markdown";
 import { SlashCommand } from "@/components/slash-command";
-import { useAICommands } from "@/hooks/use-ai-commands";
 import { cn } from "@/lib/utils";
 import { formatMarkdown } from "@/utils/markdown-formatter";
 
@@ -33,9 +32,6 @@ export function MarkdownEditor({
   const isSavingRef = useRef(false);
   const [isAIGenerating, setIsAIGenerating] = useState(false);
 
-  // Get AI commands configuration
-  const aiCommands = useAICommands();
-
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -54,7 +50,6 @@ export function MarkdownEditor({
         placeholder: "Start typing...",
       }),
       SlashCommand.configure({
-        aiCommands,
         onAIGenerationChange: setIsAIGenerating,
       }),
     ],
@@ -163,7 +158,7 @@ export function MarkdownEditor({
     }
   }, [autoFocus, editor]);
 
-  // Update editable state when isEditable or isAIGenerating changes
+  // Update editable state when isEditable changes
   useEffect(() => {
     if (editor) {
       editor.setEditable(isEditable);

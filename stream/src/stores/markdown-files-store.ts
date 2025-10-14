@@ -1,12 +1,12 @@
 import { debounce } from "lodash";
 import { create } from "zustand";
-import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
+import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import {
   ensureTodayMarkdownFile,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
   writeMarkdownFileContent,
-} from "@/utils/markdown-reader";
+} from "@/ipc/markdown-reader";
 
 interface MarkdownFilesState {
   // Data

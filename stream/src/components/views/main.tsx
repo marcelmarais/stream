@@ -8,10 +8,10 @@ import {
   FileReaderHeader,
   FocusedFileOverlay,
 } from "@/components/markdown-file-card";
+import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
-import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
 import CommitFilter from "../commit-filter";
 
 interface FileReaderScreenProps {
