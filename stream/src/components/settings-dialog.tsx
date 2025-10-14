@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useApiKey } from "@/hooks/use-api-key";
+import { useApiKeyStore } from "@/stores/api-key-store";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 
 interface SettingsDialogProps {
@@ -86,7 +86,8 @@ function OverviewCard({
 }
 
 function AISettingsCard() {
-  const { isLoading, isSaving, apiKey, setApiKey, removeApiKey } = useApiKey();
+  const { isLoading, isSaving, apiKey, setApiKey, removeApiKey } =
+    useApiKeyStore();
 
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
