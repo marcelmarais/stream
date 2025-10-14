@@ -1,7 +1,7 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
-import { getApiKey } from "@/utils/settings-store";
-import type { GitCommit } from "./git-reader";
+import { getApiKey } from "@/ipc/settings";
+import type { GitCommit } from "../ipc/git-reader";
 
 /**
  * Get yesterday's date in YYYY-MM-DD format

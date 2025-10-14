@@ -19,6 +19,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { filterCommits, getCommitsForDate } from "@/ipc/git-reader";
+import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
+import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
@@ -27,9 +30,6 @@ import {
   getDateFromFilename,
   getDateKey,
 } from "@/utils/date-utils";
-import { filterCommits, getCommitsForDate } from "@/utils/git-reader";
-import type { MarkdownFileMetadata } from "@/utils/markdown-reader";
-import { getTodayMarkdownFileName } from "@/utils/markdown-reader";
 
 export function DateHeader({
   displayDate,

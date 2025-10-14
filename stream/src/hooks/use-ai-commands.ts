@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { AICommand } from "@/components/slash-command";
+import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import {
@@ -7,7 +8,6 @@ import {
   getYesterdayMarkdownFileName,
   streamYesterdaySummary,
 } from "@/utils/ai";
-import { readMarkdownFilesContentByPaths } from "@/utils/markdown-reader";
 
 export function useAICommands(): AICommand[] {
   const allFilesMetadata = useMarkdownFilesStore(

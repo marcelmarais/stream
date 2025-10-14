@@ -30,13 +30,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getApiKey, hasApiKey, removeApiKey, setApiKey } from "@/ipc/settings";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
-import {
-  getApiKey,
-  hasApiKey,
-  removeApiKey,
-  setApiKey,
-} from "@/utils/settings-store";
 
 interface SettingsDialogProps {
   folderPath: string;

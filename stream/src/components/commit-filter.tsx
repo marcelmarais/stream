@@ -17,8 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatCommitAuthor } from "@/ipc/git-reader";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
-import { formatCommitAuthor } from "@/utils/git-reader";
 
 export function CommitFilter() {
   // Get state directly from store
