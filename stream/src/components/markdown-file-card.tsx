@@ -4,6 +4,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  MapPin,
 } from "lucide-react";
 import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
@@ -35,26 +36,43 @@ export function DateHeader({
   displayDate,
   isFocused,
   onToggleFocus,
+  country,
+  city,
 }: {
   displayDate: string;
   isFocused: boolean;
   onToggleFocus: () => void;
+  country?: string;
+  city?: string;
 }) {
+  const validCity = city && city !== "Unknown" ? city : undefined;
+  const validCountry = country && country !== "Unknown" ? country : undefined;
+  const hasLocation = validCity || validCountry;
+  const locationText = [validCity, validCountry].filter(Boolean).join(", ");
+
   return (
-    <Button
-      className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
-      variant="default"
-      onClick={onToggleFocus}
-    >
-      <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
-        {displayDate}
-      </h1>
-      {isFocused ? (
-        <EyeOff className="size-4 text-muted-foreground/50" />
-      ) : (
-        <Eye className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+    <div className="flex flex-col items-start gap-2.5">
+      <Button
+        className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
+        variant="default"
+        onClick={onToggleFocus}
+      >
+        <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
+          {displayDate}
+        </h1>
+        {isFocused ? (
+          <EyeOff className="size-4 text-muted-foreground/50" />
+        ) : (
+          <Eye className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+        )}
+      </Button>
+      {hasLocation && (
+        <div className="flex items-center gap-1.5 pl-3 text-muted-foreground/60 text-sm">
+          <MapPin className="size-3.5" />
+          <span>{locationText}</span>
+        </div>
       )}
-    </Button>
+    </div>
   );
 }
 
@@ -165,6 +183,8 @@ export function FileCard({
         displayDate={displayDate}
         isFocused={isFocused}
         onToggleFocus={onToggleFocus || (() => {})}
+        country={file.country}
+        city={file.city}
       />
       <div className="p-6">
         <MarkdownEditor
@@ -420,6 +440,8 @@ export function FocusedFileOverlay({
           displayDate={displayDate}
           isFocused={true}
           onToggleFocus={onClose}
+          country={file.country}
+          city={file.city}
         />
         <div className="p-6">
           <MarkdownEditor
