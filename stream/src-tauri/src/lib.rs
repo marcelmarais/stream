@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 use git2::{Repository, Time};
 use chrono::{DateTime, Utc};
+use xattr;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MarkdownFileMetadata {
@@ -12,6 +13,8 @@ pub struct MarkdownFileMetadata {
     pub created_at: u64, // Unix timestamp in milliseconds
     pub modified_at: u64, // Unix timestamp in milliseconds
     pub size: u64,
+    pub country: Option<String>, // Location country from xattrs
+    pub city: Option<String>,    // Location city from xattrs
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,6 +41,40 @@ pub struct RepoCommits {
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+// Helper functions for xattr operations
+const XATTR_COUNTRY_KEY: &str = "user.location.country";
+const XATTR_CITY_KEY: &str = "user.location.city";
+
+fn read_location_xattrs(file_path: &Path) -> (Option<String>, Option<String>) {
+    let country = xattr::get(file_path, XATTR_COUNTRY_KEY)
+        .ok()
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes).ok());
+    
+    let city = xattr::get(file_path, XATTR_CITY_KEY)
+        .ok()
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes).ok());
+    
+    (country, city)
+}
+
+fn write_location_xattrs(file_path: &Path, country: &str, city: &str) -> Result<(), Box<dyn std::error::Error>> {
+    xattr::set(file_path, XATTR_COUNTRY_KEY, country.as_bytes())?;
+    xattr::set(file_path, XATTR_CITY_KEY, city.as_bytes())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_file_location_metadata(file_path: String, country: String, city: String) -> Result<(), String> {
+    let path = Path::new(&file_path);
+    
+    write_location_xattrs(path, &country, &city)
+        .map_err(|e| format!("Failed to set location metadata: {}", e))?;
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -111,12 +148,17 @@ async fn read_markdown_files_metadata(directory_path: String, max_file_size: Opt
                                     .unwrap_or_default()
                                     .as_millis() as u64;
                                 
+                                // Read location metadata from xattrs
+                                let (country, city) = read_location_xattrs(&path);
+                                
                                 files.push(MarkdownFileMetadata {
                                     file_path,
                                     file_name,
                                     created_at,
                                     modified_at,
                                     size,
+                                    country,
+                                    city,
                                 });
                             }
                         }
@@ -476,7 +518,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, read_markdown_files_metadata, read_markdown_files_content, get_git_commits_for_repos, fetch_repos])
+        .invoke_handler(tauri::generate_handler![greet, read_markdown_files_metadata, read_markdown_files_content, get_git_commits_for_repos, fetch_repos, set_file_location_metadata])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
