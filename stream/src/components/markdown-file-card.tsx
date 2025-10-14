@@ -33,9 +33,36 @@ import { getTodayMarkdownFileName } from "@/utils/markdown-reader";
 
 export function DateHeader({
   displayDate,
-  content,
+  isFocused,
+  onToggleFocus,
 }: {
   displayDate: string;
+  isFocused: boolean;
+  onToggleFocus: () => void;
+}) {
+  return (
+    <Button
+      className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
+      variant="default"
+      onClick={onToggleFocus}
+    >
+      <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
+        {displayDate}
+      </h1>
+      {isFocused ? (
+        <EyeOff className="size-4 text-muted-foreground/50" />
+      ) : (
+        <Eye className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+      )}
+    </Button>
+  );
+}
+
+export function FileName({
+  fileName,
+  content,
+}: {
+  fileName: string;
   content: string | undefined;
 }) {
   const handleCopyToClipboard = async () => {
@@ -43,33 +70,10 @@ export function DateHeader({
       toast.error("No content to copy");
       return;
     }
-    await navigator.clipboard.writeText(`# ${displayDate}\n\n${content}`);
+    await navigator.clipboard.writeText(content);
     toast.success("File content copied to clipboard");
   };
 
-  return (
-    <Button
-      className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
-      variant="default"
-      onClick={handleCopyToClipboard}
-    >
-      <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
-        {displayDate}
-      </h1>
-      <Copy className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
-    </Button>
-  );
-}
-
-export function FileName({
-  fileName,
-  isFocused,
-  onToggleFocus,
-}: {
-  fileName: string;
-  isFocused: boolean;
-  onToggleFocus: () => void;
-}) {
   return (
     <div className="group relative flex items-center justify-end bg-transparent">
       {/* Gradient fade effect */}
@@ -79,19 +83,10 @@ export function FileName({
       <Button
         variant="ghost"
         size="sm"
-        onClick={onToggleFocus}
-        className={cn(
-          "relative z-10 flex items-center justify-end gap-2 font-base text-sm transition-colors hover:bg-transparent",
-          isFocused
-            ? "text-primary"
-            : "text-muted-foreground hover:text-primary",
-        )}
+        onClick={handleCopyToClipboard}
+        className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
       >
-        {isFocused ? (
-          <EyeOff className="size-4" />
-        ) : (
-          <Eye className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
-        )}
+        <Copy className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
         {fileName}
       </Button>
     </div>
@@ -166,7 +161,11 @@ export function FileCard({
   }
   return (
     <div>
-      <DateHeader displayDate={displayDate} content={content} />
+      <DateHeader
+        displayDate={displayDate}
+        isFocused={isFocused}
+        onToggleFocus={onToggleFocus || (() => {})}
+      />
       <div className="p-6">
         <MarkdownEditor
           value={content ?? ""}
@@ -176,11 +175,7 @@ export function FileCard({
           isEditable={!isFocused}
         />
 
-        <FileName
-          fileName={file.fileName}
-          isFocused={isFocused}
-          onToggleFocus={onToggleFocus || (() => {})}
-        />
+        <FileName fileName={file.fileName} content={content} />
         {commits.length > 0 && (
           <div className="mt-4">
             <CommitOverlay
@@ -421,7 +416,11 @@ export function FocusedFileOverlay({
   return (
     <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-16">
-        <DateHeader displayDate={displayDate} content={content} />
+        <DateHeader
+          displayDate={displayDate}
+          isFocused={true}
+          onToggleFocus={onClose}
+        />
         <div className="p-6">
           <MarkdownEditor
             value={content ?? ""}
@@ -435,11 +434,7 @@ export function FocusedFileOverlay({
       </div>
       <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto w-full max-w-4xl px-6 py-6">
-          <FileName
-            fileName={file.fileName}
-            isFocused={true}
-            onToggleFocus={onClose}
-          />
+          <FileName fileName={file.fileName} content={content} />
           {commits.length > 0 && (
             <div className="mt-4">
               <CommitOverlay
