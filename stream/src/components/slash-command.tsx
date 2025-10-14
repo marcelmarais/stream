@@ -7,6 +7,15 @@ import Suggestion from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import type { Instance as TippyInstance } from "tippy.js";
 import tippy from "tippy.js";
+import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
+import { useApiKeyStore } from "@/stores/api-key-store";
+import { useGitCommitsStore } from "@/stores/git-commits-store";
+import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
+import {
+  getYesterdayDateString,
+  getYesterdayMarkdownFileName,
+  streamYesterdaySummary,
+} from "@/utils/ai";
 
 interface SlashCommandItem {
   title: string;
@@ -101,8 +110,10 @@ const SlashCommandList = forwardRef<
           </button>
         ))
       ) : (
-        <div className="px-3 py-2 text-muted-foreground text-sm">
-          No results
+        <div className="flex flex-col gap-2 px-3 py-2 text-muted-foreground">
+          <span className="text-xs">
+            Configure your Gemini API key in settings to use AI features
+          </span>
         </div>
       )}
     </div>
@@ -111,17 +122,181 @@ const SlashCommandList = forwardRef<
 
 SlashCommandList.displayName = "SlashCommandList";
 
-export interface AICommand {
-  title: string;
-  description: string;
-  executeStream: (onToken: (delta: string) => void) => Promise<void>;
-  streamingPrefix?: string;
-  streamingSuffix?: string;
+interface SlashCommandOptions {
+  onAIGenerationChange?: (isGenerating: boolean) => void;
 }
 
-interface SlashCommandOptions {
-  aiCommands?: AICommand[];
-  onAIGenerationChange?: (isGenerating: boolean) => void;
+/**
+ * Get available AI commands based on API key configuration
+ */
+function getAICommands(
+  onAIGenerationChange?: (isGenerating: boolean) => void,
+): SlashCommandItem[] {
+  const apiKey = useApiKeyStore.getState().apiKey;
+  if (!apiKey) {
+    return [];
+  }
+
+  return [
+    {
+      title: "todos",
+      description: "Collect yesterday's todos & open points",
+      command: async ({
+        editor,
+        range,
+      }: {
+        editor: Editor;
+        range: { from: number; to: number };
+      }) => {
+        const loadingText = "Generating todos...";
+
+        // Notify that AI generation has started
+        onAIGenerationChange?.(true);
+
+        // Show loading indicator
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent(loadingText)
+          .run();
+
+        try {
+          // Get yesterday's date and filename
+          const yesterdayDateStr = getYesterdayDateString();
+          const yesterdayFileName = getYesterdayMarkdownFileName();
+
+          // Find yesterday's markdown file
+          const allFilesMetadata =
+            useMarkdownFilesStore.getState().allFilesMetadata;
+          const yesterdayFile = allFilesMetadata.find(
+            (file) => file.fileName === yesterdayFileName,
+          );
+
+          // Get yesterday's markdown content
+          let markdownContent = "";
+          if (yesterdayFile) {
+            const loadedContent =
+              useMarkdownFilesStore.getState().loadedContent;
+            const cachedContent = loadedContent.get(yesterdayFile.filePath);
+            if (cachedContent !== undefined) {
+              markdownContent = cachedContent;
+            } else {
+              const contentMap = await readMarkdownFilesContentByPaths([
+                yesterdayFile.filePath,
+              ]);
+              markdownContent = contentMap.get(yesterdayFile.filePath) ?? "";
+            }
+          }
+
+          // Get yesterday's commits
+          const commitsByDate = useGitCommitsStore.getState().commitsByDate;
+          const yesterdayCommits =
+            commitsByDate[yesterdayDateStr]?.commits || [];
+
+          const { state } = editor;
+          const { doc } = state;
+          let loadingPos = -1;
+
+          // Locate loading text position
+          doc.descendants((node, pos) => {
+            if (node.isText && node.text?.includes(loadingText)) {
+              loadingPos = pos;
+              return false;
+            }
+            return true;
+          });
+
+          // Replace loading with prefix
+          if (loadingPos !== -1) {
+            editor
+              .chain()
+              .focus()
+              .deleteRange({
+                from: loadingPos,
+                to: loadingPos + loadingText.length,
+              })
+              .insertContent("## todo\n\n")
+              .run();
+          }
+
+          // Buffer streaming tokens and flush periodically
+          let buffer = "";
+          let flushTimer: number | null = null;
+          const flush = () => {
+            if (!buffer) return;
+            editor.chain().focus().insertContent(buffer).run();
+            buffer = "";
+          };
+          const scheduleFlush = () => {
+            if (flushTimer !== null) return;
+            flushTimer = window.setTimeout(() => {
+              flush();
+              flushTimer = null;
+            }, 60);
+          };
+
+          // Stream the summary
+          await streamYesterdaySummary(
+            markdownContent,
+            yesterdayCommits,
+            (delta) => {
+              buffer += delta;
+              scheduleFlush();
+            },
+          );
+
+          // Final flush and suffix
+          flush();
+          editor.chain().focus().insertContent("\n\n").run();
+
+          // Notify completion
+          onAIGenerationChange?.(false);
+        } catch (error) {
+          console.error("Error executing todos:", error);
+          const { state } = editor;
+          const { doc } = state;
+          let loadingPos = -1;
+
+          doc.descendants((node, pos) => {
+            if (node.isText && node.text?.includes(loadingText)) {
+              loadingPos = pos;
+              return false;
+            }
+            return true;
+          });
+
+          if (loadingPos !== -1) {
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to generate todos";
+            editor
+              .chain()
+              .focus()
+              .deleteRange({
+                from: loadingPos,
+                to: loadingPos + loadingText.length,
+              })
+              .insertContent(`❌ Error: ${errorMessage}`)
+              .run();
+          } else {
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to generate todos";
+            editor
+              .chain()
+              .focus()
+              .insertContent(`\n\n❌ Error: ${errorMessage}`)
+              .run();
+          }
+
+          onAIGenerationChange?.(false);
+        }
+      },
+    },
+  ];
 }
 
 export const SlashCommand = Extension.create<SlashCommandOptions>({
@@ -129,15 +304,11 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
 
   addOptions() {
     return {
-      aiCommands: [],
       onAIGenerationChange: undefined,
     };
   },
 
   addProseMirrorPlugins() {
-    const aiCommands = this.options.aiCommands || [];
-    const onAIGenerationChange = this.options.onAIGenerationChange;
-
     return [
       Suggestion({
         editor: this.editor,
@@ -146,141 +317,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
           props.command({ editor, range });
         },
         items: ({ query }) => {
-          const items: SlashCommandItem[] = [
-            // Add AI commands dynamically
-            ...aiCommands.map((aiCommand) => ({
-              title: aiCommand.title,
-              description: aiCommand.description,
-              command: async ({
-                editor,
-                range,
-              }: {
-                editor: Editor;
-                range: { from: number; to: number };
-              }) => {
-                const loadingText = `Generating ${aiCommand.title}...`;
-
-                // Notify that AI generation has started
-                onAIGenerationChange?.(true);
-
-                // Show loading indicator
-                editor
-                  .chain()
-                  .focus()
-                  .deleteRange(range)
-                  .insertContent(loadingText)
-                  .run();
-
-                try {
-                  const { state } = editor;
-                  const { doc } = state;
-                  let loadingPos = -1;
-
-                  // Locate loading text position
-                  doc.descendants((node, pos) => {
-                    if (node.isText && node.text?.includes(loadingText)) {
-                      loadingPos = pos;
-                      return false;
-                    }
-                    return true;
-                  });
-
-                  // Replace loading with optional prefix
-                  if (loadingPos !== -1) {
-                    const prefix = aiCommand.streamingPrefix ?? "";
-                    editor
-                      .chain()
-                      .focus()
-                      .deleteRange({
-                        from: loadingPos,
-                        to: loadingPos + loadingText.length,
-                      })
-                      .insertContent(prefix)
-                      .run();
-                  }
-
-                  // Buffer streaming tokens and flush periodically to avoid excessive reflows
-                  let buffer = "";
-                  let flushTimer: number | null = null;
-                  const flush = () => {
-                    if (!buffer) return;
-                    editor.chain().focus().insertContent(buffer).run();
-                    buffer = "";
-                  };
-                  const scheduleFlush = () => {
-                    if (flushTimer !== null) return;
-                    // Flush at ~60ms cadence
-                    flushTimer = window.setTimeout(() => {
-                      flush();
-                      flushTimer = null;
-                    }, 60);
-                  };
-
-                  await aiCommand.executeStream((delta) => {
-                    buffer += delta;
-                    scheduleFlush();
-                  });
-
-                  // Final flush and optional suffix
-                  flush();
-                  if (aiCommand.streamingSuffix) {
-                    editor
-                      .chain()
-                      .focus()
-                      .insertContent(aiCommand.streamingSuffix)
-                      .run();
-                  }
-
-                  // Notify that AI generation has completed successfully
-                  onAIGenerationChange?.(false);
-                } catch (error) {
-                  console.error(`Error executing ${aiCommand.title}:`, error);
-                  const { state } = editor;
-                  const { doc } = state;
-                  let loadingPos = -1;
-
-                  doc.descendants((node, pos) => {
-                    if (node.isText && node.text?.includes(loadingText)) {
-                      loadingPos = pos;
-                      return false;
-                    }
-                    return true;
-                  });
-
-                  if (loadingPos !== -1) {
-                    const errorMessage =
-                      error instanceof Error
-                        ? error.message
-                        : `Failed to generate ${aiCommand.title}`;
-                    editor
-                      .chain()
-                      .focus()
-                      .deleteRange({
-                        from: loadingPos,
-                        to: loadingPos + loadingText.length,
-                      })
-                      .insertContent(`❌ Error: ${errorMessage}`)
-                      .run();
-                  } else {
-                    // If loading text was already replaced (streaming), append error message
-                    const errorMessage =
-                      error instanceof Error
-                        ? error.message
-                        : `Failed to generate ${aiCommand.title}`;
-                    editor
-                      .chain()
-                      .focus()
-                      .insertContent(`\n\n❌ Error: ${errorMessage}`)
-                      .run();
-                  }
-
-                  // Notify that AI generation has completed (with error)
-                  onAIGenerationChange?.(false);
-                }
-              },
-            })),
-          ];
-
+          const items = getAICommands(this.options.onAIGenerationChange);
           return items.filter((item) =>
             item.title.toLowerCase().startsWith(query.toLowerCase()),
           );

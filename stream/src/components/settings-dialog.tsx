@@ -11,7 +11,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { toast } from "sonner";
 import RepoConnector from "@/components/repo-connector";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getApiKey, hasApiKey, removeApiKey, setApiKey } from "@/ipc/settings";
+import { useApiKey } from "@/hooks/use-api-key";
 import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 
 interface SettingsDialogProps {
@@ -87,69 +86,18 @@ function OverviewCard({
 }
 
 function AISettingsCard() {
+  const { isLoading, isSaving, apiKey, setApiKey, removeApiKey } = useApiKey();
+
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [originalApiKey, setOriginalApiKey] = useState("");
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const inputId = useId();
 
   useEffect(() => {
-    const loadApiKey = async () => {
-      setIsLoading(true);
-      try {
-        const configured = await hasApiKey();
-        setIsConfigured(configured);
-        if (configured) {
-          const key = await getApiKey();
-          setApiKeyInput(key || "");
-          setOriginalApiKey(key || "");
-        }
-      } catch (error) {
-        console.error("Error loading API key:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadApiKey();
-  }, []);
+    setApiKeyInput(apiKey || "");
+  }, [apiKey]);
 
-  const handleSave = async () => {
-    if (!apiKeyInput.trim()) {
-      toast.error("Please enter an API key");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await setApiKey(apiKeyInput.trim());
-      setIsConfigured(true);
-      setOriginalApiKey(apiKeyInput.trim());
-      toast.success("API key saved successfully");
-    } catch (error) {
-      console.error("Error saving API key:", error);
-      toast.error("Failed to save API key");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleRemove = async () => {
-    setIsSaving(true);
-    try {
-      await removeApiKey();
-      setApiKeyInput("");
-      setOriginalApiKey("");
-      setIsConfigured(false);
-      toast.success("API key removed");
-    } catch (error) {
-      console.error("Error removing API key:", error);
-      toast.error("Failed to remove API key");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const hasChanges = apiKeyInput.trim() !== (apiKey || "");
+  const canSave = !isSaving && apiKeyInput.trim() !== "" && hasChanges;
 
   return (
     <Card>
@@ -208,12 +156,8 @@ function AISettingsCard() {
 
             <div className="flex gap-2">
               <Button
-                onClick={handleSave}
-                disabled={
-                  isSaving ||
-                  !apiKeyInput.trim() ||
-                  apiKeyInput.trim() === originalApiKey
-                }
+                onClick={() => setApiKey(apiKeyInput)}
+                disabled={!canSave}
                 size="sm"
               >
                 {isSaving ? (
@@ -225,9 +169,9 @@ function AISettingsCard() {
                   "Save"
                 )}
               </Button>
-              {isConfigured && (
+              {apiKey && (
                 <Button
-                  onClick={handleRemove}
+                  onClick={removeApiKey}
                   disabled={isSaving}
                   variant="outline"
                   size="sm"
