@@ -45,10 +45,8 @@ export function DateHeader({
   country?: string;
   city?: string;
 }) {
-  const validCity = city && city !== "Unknown" ? city : undefined;
-  const validCountry = country && country !== "Unknown" ? country : undefined;
-  const hasLocation = validCity || validCountry;
-  const locationText = [validCity, validCountry].filter(Boolean).join(", ");
+  const hasLocation = city || country;
+  const locationText = [city, country].filter(Boolean).join(", ");
 
   return (
     <div className="flex flex-col items-start gap-2.5 pb-2">
@@ -77,18 +75,21 @@ export function DateHeader({
 }
 
 export function FileName({
-  fileName,
   content,
+  metadata,
 }: {
-  fileName: string;
   content: string | undefined;
+  metadata: MarkdownFileMetadata;
 }) {
+  const fileName = metadata.fileName.split(".")[0];
   const handleCopyToClipboard = async () => {
     if (!content) {
       toast.error("No content to copy");
       return;
     }
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(
+      `# ${fileName}\n\n${metadata.country}, ${metadata.city}\n\n${content}`,
+    );
     toast.success("File content copied to clipboard");
   };
 
@@ -105,7 +106,7 @@ export function FileName({
         className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
       >
         <Copy className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
-        {fileName}
+        {metadata.fileName}
       </Button>
     </div>
   );
@@ -195,7 +196,7 @@ export function FileCard({
         isEditable={!isFocused}
       />
 
-      <FileName fileName={file.fileName} content={content} />
+      <FileName content={content} metadata={file} />
       {commits.length > 0 && (
         <div className="mt-2">
           <CommitOverlay
@@ -454,7 +455,7 @@ export function FocusedFileOverlay({
       </div>
       <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto w-full max-w-4xl px-6 py-6">
-          <FileName fileName={file.fileName} content={content} />
+          <FileName content={content} metadata={file} />
           {commits.length > 0 && (
             <div className="mt-4">
               <CommitOverlay
