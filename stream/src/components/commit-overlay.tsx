@@ -50,7 +50,7 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
         onValueChange={(val) => setExpanded(val)}
       >
         <AccordionItem value="repo" className="border-0">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline [&[data-state=closed]>div>span:last-child]:text-muted-foreground [&[data-state=open]>div>span:last-child]:text-muted-foreground">
+          <AccordionTrigger className="px-4 py-2 hover:no-underline [&[data-state=closed]>div>span:last-child]:text-muted-foreground [&[data-state=open]>div>span:last-child]:text-muted-foreground">
             <div className="flex w-full items-center justify-between">
               <div className="flex items-center gap-2">
                 <FolderGit className="h-4 w-4 text-muted-foreground" />
@@ -59,13 +59,13 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
                   {commits.length} commit{commits.length !== 1 ? "s" : ""}
                 </Badge>
               </div>
-              <span className="mr-2 text-muted-foreground text-xs">
+              <span className="text-muted-foreground text-xs">
                 {expanded === "repo" ? "Hide details" : "Show details"}
               </span>
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <CardContent className="pt-0">
+            <CardContent className="pt-2">
               <div className="max-h-[250px] space-y-2 overflow-y-scroll">
                 {commits.map((commit) => {
                   const time = new Date(commit.timestamp).toLocaleTimeString();
