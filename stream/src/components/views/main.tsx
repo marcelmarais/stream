@@ -200,7 +200,6 @@ export function FileReaderScreen({
     [allFilesMetadata, handleLoadFileContent, handleLoadCommitsForVisibleFiles],
   );
 
-  // Render individual item
   const renderItem = useCallback(
     (index: number) => {
       const file = allFilesMetadata[index];
@@ -257,7 +256,7 @@ export function FileReaderScreen({
 
       {/* Virtualized List */}
       {!isLoadingMetadata && allFilesMetadata.length > 0 && (
-        <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-16">
+        <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-4">
           <Virtuoso
             ref={virtuosoRef}
             totalCount={allFilesMetadata.length}

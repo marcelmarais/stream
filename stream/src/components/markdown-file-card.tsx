@@ -51,13 +51,13 @@ export function DateHeader({
   const locationText = [validCity, validCountry].filter(Boolean).join(", ");
 
   return (
-    <div className="flex flex-col items-start gap-2.5">
-      <Button
-        className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
-        variant="default"
+    <div className="flex flex-col items-start gap-2.5 pb-2">
+      <button
+        type="button"
+        className="group flex w-full items-center justify-start gap-3 bg-transparent p-0 hover:bg-transparent"
         onClick={onToggleFocus}
       >
-        <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
+        <h1 className="m-0 line-clamp-1 min-w-0 flex-shrink cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
           {displayDate}
         </h1>
         {isFocused ? (
@@ -65,9 +65,9 @@ export function DateHeader({
         ) : (
           <Eye className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
         )}
-      </Button>
+      </button>
       {hasLocation && (
-        <div className="flex items-center gap-1.5 pl-3 text-muted-foreground/60 text-sm">
+        <div className="flex items-center gap-1.5 text-muted-foreground/60 text-sm">
           <MapPin className="size-3.5" />
           <span>{locationText}</span>
         </div>
@@ -178,7 +178,7 @@ export function FileCard({
     );
   }
   return (
-    <div>
+    <div className="px-4 pt-8">
       <DateHeader
         displayDate={displayDate}
         isFocused={isFocused}
@@ -186,27 +186,26 @@ export function FileCard({
         country={file.country}
         city={file.city}
       />
-      <div className="p-6">
-        <MarkdownEditor
-          value={content ?? ""}
-          onChange={handleContentChange}
-          onSave={handleSave}
-          onFocus={onEditorFocus || (() => {})}
-          isEditable={!isFocused}
-        />
 
-        <FileName fileName={file.fileName} content={content} />
-        {commits.length > 0 && (
-          <div className="mt-4">
-            <CommitOverlay
-              commits={commits}
-              date={file.createdAt}
-              className="w-full"
-            />
-          </div>
-        )}
-        <Separator className="mt-12" />
-      </div>
+      <MarkdownEditor
+        value={content ?? ""}
+        onChange={handleContentChange}
+        onSave={handleSave}
+        onFocus={onEditorFocus || (() => {})}
+        isEditable={!isFocused}
+      />
+
+      <FileName fileName={file.fileName} content={content} />
+      {commits.length > 0 && (
+        <div className="mt-2">
+          <CommitOverlay
+            commits={commits}
+            date={file.createdAt}
+            className="w-full"
+          />
+        </div>
+      )}
+      <Separator className="mt-12" />
     </div>
   );
 }
@@ -435,7 +434,7 @@ export function FocusedFileOverlay({
 
   return (
     <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
-      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-16">
+      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-10 pt-16">
         <DateHeader
           displayDate={displayDate}
           isFocused={true}
@@ -443,16 +442,15 @@ export function FocusedFileOverlay({
           country={file.country}
           city={file.city}
         />
-        <div className="p-6">
-          <MarkdownEditor
-            value={content ?? ""}
-            onChange={handleContentChange}
-            onSave={handleSave}
-            onFocus={onEditorFocus || (() => {})}
-            autoFocus={true}
-            isEditable={true}
-          />
-        </div>
+
+        <MarkdownEditor
+          value={content ?? ""}
+          onChange={handleContentChange}
+          onSave={handleSave}
+          onFocus={onEditorFocus || (() => {})}
+          autoFocus={true}
+          isEditable={true}
+        />
       </div>
       <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto w-full max-w-4xl px-6 py-6">

@@ -176,11 +176,6 @@
 }
 
 @layer components {
-  /* TipTap Editor Styling */
-  .markdown-editor-wrapper {
-    @apply w-full h-full relative;
-  }
-
   /* Obsidian-like prose overrides */
   .prose.prose-obsidian {
     /* Prevent overflow */
@@ -192,14 +187,6 @@
     & pre {
       overflow-x: auto;
       max-width: 100%;
-    }
-
-    & pre code {
-      word-break: normal;
-    }
-
-    & code {
-      word-break: break-all;
     }
 
     & h1 {
@@ -241,13 +228,13 @@
     & ol > li > ol,
     & ul > li > ol,
     & ol > li > ul {
-      @apply !mt-1 !mb-0 !pl-6;
+      @apply !mt-1 !mb-0 !pl-4;
     }
 
     /* Lists */
     & ul,
     & ol {
-      @apply !mt-3 !mb-3 !pl-6;
+      @apply !mt-3 !mb-3;
     }
 
     /* List items */

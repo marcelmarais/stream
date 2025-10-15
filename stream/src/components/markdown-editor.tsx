@@ -168,7 +168,7 @@ export function MarkdownEditor({
   return (
     <div
       className={cn(
-        "markdown-editor-wrapper pb-12",
+        "relative h-full w-full pb-4",
         isAIGenerating && "animate-pulse",
       )}
     >
