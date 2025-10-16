@@ -45,19 +45,17 @@ export function DateHeader({
   country?: string;
   city?: string;
 }) {
-  const validCity = city && city !== "Unknown" ? city : undefined;
-  const validCountry = country && country !== "Unknown" ? country : undefined;
-  const hasLocation = validCity || validCountry;
-  const locationText = [validCity, validCountry].filter(Boolean).join(", ");
+  const hasLocation = city || country;
+  const locationText = [city, country].filter(Boolean).join(", ");
 
   return (
-    <div className="flex flex-col items-start gap-2.5">
-      <Button
-        className="group m-0 flex items-center justify-center gap-3 bg-transparent p-0 hover:bg-transparent"
-        variant="default"
+    <div className="flex flex-col items-start gap-2.5 pb-2">
+      <button
+        type="button"
+        className="group flex w-full items-center justify-start gap-3 bg-transparent p-0 hover:bg-transparent"
         onClick={onToggleFocus}
       >
-        <h1 className="cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
+        <h1 className="m-0 line-clamp-1 min-w-0 flex-shrink-0 cursor-pointer text-left font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
           {displayDate}
         </h1>
         {isFocused ? (
@@ -65,9 +63,9 @@ export function DateHeader({
         ) : (
           <Eye className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
         )}
-      </Button>
+      </button>
       {hasLocation && (
-        <div className="flex items-center gap-1.5 pl-3 text-muted-foreground/60 text-sm">
+        <div className="flex items-center gap-1.5 text-muted-foreground/60 text-sm">
           <MapPin className="size-3.5" />
           <span>{locationText}</span>
         </div>
@@ -77,18 +75,21 @@ export function DateHeader({
 }
 
 export function FileName({
-  fileName,
   content,
+  metadata,
 }: {
-  fileName: string;
   content: string | undefined;
+  metadata: MarkdownFileMetadata;
 }) {
+  const fileName = metadata.fileName.split(".")[0];
   const handleCopyToClipboard = async () => {
     if (!content) {
       toast.error("No content to copy");
       return;
     }
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(
+      `# ${fileName}\n\n${metadata.country}, ${metadata.city}\n\n${content}`,
+    );
     toast.success("File content copied to clipboard");
   };
 
@@ -105,7 +106,7 @@ export function FileName({
         className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
       >
         <Copy className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
-        {fileName}
+        {metadata.fileName}
       </Button>
     </div>
   );
@@ -178,7 +179,7 @@ export function FileCard({
     );
   }
   return (
-    <div>
+    <div className="px-4 pt-8">
       <DateHeader
         displayDate={displayDate}
         isFocused={isFocused}
@@ -186,27 +187,26 @@ export function FileCard({
         country={file.country}
         city={file.city}
       />
-      <div className="p-6">
-        <MarkdownEditor
-          value={content ?? ""}
-          onChange={handleContentChange}
-          onSave={handleSave}
-          onFocus={onEditorFocus || (() => {})}
-          isEditable={!isFocused}
-        />
 
-        <FileName fileName={file.fileName} content={content} />
-        {commits.length > 0 && (
-          <div className="mt-4">
-            <CommitOverlay
-              commits={commits}
-              date={file.createdAt}
-              className="w-full"
-            />
-          </div>
-        )}
-        <Separator className="mt-12" />
-      </div>
+      <MarkdownEditor
+        value={content ?? ""}
+        onChange={handleContentChange}
+        onSave={handleSave}
+        onFocus={onEditorFocus || (() => {})}
+        isEditable={!isFocused}
+      />
+
+      <FileName content={content} metadata={file} />
+      {commits.length > 0 && (
+        <div className="mt-2">
+          <CommitOverlay
+            commits={commits}
+            date={file.createdAt}
+            className="w-full"
+          />
+        </div>
+      )}
+      <Separator className="mt-12" />
     </div>
   );
 }
@@ -435,7 +435,7 @@ export function FocusedFileOverlay({
 
   return (
     <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
-      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-6 pt-16">
+      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-10 pt-16">
         <DateHeader
           displayDate={displayDate}
           isFocused={true}
@@ -443,20 +443,19 @@ export function FocusedFileOverlay({
           country={file.country}
           city={file.city}
         />
-        <div className="p-6">
-          <MarkdownEditor
-            value={content ?? ""}
-            onChange={handleContentChange}
-            onSave={handleSave}
-            onFocus={onEditorFocus || (() => {})}
-            autoFocus={true}
-            isEditable={true}
-          />
-        </div>
+
+        <MarkdownEditor
+          value={content ?? ""}
+          onChange={handleContentChange}
+          onSave={handleSave}
+          onFocus={onEditorFocus || (() => {})}
+          autoFocus={true}
+          isEditable={true}
+        />
       </div>
       <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto w-full max-w-4xl px-6 py-6">
-          <FileName fileName={file.fileName} content={content} />
+          <FileName content={content} metadata={file} />
           {commits.length > 0 && (
             <div className="mt-4">
               <CommitOverlay
