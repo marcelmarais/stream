@@ -55,7 +55,7 @@ export function DateHeader({
         className="group flex w-full items-center justify-start gap-3 bg-transparent p-0 hover:bg-transparent"
         onClick={onToggleFocus}
       >
-        <h1 className="m-0 line-clamp-1 min-w-0 flex-shrink cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground">
+        <h1 className="m-0 line-clamp-1 min-w-0 flex-shrink-0 cursor-pointer font-semibold text-4xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground text-left">
           {displayDate}
         </h1>
         {isFocused ? (
