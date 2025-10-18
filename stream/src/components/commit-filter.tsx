@@ -1,6 +1,6 @@
 "use client";
 
-import { SlidersHorizontal, X } from "lucide-react";
+import { SlidersHorizontalIcon, XIcon } from "@phosphor-icons/react";
 import { useCallback, useId, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,7 +111,7 @@ export function CommitFilter() {
   if (commits.length === 0) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
-        <SlidersHorizontal className="h-4 w-4" />
+        <SlidersHorizontalIcon className="h-4 w-4" />
       </div>
     );
   }
@@ -121,7 +121,7 @@ export function CommitFilter() {
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
-            <SlidersHorizontal
+            <SlidersHorizontalIcon
               className={`h-4 w-4 ${hasActiveFilters ? "fill-white" : ""}`}
             />
           </Button>
@@ -193,7 +193,7 @@ export function CommitFilter() {
                         onClick={() => handleAuthorChange(author)}
                         className="h-auto p-0 hover:bg-transparent"
                       >
-                        <X className="h-3 w-3" />
+                        <XIcon className="h-3 w-3" />
                       </Button>
                     </Badge>
                   ))}
@@ -243,7 +243,7 @@ export function CommitFilter() {
                         onClick={() => handleRepoChange(repo)}
                         className="h-auto p-0 hover:bg-transparent"
                       >
-                        <X className="h-3 w-3" />
+                        <XIcon className="h-3 w-3" />
                       </Button>
                     </Badge>
                   ))}

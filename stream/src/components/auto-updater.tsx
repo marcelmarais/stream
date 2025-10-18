@@ -1,8 +1,8 @@
 "use client";
 
+import { PackageIcon } from "@phosphor-icons/react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent } from "@tauri-apps/plugin-updater";
-import { Package } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
@@ -65,7 +65,7 @@ export function AutoUpdater() {
 
         toastIdRef.current = toast(`New version ${update.version} available`, {
           duration: Number.POSITIVE_INFINITY,
-          icon: <Package className="h-4 w-4" />,
+          icon: <PackageIcon className="h-4 w-4" />,
           position: "bottom-left",
           className: "text-xs",
           dismissible: true,

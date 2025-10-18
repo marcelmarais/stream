@@ -1,4 +1,9 @@
-import { FileText, Folder, GitBranch, Settings } from "lucide-react";
+import {
+  FileTextIcon,
+  FolderIcon,
+  GearIcon,
+  GitBranchIcon,
+} from "@phosphor-icons/react";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
@@ -38,7 +43,7 @@ export function Footer({
             onClick={onFolderClick}
             title="Click to go back to folder selection"
           >
-            <Folder className="size-3" />
+            <FolderIcon className="size-3" />
             <span title={folderPath}>{folderName}</span>
           </Button>
           <Button
@@ -48,7 +53,7 @@ export function Footer({
             onClick={() => onSettingsOpenChange(true)}
             title="Open settings"
           >
-            <Settings className="size-3" />
+            <GearIcon className="size-3" />
           </Button>
         </div>
         <div className="flex items-center">
@@ -59,7 +64,7 @@ export function Footer({
             disabled
             title="Markdown files"
           >
-            <FileText className="size-3" />
+            <FileTextIcon className="size-3" />
             {fileCount}
           </Button>
           <Button
@@ -69,7 +74,7 @@ export function Footer({
             disabled
             title="Connected repositories"
           >
-            <GitBranch className="size-3" />
+            <GitBranchIcon className="size-3" />
             {connectedReposCount}
           </Button>
         </div>

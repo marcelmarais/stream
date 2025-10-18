@@ -1,9 +1,14 @@
 "use client";
 
+import {
+  CircleNotchIcon,
+  FolderIcon,
+  FolderPlusIcon,
+  PlusIcon,
+} from "@phosphor-icons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
-import { Folder, FolderPlus, Loader2, Plus } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -167,7 +172,7 @@ export function RepoConnector({
                 <Fragment key={repo}>
                   <div className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-muted/50">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <Folder className="size-4 shrink-0 text-muted-foreground" />
+                      <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
                       <div className="min-w-0">
                         <div className="truncate font-mono text-sm">
                           {repo.split("/").pop()}
@@ -201,9 +206,9 @@ export function RepoConnector({
               className="cursor-pointer rounded-full"
             >
               {isAddingRepo ? (
-                <Loader2 className="size-3 animate-spin" />
+                <CircleNotchIcon className="size-3 animate-spin" />
               ) : (
-                <Plus className="size-3" />
+                <PlusIcon className="size-3" />
               )}
             </Button>
           </div>
@@ -218,9 +223,9 @@ export function RepoConnector({
         >
           <div className="flex flex-col items-center">
             {isAddingRepo ? (
-              <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground/50" />
+              <CircleNotchIcon className="mx-auto size-8 animate-spin text-muted-foreground/50" />
             ) : (
-              <FolderPlus className="mx-auto size-8 text-muted-foreground" />
+              <FolderPlusIcon className="mx-auto size-8 text-muted-foreground" />
             )}
             <div className="mt-3 text-muted-foreground text-sm">
               No Git repositories connected

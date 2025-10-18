@@ -1,11 +1,11 @@
 import {
-  Calendar as CalendarIcon,
-  CalendarPlus,
-  Copy,
-  Eye,
-  EyeOff,
-  MapPin,
-} from "lucide-react";
+  CalendarDotsIcon,
+  CalendarPlusIcon,
+  CopyIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  MapPinIcon,
+} from "@phosphor-icons/react";
 import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
 import CommitOverlay from "@/components/commit-overlay";
@@ -59,14 +59,14 @@ export function DateHeader({
           {displayDate}
         </h1>
         {isFocused ? (
-          <EyeOff className="size-4 text-muted-foreground/50" />
+          <EyeSlashIcon className="size-4 text-muted-foreground/50" />
         ) : (
-          <Eye className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+          <EyeIcon className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
         )}
       </button>
       {hasLocation && (
         <div className="flex items-center gap-1.5 text-muted-foreground/60 text-sm">
-          <MapPin className="size-3.5" />
+          <MapPinIcon className="size-3.5" />
           <span>{locationText}</span>
         </div>
       )}
@@ -105,7 +105,7 @@ export function FileName({
         onClick={handleCopyToClipboard}
         className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
       >
-        <Copy className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+        <CopyIcon className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
         {metadata.fileName}
       </Button>
     </div>
@@ -315,7 +315,7 @@ export function HeaderNavigation({
             onClick={handleCreateToday}
             disabled={isLoadingMetadata || Boolean(creatingToday)}
           >
-            <CalendarPlus className="size-4" />
+            <CalendarPlusIcon className="size-4" />
           </Button>
         )}
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
@@ -326,7 +326,7 @@ export function HeaderNavigation({
               variant="ghost"
               disabled={isLoadingMetadata}
             >
-              <CalendarIcon className="size-4" />
+              <CalendarDotsIcon className="size-4" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="end">

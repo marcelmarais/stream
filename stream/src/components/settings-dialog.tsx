@@ -1,15 +1,15 @@
 "use client";
 
-import { getVersion } from "@tauri-apps/api/app";
 import {
+  ArrowsClockwiseIcon,
+  CircleNotchIcon,
   EyeIcon,
-  EyeOffIcon,
-  FolderOpen,
-  GitBranch,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
+  EyeSlashIcon,
+  FolderOpenIcon,
+  GitBranchIcon,
+  SparkleIcon,
+} from "@phosphor-icons/react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
 import RepoConnector from "@/components/repo-connector";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,7 @@ function OverviewCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FolderOpen className="size-5" />
+          <FolderOpenIcon className="size-5" />
           Overview
         </CardTitle>
         <CardDescription>Folder information and statistics</CardDescription>
@@ -104,7 +104,7 @@ function AISettingsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Sparkles className="size-5" />
+          <SparkleIcon className="size-5" />
           AI Features
         </CardTitle>
         <CardDescription>
@@ -139,7 +139,7 @@ function AISettingsCard() {
                   onClick={() => setShowKey(!showKey)}
                   disabled={isSaving}
                 >
-                  {showKey ? <EyeIcon /> : <EyeOffIcon />}
+                  {showKey ? <EyeIcon /> : <EyeSlashIcon />}
                 </Button>
               </div>
               <p className="text-muted-foreground text-xs">
@@ -163,7 +163,7 @@ function AISettingsCard() {
               >
                 {isSaving ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" />
+                    <CircleNotchIcon className="size-4 animate-spin" />
                     Saving...
                   </>
                 ) : (
@@ -247,7 +247,7 @@ export function SettingsDialog({
           <Card className="pb-4">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <GitBranch className="size-5" />
+                <GitBranchIcon className="size-5" />
                 Connect Git Repositories
               </CardTitle>
               <CardDescription>
@@ -264,9 +264,9 @@ export function SettingsDialog({
                     title="Git fetch all repositories"
                   >
                     {isFetching ? (
-                      <Loader2 className="size-4 animate-spin" />
+                      <CircleNotchIcon className="size-4 animate-spin" />
                     ) : (
-                      <RefreshCw className="size-4" />
+                      <ArrowsClockwiseIcon className="size-4" />
                     )}
                   </Button>
                 </CardAction>
