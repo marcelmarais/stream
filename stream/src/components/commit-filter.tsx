@@ -284,7 +284,7 @@ export function CommitFilter() {
                 onClick={() => handleAuthorChange(author)}
                 className="h-auto p-0 hover:bg-transparent"
               >
-                <X className="h-3 w-3" />
+                <XIcon className="h-3 w-3" />
               </Button>
             </Badge>
           ))}
@@ -301,7 +301,7 @@ export function CommitFilter() {
                 onClick={() => handleRepoChange(repo)}
                 className="h-auto p-0 hover:bg-transparent"
               >
-                <X className="h-3 w-3" />
+                <XIcon className="h-3 w-3" />
               </Button>
             </Badge>
           ))}
@@ -317,7 +317,7 @@ export function CommitFilter() {
                 onClick={() => handleSearchChange("")}
                 className="h-auto p-0 hover:bg-transparent"
               >
-                <X className="h-3 w-3" />
+                <XIcon className="h-3 w-3" />
               </Button>
             </Badge>
           )}
