@@ -19,6 +19,8 @@ export interface MarkdownFileMetadata {
   country?: string;
   /** The city where the file was created (from xattrs) */
   city?: string;
+  /** The date parsed from the filename (YYYY-MM-DD format) */
+  dateFromFilename: Date;
 }
 
 /**
@@ -32,6 +34,7 @@ interface RustMarkdownFileMetadata {
   size: number;
   country?: string;
   city?: string;
+  date_from_filename: number; // Date from filename as Unix timestamp (midnight UTC)
 }
 
 /**
@@ -43,13 +46,15 @@ interface ReadMarkdownOptions {
 }
 
 /**
- * Reads metadata for ALL *.md files in a directory (including subdirectories).
- * This function only reads file metadata, not content, and does not filter by date.
+ * Reads metadata for markdown files in a directory (including subdirectories).
+ * Only reads files that match the naming pattern: YYYY-MM-DD.md (e.g., 2025-10-19.md).
+ * Files are sorted by the date in the filename (newest first).
+ * This function only reads file metadata, not content.
  * Uses a fast Rust-based implementation for optimal performance.
  *
  * @param directoryPath - The path to the directory to search
  * @param options - Additional options for reading files
- * @returns Promise<MarkdownFileMetadata[]> - Array of all markdown file metadata
+ * @returns Promise<MarkdownFileMetadata[]> - Array of markdown file metadata sorted by filename date
  */
 export async function readAllMarkdownFilesMetadata(
   directoryPath: string,
@@ -78,6 +83,7 @@ export async function readAllMarkdownFilesMetadata(
       size: rustFile.size,
       country: rustFile.country,
       city: rustFile.city,
+      dateFromFilename: new Date(rustFile.date_from_filename),
     }));
 
     return files;

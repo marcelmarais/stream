@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use git2::{Repository, Time};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, NaiveDate};
 use xattr;
+use regex::Regex;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MarkdownFileMetadata {
@@ -15,6 +16,7 @@ pub struct MarkdownFileMetadata {
     pub size: u64,
     pub country: Option<String>, // Location country from xattrs
     pub city: Option<String>,    // Location city from xattrs
+    pub date_from_filename: u64, // Date from filename as Unix timestamp (midnight UTC)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -65,6 +67,27 @@ fn write_location_xattrs(file_path: &Path, country: &str, city: &str) -> Result<
     xattr::set(file_path, XATTR_COUNTRY_KEY, country.as_bytes())?;
     xattr::set(file_path, XATTR_CITY_KEY, city.as_bytes())?;
     Ok(())
+}
+
+// Helper function to validate and parse date from filename (YYYY-MM-DD.md)
+// Returns Unix timestamp in milliseconds for the date at midnight UTC
+fn parse_date_from_filename(file_name: &str) -> Option<u64> {
+    // Regex pattern: YYYY-MM-DD.md
+    let re = Regex::new(r"^(\d{4})-(\d{2})-(\d{2})\.md$").ok()?;
+    let caps = re.captures(file_name)?;
+    
+    let year: i32 = caps.get(1)?.as_str().parse().ok()?;
+    let month: u32 = caps.get(2)?.as_str().parse().ok()?;
+    let day: u32 = caps.get(3)?.as_str().parse().ok()?;
+    
+    // Validate date is actually valid (chrono will return None for invalid dates like 2025-02-30)
+    let date = NaiveDate::from_ymd_opt(year, month, day)?;
+    
+    // Convert to midnight UTC timestamp in milliseconds
+    let datetime = date.and_hms_opt(0, 0, 0)?.and_utc();
+    let timestamp_ms = datetime.timestamp_millis() as u64;
+    
+    Some(timestamp_ms)
 }
 
 #[tauri::command]
@@ -121,45 +144,49 @@ async fn read_markdown_files_metadata(directory_path: String, max_file_size: Opt
                 // Check if it's a markdown file
                 if let Some(extension) = path.extension() {
                     if extension.to_string_lossy().to_lowercase() == "md" {
-                        // Get file metadata
-                        if let Ok(metadata) = entry.metadata() {
-                            let size = metadata.len();
-                            
-                            // Filter by file size
-                            if size <= max_size {
-                                let file_name = path.file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or("unknown")
-                                    .to_string();
+                        let file_name = path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        
+                        // Only process files that match YYYY-MM-DD.md pattern
+                        if let Some(date_timestamp) = parse_date_from_filename(&file_name) {
+                            // Get file metadata
+                            if let Ok(metadata) = entry.metadata() {
+                                let size = metadata.len();
                                 
-                                let file_path = path.to_string_lossy().to_string();
-                                
-                                // Convert system time to unix timestamp in milliseconds
-                                let created_at = metadata.created()
-                                    .or_else(|_| metadata.modified())
-                                    .unwrap_or_else(|_| std::time::SystemTime::now())
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_millis() as u64;
-                                
-                                let modified_at = metadata.modified()
-                                    .unwrap_or_else(|_| std::time::SystemTime::now())
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_millis() as u64;
-                                
-                                // Read location metadata from xattrs
-                                let (country, city) = read_location_xattrs(&path);
-                                
-                                files.push(MarkdownFileMetadata {
-                                    file_path,
-                                    file_name,
-                                    created_at,
-                                    modified_at,
-                                    size,
-                                    country,
-                                    city,
-                                });
+                                // Filter by file size
+                                if size <= max_size {
+                                    let file_path = path.to_string_lossy().to_string();
+                                    
+                                    // Convert system time to unix timestamp in milliseconds
+                                    let created_at = metadata.created()
+                                        .or_else(|_| metadata.modified())
+                                        .unwrap_or_else(|_| std::time::SystemTime::now())
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as u64;
+                                    
+                                    let modified_at = metadata.modified()
+                                        .unwrap_or_else(|_| std::time::SystemTime::now())
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as u64;
+                                    
+                                    // Read location metadata from xattrs
+                                    let (country, city) = read_location_xattrs(&path);
+                                    
+                                    files.push(MarkdownFileMetadata {
+                                        file_path,
+                                        file_name,
+                                        created_at,
+                                        modified_at,
+                                        size,
+                                        country,
+                                        city,
+                                        date_from_filename: date_timestamp,
+                                    });
+                                }
                             }
                         }
                     }
@@ -175,8 +202,8 @@ async fn read_markdown_files_metadata(directory_path: String, max_file_size: Opt
         return Err(format!("Error reading directory: {}", e));
     }
     
-    // Sort by creation date (newest first)
-    files.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    // Sort by date from filename (newest first)
+    files.sort_by(|a, b| b.date_from_filename.cmp(&a.date_from_filename));
     
     Ok(files)
 }
