@@ -46,8 +46,8 @@ export function getDateFromFilename(fileName: string): string | null {
  * @example
  * formatDisplayDate("2023-08-13") // returns "sunday — august 13, 2023"
  */
-export function formatDisplayDate(dateStr: string): string {
-  const date = new Date(dateStr);
+export function formatDisplayDate(dateStr: string | Date): string {
+  const date = dateStr instanceof Date ? dateStr : new Date(dateStr);
   return date
     .toLocaleDateString("en-US", {
       weekday: "long",

@@ -125,7 +125,6 @@ export function FileCard({
   isFocused = false,
   onEditorFocus,
 }: FileCardProps) {
-  // Get data from markdown files store
   const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
   const loadingFiles = useMarkdownFilesStore((state) => state.loadingFiles);
   const updateContent = useMarkdownFilesStore(
@@ -136,27 +135,20 @@ export function FileCard({
   );
   const saveImmediate = useMarkdownFilesStore((state) => state.saveFileContent);
 
-  // Get data from git commits store
   const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
   const commitFilters = useGitCommitsStore((state) => state.commitFilters);
 
-  // Compute locally
   const content = loadedContent.get(file.filePath);
   const isLoading = !content && loadingFiles.has(file.filePath);
 
-  // Get commits for this file's date
-  const dateFromFilename = getDateFromFilename(file.fileName);
-  const fileDate = dateFromFilename
-    ? new Date(dateFromFilename)
-    : file.createdAt;
-  const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
+  const allFileCommits = getCommitsForDate(
+    commitsByDate,
+    file.dateFromFilename,
+  );
   const commits = filterCommits(allFileCommits, commitFilters);
 
-  // Calculate display date for the header
-  const dateStr = dateFromFilename || getDateKey(file.createdAt);
-  const displayDate = formatDisplayDate(dateStr);
+  const displayDate = formatDisplayDate(file.dateFromFilename);
 
-  // Handlers
   const handleContentChange = (newContent: string) => {
     updateContent(file.filePath, newContent);
     saveDebounced(file.filePath, newContent);

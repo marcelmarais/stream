@@ -45,26 +45,26 @@ export function Footer({
           <FolderIcon className="size-3" />
           <span title={folderPath}>{folderName}</span>
         </Button>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
-            className="h-auto w-auto text-xs"
+            className="h-auto w-auto gap-1 text-xs"
             disabled
             title="Markdown files"
           >
-            <FileTextIcon className="size-3" />
-            {fileCount}
+            <FileTextIcon className="m-0 size-3" />
+            <span>{fileCount}</span>
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-auto w-auto text-xs"
+            className="h-auto w-auto gap-1 text-xs"
             disabled
             title="Connected repositories"
           >
             <GitBranchIcon className="size-3" />
-            {connectedReposCount}
+            <span>{connectedReposCount}</span>
           </Button>
           <Button
             variant="ghost"
