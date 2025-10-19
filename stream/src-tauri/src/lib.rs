@@ -2,6 +2,7 @@ use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 use git2::{Repository, Time};
 use chrono::{DateTime, Utc, NaiveDate};
 use xattr;
@@ -45,6 +46,11 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+// Compile regex once on first use for efficient reuse
+static DATE_FILENAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(\d{4})-(\d{2})-(\d{2})\.md$").expect("Failed to compile date filename regex")
+});
+
 // Helper functions for xattr operations
 const XATTR_COUNTRY_KEY: &str = "user.location.country";
 const XATTR_CITY_KEY: &str = "user.location.city";
@@ -72,9 +78,8 @@ fn write_location_xattrs(file_path: &Path, country: &str, city: &str) -> Result<
 // Helper function to validate and parse date from filename (YYYY-MM-DD.md)
 // Returns Unix timestamp in milliseconds for the date at midnight UTC
 fn parse_date_from_filename(file_name: &str) -> Option<u64> {
-    // Regex pattern: YYYY-MM-DD.md
-    let re = Regex::new(r"^(\d{4})-(\d{2})-(\d{2})\.md$").ok()?;
-    let caps = re.captures(file_name)?;
+    // Use the pre-compiled regex for efficiency
+    let caps = DATE_FILENAME_REGEX.captures(file_name)?;
     
     let year: i32 = caps.get(1)?.as_str().parse().ok()?;
     let month: u32 = caps.get(2)?.as_str().parse().ok()?;
