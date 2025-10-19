@@ -123,7 +123,7 @@ function AISettingsCard() {
               <Label htmlFor={inputId} className="font-medium text-sm">
                 Google Gemini API Key
               </Label>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <Input
                   id={inputId}
                   type={showKey ? "text" : "password"}
@@ -131,7 +131,7 @@ function AISettingsCard() {
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   disabled={isSaving}
-                  className="font-mono text-xs"
+                  className="!text-xs !h-8 !py-1 !px-2 !w-2/3 font-mono"
                 />
                 <Button
                   variant="ghost"
@@ -160,6 +160,7 @@ function AISettingsCard() {
                 onClick={() => setApiKey(apiKeyInput)}
                 disabled={!canSave}
                 size="sm"
+                className="text-xs"
               >
                 {isSaving ? (
                   <>
@@ -176,6 +177,7 @@ function AISettingsCard() {
                   disabled={isSaving}
                   variant="outline"
                   size="sm"
+                  className="text-xs"
                 >
                   Remove
                 </Button>

@@ -186,7 +186,7 @@ export function RepoConnector({
                       onClick={() => handleRemoveRepo(repo)}
                       variant="ghost"
                       size="sm"
-                      className="ml-2 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="ml-2 shrink-0 text-destructive text-xs hover:bg-destructive/10 hover:text-destructive"
                     >
                       Remove
                     </Button>
