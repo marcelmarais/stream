@@ -1,4 +1,9 @@
-import { FileText, Folder, GitBranch, Settings } from "lucide-react";
+import {
+  FileTextIcon,
+  FolderIcon,
+  GearIcon,
+  GitBranchIcon,
+} from "@phosphor-icons/react";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
@@ -28,49 +33,47 @@ export function Footer({
   const folderName = folderPath.split("/").pop() || folderPath;
 
   return (
-    <div className="flex-shrink-0 border-border border-t bg-muted/30 px-4 py-1 text-muted-foreground text-xs">
+    <div className="flex-shrink-0 border-border border-t bg-muted/30 px-3 py-1 text-muted-foreground text-xs">
       <div className="flex items-center justify-between">
-        <div className="flex items-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-auto w-auto text-xs"
+          onClick={onFolderClick}
+          title="Click to go back to folder selection"
+        >
+          <FolderIcon className="size-3" />
+          <span title={folderPath}>{folderName}</span>
+        </Button>
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
-            onClick={onFolderClick}
-            title="Click to go back to folder selection"
-          >
-            <Folder className="size-3" />
-            <span title={folderPath}>{folderName}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto p-1"
-            onClick={() => onSettingsOpenChange(true)}
-            title="Open settings"
-          >
-            <Settings className="size-3" />
-          </Button>
-        </div>
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
+            size="icon"
+            className="h-auto w-auto text-xs"
             disabled
             title="Markdown files"
           >
-            <FileText className="size-3" />
+            <FileTextIcon className="size-3" />
             {fileCount}
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-auto text-xs"
+            size="icon"
+            className="h-auto w-auto text-xs"
             disabled
             title="Connected repositories"
           >
-            <GitBranch className="size-3" />
+            <GitBranchIcon className="size-3" />
             {connectedReposCount}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-auto w-auto"
+            onClick={() => onSettingsOpenChange(true)}
+            title="Open settings"
+          >
+            <GearIcon className="size-3" />
           </Button>
         </div>
       </div>

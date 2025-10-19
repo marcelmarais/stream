@@ -1,15 +1,15 @@
 "use client";
 
-import { getVersion } from "@tauri-apps/api/app";
 import {
+  ArrowsClockwiseIcon,
+  CircleNotchIcon,
   EyeIcon,
-  EyeOffIcon,
-  FolderOpen,
-  GitBranch,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
+  EyeSlashIcon,
+  FolderOpenIcon,
+  GitBranchIcon,
+  SparkleIcon,
+} from "@phosphor-icons/react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
 import RepoConnector from "@/components/repo-connector";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,7 @@ function OverviewCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FolderOpen className="size-5" />
+          <FolderOpenIcon className="size-5" />
           Overview
         </CardTitle>
         <CardDescription>Folder information and statistics</CardDescription>
@@ -104,7 +104,7 @@ function AISettingsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Sparkles className="size-5" />
+          <SparkleIcon className="size-5" />
           AI Features
         </CardTitle>
         <CardDescription>
@@ -123,7 +123,7 @@ function AISettingsCard() {
               <Label htmlFor={inputId} className="font-medium text-sm">
                 Google Gemini API Key
               </Label>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <Input
                   id={inputId}
                   type={showKey ? "text" : "password"}
@@ -131,7 +131,7 @@ function AISettingsCard() {
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   disabled={isSaving}
-                  className="font-mono text-xs"
+                  className="!text-xs !h-8 !py-1 !px-2 !w-2/3 font-mono"
                 />
                 <Button
                   variant="ghost"
@@ -139,7 +139,7 @@ function AISettingsCard() {
                   onClick={() => setShowKey(!showKey)}
                   disabled={isSaving}
                 >
-                  {showKey ? <EyeIcon /> : <EyeOffIcon />}
+                  {showKey ? <EyeIcon /> : <EyeSlashIcon />}
                 </Button>
               </div>
               <p className="text-muted-foreground text-xs">
@@ -160,10 +160,11 @@ function AISettingsCard() {
                 onClick={() => setApiKey(apiKeyInput)}
                 disabled={!canSave}
                 size="sm"
+                className="text-xs"
               >
                 {isSaving ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" />
+                    <CircleNotchIcon className="size-4 animate-spin" />
                     Saving...
                   </>
                 ) : (
@@ -176,6 +177,7 @@ function AISettingsCard() {
                   disabled={isSaving}
                   variant="outline"
                   size="sm"
+                  className="text-xs"
                 >
                   Remove
                 </Button>
@@ -247,7 +249,7 @@ export function SettingsDialog({
           <Card className="pb-4">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <GitBranch className="size-5" />
+                <GitBranchIcon className="size-5" />
                 Connect Git Repositories
               </CardTitle>
               <CardDescription>
@@ -264,9 +266,9 @@ export function SettingsDialog({
                     title="Git fetch all repositories"
                   >
                     {isFetching ? (
-                      <Loader2 className="size-4 animate-spin" />
+                      <CircleNotchIcon className="size-4 animate-spin" />
                     ) : (
-                      <RefreshCw className="size-4" />
+                      <ArrowsClockwiseIcon className="size-4" />
                     )}
                   </Button>
                 </CardAction>

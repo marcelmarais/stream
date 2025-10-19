@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderGit } from "lucide-react";
+import { GitBranchIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import {
   Accordion,
@@ -53,7 +53,7 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
           <AccordionTrigger className="px-4 py-2 hover:no-underline [&[data-state=closed]>div>span:last-child]:text-muted-foreground [&[data-state=open]>div>span:last-child]:text-muted-foreground">
             <div className="flex w-full items-center justify-between">
               <div className="flex items-center gap-2">
-                <FolderGit className="h-4 w-4 text-muted-foreground" />
+                <GitBranchIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium text-sm">{repoName}</span>
                 <Badge variant="secondary" className="text-xs">
                   {commits.length} commit{commits.length !== 1 ? "s" : ""}
