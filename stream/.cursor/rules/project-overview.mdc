@@ -34,6 +34,8 @@ alwaysApply: true
   - `pnpm lint`, `pnpm lint:fix`
   - `pnpm format`
   - `pnpm check`, `pnpm check:fix`
+- **Type-checker**
+  -  `pnpm type-check`
 - **VS Code**:
   - Biome is default formatter; format-on-save enabled
   - Recommended extensions: `tauri-apps.tauri-vscode`, `rust-lang.rust-analyzer`
