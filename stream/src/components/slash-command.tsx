@@ -144,11 +144,6 @@ interface SlashCommandOptions {
 function getAICommands(
   onAIGenerationChange?: (isGenerating: boolean) => void,
 ): SlashCommandItem[] {
-  // const apiKey = useApiKeyStore.getState().apiKey;
-  // if (!apiKey) {
-  //   return [];
-  // }
-
   return [
     {
       title: "todos",
