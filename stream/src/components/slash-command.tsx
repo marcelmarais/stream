@@ -112,7 +112,9 @@ const SlashCommandList = forwardRef<
             onMouseEnter={() => setSelectedIndex(index)}
           >
             <div className="flex flex-col items-start gap-0.5">
-              <span className="font-medium leading-none">{item.title}</span>
+              <span className="font-semibold text-xs leading-none">
+                {item.title}
+              </span>
               {item.description && (
                 <span className="text-muted-foreground text-xs leading-none">
                   {item.description}
@@ -150,7 +152,7 @@ function getAICommands(
   return [
     {
       title: "todos",
-      description: "Collect yesterday's todos & open points",
+      description: "collect yesterday's open points",
       command: async ({
         editor,
         range,
