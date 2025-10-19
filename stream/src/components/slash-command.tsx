@@ -36,6 +36,7 @@ const SlashCommandList = forwardRef<
   SlashCommandProps
 >((props, ref) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const apiKey = useApiKeyStore.getState().apiKey;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset selection when items change
   useEffect(() => {
@@ -84,8 +85,19 @@ const SlashCommandList = forwardRef<
     },
   }));
 
+  if (!apiKey)
+    return (
+      <div className="z-50 min-w-[220px] rounded-xl border bg-popover p-1 shadow-xl">
+        <div className="flex flex-col gap-2 px-3 py-2 text-muted-foreground">
+          <span className="text-xs">
+            Configure your API key in settings to use AI features
+          </span>
+        </div>
+      </div>
+    );
+
   return (
-    <div className="z-50 min-w-[220px] rounded-lg border bg-popover p-1 shadow-lg">
+    <div className="z-50 min-w-[220px] rounded-xl border bg-popover p-1 shadow-xl">
       {props.items.length > 0 ? (
         props.items.map((item, index) => (
           <button
@@ -111,9 +123,7 @@ const SlashCommandList = forwardRef<
         ))
       ) : (
         <div className="flex flex-col gap-2 px-3 py-2 text-muted-foreground">
-          <span className="text-xs">
-            Configure your Gemini API key in settings to use AI features
-          </span>
+          <span className="text-xs">No slash commands found</span>
         </div>
       )}
     </div>
@@ -132,10 +142,10 @@ interface SlashCommandOptions {
 function getAICommands(
   onAIGenerationChange?: (isGenerating: boolean) => void,
 ): SlashCommandItem[] {
-  const apiKey = useApiKeyStore.getState().apiKey;
-  if (!apiKey) {
-    return [];
-  }
+  // const apiKey = useApiKeyStore.getState().apiKey;
+  // if (!apiKey) {
+  //   return [];
+  // }
 
   return [
     {
