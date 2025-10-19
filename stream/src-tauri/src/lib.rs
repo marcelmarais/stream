@@ -182,7 +182,7 @@ async fn read_markdown_files_metadata(directory_path: String, max_file_size: Opt
 }
 
 fn time_to_timestamp_ms(time: Time) -> u64 {
-    (time.seconds() as u64) * 1000 + (time.offset_minutes() as u64) * 60 * 1000
+    (time.seconds() as u64) * 1000
 }
 
 fn time_to_iso_date(time: Time) -> String {
