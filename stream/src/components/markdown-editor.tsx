@@ -138,7 +138,6 @@ export function MarkdownEditor({
     }
   }, [autoFocus, editor]);
 
-  // Update editable state when isEditable changes
   useEffect(() => {
     if (editor) {
       editor.setEditable(isEditable);

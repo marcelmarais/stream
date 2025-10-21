@@ -100,10 +100,8 @@ export function FileName({
 
   return (
     <div className="group relative flex items-center justify-end bg-transparent">
-      {/* Gradient fade effect */}
       <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
 
-      {/* Button content */}
       <Button
         variant="ghost"
         size="sm"
