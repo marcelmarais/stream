@@ -72,8 +72,12 @@ export function MarkdownEditor({
           );
         },
         getCommitsForDate: (dateKey: string) => {
+          const repos =
+            queryClient.getQueryData<string[]>(
+              gitKeys.repos(folderPath || ""),
+            ) || [];
           return queryClient.getQueryData(
-            gitKeys.commits(folderPath || "", dateKey),
+            gitKeys.commits(folderPath || "", dateKey, repos),
           );
         },
       }),

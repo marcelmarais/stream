@@ -20,7 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { useCommitsForDateFromCache } from "@/hooks/use-git-queries";
+import { useCommitsForDate } from "@/hooks/use-git-queries";
 import {
   useCreateTodayFile,
   useFileContentManager,
@@ -143,8 +143,10 @@ export function FileCard({
   const folderPath = useUserStore((state) => state.folderPath);
 
   const dateKey = getDateKey(file.dateFromFilename);
-  const commitsByDate =
-    useCommitsForDateFromCache(folderPath || "", dateKey) || {};
+  const { data: commitsByDate = {} } = useCommitsForDate(
+    folderPath || "",
+    dateKey,
+  );
 
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
 
@@ -354,8 +356,10 @@ export function FocusedFileOverlay({
   const displayDate = formatDisplayDate(file.dateFromFilename);
 
   const dateKey = getDateKey(file.dateFromFilename);
-  const commitsByDate =
-    useCommitsForDateFromCache(folderPath || "", dateKey) || {};
+  const { data: commitsByDate = {} } = useCommitsForDate(
+    folderPath || "",
+    dateKey,
+  );
 
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
 
