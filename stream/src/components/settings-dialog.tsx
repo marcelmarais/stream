@@ -9,6 +9,7 @@ import {
   GitBranchIcon,
   SparkleIcon,
 } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
 import RepoConnector from "@/components/repo-connector";
@@ -29,24 +30,27 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useApiKeyStore } from "@/stores/api-key-store";
-import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
+import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
+import {
+  useApiKey,
+  useRemoveApiKey,
+  useSetApiKey,
+} from "@/hooks/use-user-data";
+import { useUserStore } from "@/stores/user-store";
 
 interface SettingsDialogProps {
-  folderPath: string;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 function OverviewCard({
-  folderPath,
   fileCount,
   isLoading,
 }: {
-  folderPath: string;
   fileCount: number;
   isLoading: boolean;
 }) {
+  const folderPath = useUserStore((state) => state.folderPath);
   return (
     <Card>
       <CardHeader>
@@ -86,8 +90,9 @@ function OverviewCard({
 }
 
 function AISettingsCard() {
-  const { isLoading, isSaving, apiKey, setApiKey, removeApiKey } =
-    useApiKeyStore();
+  const { data: apiKey, isLoading } = useApiKey();
+  const setApiKeyMutation = useSetApiKey();
+  const removeApiKeyMutation = useRemoveApiKey();
 
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -98,6 +103,8 @@ function AISettingsCard() {
   }, [apiKey]);
 
   const hasChanges = apiKeyInput.trim() !== (apiKey || "");
+  const isSaving =
+    setApiKeyMutation.isPending || removeApiKeyMutation.isPending;
   const canSave = !isSaving && apiKeyInput.trim() !== "" && hasChanges;
 
   return (
@@ -157,12 +164,12 @@ function AISettingsCard() {
 
             <div className="flex gap-2">
               <Button
-                onClick={() => setApiKey(apiKeyInput)}
+                onClick={() => setApiKeyMutation.mutateAsync(apiKeyInput)}
                 disabled={!canSave}
                 size="sm"
                 className="text-xs"
               >
-                {isSaving ? (
+                {setApiKeyMutation.isPending ? (
                   <>
                     <CircleNotchIcon className="size-4 animate-spin" />
                     Saving...
@@ -173,7 +180,7 @@ function AISettingsCard() {
               </Button>
               {apiKey && (
                 <Button
-                  onClick={removeApiKey}
+                  onClick={() => removeApiKeyMutation.mutateAsync()}
                   disabled={isSaving}
                   variant="outline"
                   size="sm"
@@ -190,36 +197,22 @@ function AISettingsCard() {
   );
 }
 
-export function SettingsDialog({
-  folderPath,
-  open,
-  onOpenChange,
-}: SettingsDialogProps) {
-  // Get data from store
-  const isLoadingMetadata = useMarkdownFilesStore(
-    (state) => state.isLoadingMetadata,
-  );
-  const allFilesMetadata = useMarkdownFilesStore(
-    (state) => state.allFilesMetadata,
-  );
+export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+  const folderPath = useUserStore((state) => state.folderPath);
+  const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
+    useMarkdownMetadata(folderPath || "");
 
   const [fetchReposFn, setFetchReposFn] = useState<
     (() => Promise<void>) | null
   >(null);
   const [isFetching, setIsFetching] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>("");
 
-  useEffect(() => {
-    const loadVersion = async () => {
-      try {
-        const version = await getVersion();
-        setAppVersion(version);
-      } catch (error) {
-        console.error("Error loading app version:", error);
-      }
-    };
-    loadVersion();
-  }, []);
+  const { data: appVersion } = useQuery<string>({
+    queryKey: ["appVersion"],
+    queryFn: async () => {
+      return await getVersion();
+    },
+  });
 
   const handleFetchRepos = async () => {
     if (fetchReposFn) {
@@ -241,7 +234,6 @@ export function SettingsDialog({
 
         <div className="space-y-6">
           <OverviewCard
-            folderPath={folderPath}
             fileCount={allFilesMetadata.length}
             isLoading={isLoadingMetadata}
           />
@@ -275,11 +267,13 @@ export function SettingsDialog({
               )}
             </CardHeader>
             <CardContent>
-              <RepoConnector
-                key={folderPath}
-                markdownDirectory={folderPath}
-                onFetchRepos={(fn) => setFetchReposFn(() => fn)}
-              />
+              {folderPath && (
+                <RepoConnector
+                  key={folderPath}
+                  markdownDirectory={folderPath}
+                  onFetchRepos={(fn) => setFetchReposFn(() => fn)}
+                />
+              )}
             </CardContent>
           </Card>
           <AISettingsCard />

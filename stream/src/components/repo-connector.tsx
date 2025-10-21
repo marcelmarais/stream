@@ -8,14 +8,16 @@ import {
 } from "@phosphor-icons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { load } from "@tauri-apps/plugin-store";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-
-const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
+import {
+  useAddRepo,
+  useConnectedRepos,
+  useRemoveRepo,
+} from "@/hooks/use-git-queries";
 
 export interface RepoMapping {
   markdownDirectory: string;
@@ -37,88 +39,35 @@ export function RepoConnector({
   markdownDirectory,
   onFetchRepos,
 }: RepoConnectorProps) {
-  const [connectedRepos, setConnectedRepos] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAddingRepo, setIsAddingRepo] = useState(false);
 
-  useEffect(() => {
-    const loadRepoMappings = async () => {
-      try {
-        const store = await load(REPO_MAPPINGS_STORE_FILE, {
-          autoSave: true,
-          defaults: {},
-        });
-
-        const mappings = await store.get<Record<string, string[]>>("mappings");
-        const repos = mappings?.[markdownDirectory] || [];
-        setConnectedRepos(repos);
-      } catch (error) {
-        console.warn("Failed to load repo mappings:", error);
-        setConnectedRepos([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadRepoMappings();
-  }, [markdownDirectory]);
-
-  // Save repo mappings to persistent store
-  const saveRepoMappings = useCallback(
-    async (repos: string[]) => {
-      try {
-        const store = await load(REPO_MAPPINGS_STORE_FILE, {
-          autoSave: true,
-          defaults: {},
-        });
-
-        const existingMappings =
-          (await store.get<Record<string, string[]>>("mappings")) || {};
-
-        if (repos.length === 0) {
-          delete existingMappings[markdownDirectory];
-        } else {
-          existingMappings[markdownDirectory] = repos;
-        }
-
-        await store.set("mappings", existingMappings);
-        console.log("Saved repo mappings:", existingMappings);
-      } catch (error) {
-        console.error("Failed to save repo mappings:", error);
-      }
-    },
-    [markdownDirectory],
-  );
+  const { data: connectedRepos = [], isLoading } =
+    useConnectedRepos(markdownDirectory);
+  const addRepoMutation = useAddRepo(markdownDirectory);
+  const removeRepoMutation = useRemoveRepo(markdownDirectory);
 
   const handleAddRepo = async () => {
-    try {
-      setIsAddingRepo(true);
+    setIsAddingRepo(true);
 
-      const folderPath = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Code Repository",
-      });
+    const folderPath = await open({
+      directory: true,
+      multiple: false,
+      title: "Select Code Repository",
+    });
 
-      if (folderPath && typeof folderPath === "string") {
-        // Check if repo is already connected
-        if (!connectedRepos.includes(folderPath)) {
-          const updatedRepos = [...connectedRepos, folderPath];
-          setConnectedRepos(updatedRepos);
-          await saveRepoMappings(updatedRepos);
-        }
-      }
-    } catch (error) {
-      console.error("Error selecting repository:", error);
-    } finally {
-      setIsAddingRepo(false);
+    if (folderPath && typeof folderPath === "string") {
+      await addRepoMutation.mutateAsync(folderPath);
     }
+    setIsAddingRepo(false);
   };
 
   const handleRemoveRepo = async (repoPath: string) => {
-    const updatedRepos = connectedRepos.filter((repo) => repo !== repoPath);
-    setConnectedRepos(updatedRepos);
-    await saveRepoMappings(updatedRepos);
+    try {
+      await removeRepoMutation.mutateAsync(repoPath);
+    } catch (error) {
+      console.error("Error removing repository:", error);
+      toast.error("Failed to remove repository");
+    }
   };
 
   const handleFetchRepos = useCallback(async () => {
@@ -241,35 +190,3 @@ export function RepoConnector({
 }
 
 export default RepoConnector;
-
-export async function getConnectedRepos(
-  markdownDirectory: string,
-): Promise<string[]> {
-  try {
-    const store = await load(REPO_MAPPINGS_STORE_FILE, {
-      autoSave: true,
-      defaults: {},
-    });
-
-    const mappings = await store.get<Record<string, string[]>>("mappings");
-    return mappings?.[markdownDirectory] || [];
-  } catch (error) {
-    console.warn("Failed to get connected repos:", error);
-    return [];
-  }
-}
-
-export async function getAllRepoMappings(): Promise<Record<string, string[]>> {
-  try {
-    const store = await load(REPO_MAPPINGS_STORE_FILE, {
-      autoSave: true,
-      defaults: {},
-    });
-
-    const mappings = await store.get<Record<string, string[]>>("mappings");
-    return mappings || {};
-  } catch (error) {
-    console.warn("Failed to get all repo mappings:", error);
-    return {};
-  }
-}

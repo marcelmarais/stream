@@ -17,19 +17,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAllLoadedCommits } from "@/hooks/use-git-queries";
 import { formatCommitAuthor } from "@/ipc/git-reader";
-import { useGitCommitsStore } from "@/stores/git-commits-store";
+import { useUserStore } from "@/stores/user-store";
 
 export function CommitFilter() {
-  // Get state directly from store
-  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
-  const filters = useGitCommitsStore((state) => state.commitFilters);
-  const setFilters = useGitCommitsStore((state) => state.setCommitFilters);
+  const folderPath = useUserStore((state) => state.folderPath);
+  const filters = useUserStore((state) => state.commitFilters);
+  const setFilters = useUserStore((state) => state.setCommitFilters);
+
+  const commitsByDate = useAllLoadedCommits(folderPath || "");
   const searchId = useId();
   const authorSelectId = useId();
   const repoSelectId = useId();
 
-  // Compute all commits from commitsByDate
   const commits = useMemo(
     () => Object.values(commitsByDate).flatMap((dateData) => dateData.commits),
     [commitsByDate],

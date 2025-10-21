@@ -1,15 +1,18 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { Markdown } from "tiptap-markdown";
 import { SlashCommand } from "@/components/slash-command";
+import { gitKeys } from "@/hooks/use-git-queries";
+import { useSaveShortcut } from "@/hooks/use-keyboard-shortcut";
+import { markdownKeys } from "@/hooks/use-markdown-queries";
 import { cn } from "@/lib/utils";
-import { formatMarkdown } from "@/utils/markdown-formatter";
+import { useUserStore } from "@/stores/user-store";
 
 interface MarkdownEditorProps {
   value: string;
@@ -29,8 +32,9 @@ export function MarkdownEditor({
   isEditable = true,
 }: MarkdownEditorProps) {
   const isUpdatingFromProp = useRef(false);
-  const isSavingRef = useRef(false);
   const [isAIGenerating, setIsAIGenerating] = useState(false);
+  const queryClient = useQueryClient();
+  const folderPath = useUserStore((state) => state.folderPath);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -51,6 +55,31 @@ export function MarkdownEditor({
       }),
       SlashCommand.configure({
         onAIGenerationChange: setIsAIGenerating,
+        getMetadata: () => {
+          const queries = queryClient.getQueriesData({
+            queryKey: markdownKeys.all,
+          });
+          for (const [key, data] of queries) {
+            if (key[1] === "metadata" && Array.isArray(data)) {
+              return data;
+            }
+          }
+          return [];
+        },
+        getContent: (filePath: string) => {
+          return queryClient.getQueryData<string>(
+            markdownKeys.content(filePath),
+          );
+        },
+        getCommitsForDate: (dateKey: string) => {
+          const repos =
+            queryClient.getQueryData<string[]>(
+              gitKeys.repos(folderPath || ""),
+            ) || [];
+          return queryClient.getQueryData(
+            gitKeys.commits(folderPath || "", dateKey, repos),
+          );
+        },
       }),
     ],
     content: value,
@@ -74,56 +103,7 @@ export function MarkdownEditor({
     editable: isEditable,
   });
 
-  useEffect(() => {
-    const handleSaveAndFormat = async () => {
-      if (isSavingRef.current || !editor) return;
-
-      isSavingRef.current = true;
-
-      const result = await formatMarkdown(value);
-      const formatted = result.formatted;
-
-      if (!formatted) {
-        isSavingRef.current = false;
-        return;
-      }
-
-      // Update the editor content directly, preserving cursor position
-      const { from, to } = editor.state.selection;
-
-      isUpdatingFromProp.current = true;
-      editor.commands.setContent(formatted);
-
-      // Restore cursor position
-      const newDocSize = editor.state.doc.content.size;
-      const safeFrom = Math.min(from, newDocSize);
-      const safeTo = Math.min(to, newDocSize);
-      editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
-
-      // Update the store
-      onChange(formatted);
-      isUpdatingFromProp.current = false;
-
-      await onSave();
-      toast.success("Saved successfully", {
-        description: "Markdown formatted and saved",
-        duration: 1000,
-      });
-
-      isSavingRef.current = false;
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Handle Cmd+S (Mac) or Ctrl+S (Windows/Linux)
-      if ((event.metaKey || event.ctrlKey) && event.key === "s") {
-        event.preventDefault();
-        handleSaveAndFormat();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editor, value, onChange, onSave]);
+  useSaveShortcut(editor, value, onChange, onSave, isUpdatingFromProp);
 
   useEffect(() => {
     if (editor) {
@@ -158,7 +138,6 @@ export function MarkdownEditor({
     }
   }, [autoFocus, editor]);
 
-  // Update editable state when isEditable changes
   useEffect(() => {
     if (editor) {
       editor.setEditable(isEditable);

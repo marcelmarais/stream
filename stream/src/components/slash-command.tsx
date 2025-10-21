@@ -7,10 +7,9 @@ import Suggestion from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import type { Instance as TippyInstance } from "tippy.js";
 import tippy from "tippy.js";
+import { useApiKey } from "@/hooks/use-user-data";
+import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
-import { useApiKeyStore } from "@/stores/api-key-store";
-import { useGitCommitsStore } from "@/stores/git-commits-store";
-import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import {
   getYesterdayDateString,
   getYesterdayMarkdownFileName,
@@ -36,7 +35,7 @@ const SlashCommandList = forwardRef<
   SlashCommandProps
 >((props, ref) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const apiKey = useApiKeyStore.getState().apiKey;
+  const { data: apiKey } = useApiKey();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset selection when items change
   useEffect(() => {
@@ -134,8 +133,26 @@ const SlashCommandList = forwardRef<
 
 SlashCommandList.displayName = "SlashCommandList";
 
+interface CommitData {
+  commits: Array<{
+    id: string;
+    message: string;
+    author_name: string;
+    author_email: string;
+    timestamp: number;
+    date: string;
+    repo_path: string;
+    files_changed: string[];
+    branches: string[];
+  }>;
+}
+
 interface SlashCommandOptions {
   onAIGenerationChange?: (isGenerating: boolean) => void;
+  getMetadata?: () => MarkdownFileMetadata[];
+  getContent?: (filePath: string) => string | undefined;
+  getFolderPath?: () => string;
+  getCommitsForDate?: (dateKey: string) => CommitData | undefined;
 }
 
 /**
@@ -143,6 +160,9 @@ interface SlashCommandOptions {
  */
 function getAICommands(
   onAIGenerationChange?: (isGenerating: boolean) => void,
+  getMetadata?: () => MarkdownFileMetadata[],
+  getContent?: (filePath: string) => string | undefined,
+  getCommitsForDate?: (dateKey: string) => CommitData | undefined,
 ): SlashCommandItem[] {
   return [
     {
@@ -173,9 +193,8 @@ function getAICommands(
           const yesterdayDateStr = getYesterdayDateString();
           const yesterdayFileName = getYesterdayMarkdownFileName();
 
-          // Find yesterday's markdown file
-          const allFilesMetadata =
-            useMarkdownFilesStore.getState().allFilesMetadata;
+          // Get metadata from the getter function
+          const allFilesMetadata = getMetadata?.() || [];
           const yesterdayFile = allFilesMetadata.find(
             (file) => file.fileName === yesterdayFileName,
           );
@@ -183,9 +202,7 @@ function getAICommands(
           // Get yesterday's markdown content
           let markdownContent = "";
           if (yesterdayFile) {
-            const loadedContent =
-              useMarkdownFilesStore.getState().loadedContent;
-            const cachedContent = loadedContent.get(yesterdayFile.filePath);
+            const cachedContent = getContent?.(yesterdayFile.filePath);
             if (cachedContent !== undefined) {
               markdownContent = cachedContent;
             } else {
@@ -197,9 +214,8 @@ function getAICommands(
           }
 
           // Get yesterday's commits
-          const commitsByDate = useGitCommitsStore.getState().commitsByDate;
-          const yesterdayCommits =
-            commitsByDate[yesterdayDateStr]?.commits || [];
+          const yesterdayData = getCommitsForDate?.(yesterdayDateStr);
+          const yesterdayCommits = yesterdayData?.commits || [];
 
           const { state } = editor;
           const { doc } = state;
@@ -312,6 +328,8 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
   addOptions() {
     return {
       onAIGenerationChange: undefined,
+      getMetadata: undefined,
+      getContent: undefined,
     };
   },
 
@@ -324,7 +342,12 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
           props.command({ editor, range });
         },
         items: ({ query }) => {
-          const items = getAICommands(this.options.onAIGenerationChange);
+          const items = getAICommands(
+            this.options.onAIGenerationChange,
+            this.options.getMetadata,
+            this.options.getContent,
+            this.options.getCommitsForDate,
+          );
           return items.filter((item) =>
             item.title.toLowerCase().startsWith(query.toLowerCase()),
           );

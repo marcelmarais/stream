@@ -1,12 +1,10 @@
 "use client";
 
 import { FolderIcon } from "@phosphor-icons/react";
-import { load } from "@tauri-apps/plugin-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-
-const STORAGE_KEY = "stream-last-selected-folder";
-const STORE_FILE = "settings.json";
+import { useSelectedFolder, useSetSelectedFolder } from "@/hooks/use-user-data";
+import { useUserStore } from "@/stores/user-store";
 
 interface FolderSelectionScreenProps {
   onFolderConfirmed: (folderPath: string) => void;
@@ -17,54 +15,44 @@ export function FolderSelectionScreen({
   onFolderConfirmed,
   autoNavigate = true,
 }: FolderSelectionScreenProps) {
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [localSelectedFolder, setLocalSelectedFolder] = useState<string | null>(
+    null,
+  );
+  const setFolderPath = useUserStore((state) => state.setFolderPath);
 
-  // Load persisted folder after component mounts (client-side only)
+  const { data: persistedFolder, isLoading } = useSelectedFolder();
+  const setSelectedFolderMutation = useSetSelectedFolder();
+
+  // Auto-navigate to the persisted folder if available
   useEffect(() => {
-    const loadPersistedFolder = async () => {
-      try {
-        const store = await load(STORE_FILE, { autoSave: true, defaults: {} });
-        const savedFolder = await store.get<string>(STORAGE_KEY);
-        if (savedFolder) {
-          setSelectedFolder(savedFolder);
-          // Auto-navigate to the persisted folder only if autoNavigate is true
-          if (autoNavigate) {
-            onFolderConfirmed(savedFolder);
-          }
-        }
-        console.log("Loaded saved folder from Tauri Store:", savedFolder);
-      } catch (error) {
-        console.warn("Failed to load saved folder from Tauri Store:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadPersistedFolder();
-  }, [onFolderConfirmed, autoNavigate]);
-
-  const handleFolderSelected = async (folderPath: string | null) => {
-    setSelectedFolder(folderPath);
-
-    // Persist the selected folder to Tauri Store
-    try {
-      const store = await load(STORE_FILE, { autoSave: true, defaults: {} });
-      if (folderPath) {
-        await store.set(STORAGE_KEY, folderPath);
-      } else {
-        await store.delete(STORAGE_KEY);
-      }
-    } catch (error) {
-      console.warn("Failed to save folder to Tauri Store:", error);
+    if (!isLoading && persistedFolder && autoNavigate) {
+      setLocalSelectedFolder(persistedFolder);
+      setFolderPath(persistedFolder);
+      onFolderConfirmed(persistedFolder);
+    } else if (!isLoading && persistedFolder) {
+      setLocalSelectedFolder(persistedFolder);
     }
+  }, [
+    persistedFolder,
+    isLoading,
+    autoNavigate,
+    setFolderPath,
+    onFolderConfirmed,
+  ]);
+
+  const handleFolderSelected = async (folderPath: string) => {
+    setLocalSelectedFolder(folderPath);
+    await setSelectedFolderMutation.mutateAsync(folderPath);
   };
 
   const handleContinue = () => {
-    if (selectedFolder) {
-      onFolderConfirmed(selectedFolder);
+    if (localSelectedFolder) {
+      setFolderPath(localSelectedFolder);
+      onFolderConfirmed(localSelectedFolder);
     }
   };
+
+  const selectedFolder = localSelectedFolder || persistedFolder;
 
   if (isLoading) {
     return (
@@ -77,7 +65,6 @@ export function FolderSelectionScreen({
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
       <div className="w-full max-w-md space-y-8 text-center">
-        {/* App Title */}
         <div className="space-y-2">
           <h1 className="font-semibold text-2xl text-foreground tracking-tight">
             stream.
@@ -87,7 +74,6 @@ export function FolderSelectionScreen({
           </p>
         </div>
 
-        {/* Folder Selection */}
         <div className="space-y-4">
           {!selectedFolder ? (
             <button
