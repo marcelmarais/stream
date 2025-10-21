@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fira_Code, Inter } from "next/font/google";
 import { ApiKeyInitializer } from "@/components/api-key-initializer";
 import { AutoUpdater } from "@/components/auto-updater";
+import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -31,17 +32,19 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${firaCode.variable} optimizeLegibility antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
-          <ApiKeyInitializer />
-          {children}
-          <Toaster />
-          <AutoUpdater />
-        </ThemeProvider>
+        <QueryProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem={false}
+            disableTransitionOnChange
+          >
+            <ApiKeyInitializer />
+            {children}
+            <Toaster />
+            <AutoUpdater />
+          </ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   );

@@ -29,8 +29,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import { useApiKeyStore } from "@/stores/api-key-store";
-import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 
 interface SettingsDialogProps {
   folderPath: string;
@@ -195,13 +195,9 @@ export function SettingsDialog({
   open,
   onOpenChange,
 }: SettingsDialogProps) {
-  // Get data from store
-  const isLoadingMetadata = useMarkdownFilesStore(
-    (state) => state.isLoadingMetadata,
-  );
-  const allFilesMetadata = useMarkdownFilesStore(
-    (state) => state.allFilesMetadata,
-  );
+  // Get data from Tanstack Query
+  const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
+    useMarkdownMetadata(folderPath);
 
   const [fetchReposFn, setFetchReposFn] = useState<
     (() => Promise<void>) | null

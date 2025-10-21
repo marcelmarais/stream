@@ -6,8 +6,8 @@ import {
 } from "@phosphor-icons/react";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
-import { useGitCommitsStore } from "@/stores/git-commits-store";
-import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
+import { useConnectedRepos } from "@/hooks/use-git-queries";
+import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 
 interface FooterProps {
   folderPath: string;
@@ -22,13 +22,11 @@ export function Footer({
   settingsOpen,
   onSettingsOpenChange,
 }: FooterProps) {
-  // Get data from stores
-  const connectedReposCount = useGitCommitsStore(
-    (state) => state.connectedReposCount,
-  );
-  const fileCount = useMarkdownFilesStore(
-    (state) => state.allFilesMetadata.length,
-  );
+  // Get data from queries
+  const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
+  const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath);
+  const fileCount = allFilesMetadata.length;
+  const connectedReposCount = connectedRepos.length;
 
   const folderName = folderPath.split("/").pop() || folderPath;
 

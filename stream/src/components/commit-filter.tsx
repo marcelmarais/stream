@@ -17,12 +17,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAllLoadedCommits } from "@/hooks/use-git-queries";
 import { formatCommitAuthor } from "@/ipc/git-reader";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
 
-export function CommitFilter() {
-  // Get state directly from store
-  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
+interface CommitFilterProps {
+  folderPath: string;
+}
+
+export function CommitFilter({ folderPath }: CommitFilterProps) {
+  // Get commits from React Query cache
+  const commitsByDate = useAllLoadedCommits(folderPath);
   const filters = useGitCommitsStore((state) => state.commitFilters);
   const setFilters = useGitCommitsStore((state) => state.setCommitFilters);
   const searchId = useId();

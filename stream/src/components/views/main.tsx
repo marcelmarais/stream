@@ -8,9 +8,15 @@ import {
   FileReaderHeader,
   FocusedFileOverlay,
 } from "@/components/markdown-file-card";
+import {
+  useConnectedRepos,
+  usePrefetchCommitsForDates,
+} from "@/hooks/use-git-queries";
+import {
+  useMarkdownMetadata,
+  usePrefetchFileContents,
+} from "@/hooks/use-markdown-queries";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
-import { useGitCommitsStore } from "@/stores/git-commits-store";
-import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 import CommitFilter from "../commit-filter";
 
@@ -18,8 +24,6 @@ interface FileReaderScreenProps {
   folderPath: string;
   onBack: () => void;
 }
-
-const GIT_COMMIT_REFRESH_INTERVAL = 5000;
 
 export function FileReaderScreen({
   folderPath,
@@ -34,31 +38,17 @@ export function FileReaderScreen({
   const [activeEditingFile, setActiveEditingFile] =
     useState<MarkdownFileMetadata | null>(null);
 
-  // Markdown files state from store
-  const allFilesMetadata = useMarkdownFilesStore(
-    (state) => state.allFilesMetadata,
-  );
-  const isLoadingMetadata = useMarkdownFilesStore(
-    (state) => state.isLoadingMetadata,
-  );
-  const error = useMarkdownFilesStore((state) => state.error);
+  // Tanstack Query for markdown files
+  const {
+    data: allFilesMetadata = [],
+    isLoading: isLoadingMetadata,
+    error: metadataError,
+  } = useMarkdownMetadata(folderPath);
+  const prefetchFileContents = usePrefetchFileContents();
 
-  // Markdown files actions from store
-  const loadMetadata = useMarkdownFilesStore((state) => state.loadMetadata);
-  const loadFileContent = useMarkdownFilesStore(
-    (state) => state.loadFileContent,
-  );
-
-  // Git commits state from store
-  const loadConnectedReposCount = useGitCommitsStore(
-    (state) => state.loadConnectedReposCount,
-  );
-  const loadCommitsForVisibleFiles = useGitCommitsStore(
-    (state) => state.loadCommitsForVisibleFiles,
-  );
-  const refreshAllCommits = useGitCommitsStore(
-    (state) => state.refreshAllCommits,
-  );
+  // Tanstack Query for git repos and commits
+  useConnectedRepos(folderPath); // Ensure repos are loaded
+  const prefetchCommitsForDates = usePrefetchCommitsForDates();
 
   // Virtuoso ref for scrolling
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -83,53 +73,21 @@ export function FileReaderScreen({
     [allFilesMetadata],
   );
 
-  // Wrap store action for easier use in component
-  const handleLoadFileContent = useCallback(
-    async (filePath: string) => {
-      await loadFileContent(filePath);
-    },
-    [loadFileContent],
-  );
-
-  // Wrap store actions to match component needs
-  const handleLoadCommitsForVisibleFiles = useCallback(
-    async (visibleFiles: MarkdownFileMetadata[]) => {
-      await loadCommitsForVisibleFiles(folderPath, visibleFiles);
-    },
-    [folderPath, loadCommitsForVisibleFiles],
-  );
-
-  const handleRefreshAllCommits = useCallback(async () => {
-    const commitsByDate = useGitCommitsStore.getState().commitsByDate;
-    const loadedDates = Object.keys(commitsByDate);
-    await refreshAllCommits(folderPath, loadedDates);
-  }, [folderPath, refreshAllCommits]);
-
-  // Load metadata when component mounts
+  // Handle loading screen
   useEffect(() => {
-    const loadData = async () => {
-      const startTime = Date.now();
-      setShowLoading(true);
+    const startTime = Date.now();
+    setShowLoading(true);
 
-      try {
-        // Load markdown files metadata
-        await loadMetadata(folderPath);
+    if (!isLoadingMetadata) {
+      // Ensure loading screen shows for at least 200ms
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 200 - elapsed);
 
-        // Load connected repos count
-        await loadConnectedReposCount(folderPath);
-      } finally {
-        // Ensure loading screen shows for at least 200ms
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, 200 - elapsed);
-
-        setTimeout(() => {
-          setShowLoading(false);
-        }, remaining);
-      }
-    };
-
-    loadData();
-  }, [folderPath, loadMetadata, loadConnectedReposCount]);
+      setTimeout(() => {
+        setShowLoading(false);
+      }, remaining);
+    }
+  }, [isLoadingMetadata]);
 
   // Add keyboard shortcut for Command + I to focus the active editing file
   useEffect(() => {
@@ -150,54 +108,34 @@ export function FileReaderScreen({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [activeEditingFile, focusedFile]);
 
-  // Load git commits for initially visible files when metadata is loaded
-  useEffect(() => {
-    if (!isLoadingMetadata && allFilesMetadata.length > 0) {
-      // Load commits for the first few files
-      const initialFiles = allFilesMetadata.slice(0, 10);
-      handleLoadCommitsForVisibleFiles(initialFiles);
-    }
-  }, [isLoadingMetadata, allFilesMetadata, handleLoadCommitsForVisibleFiles]);
-
-  // Set up automatic git commit refresh
-  useEffect(() => {
-    // Only start refreshing if we have loaded some commits
-    const commitsByDate = useGitCommitsStore.getState().commitsByDate;
-    if (Object.keys(commitsByDate).length === 0) return;
-
-    const intervalId = setInterval(() => {
-      handleRefreshAllCommits();
-    }, GIT_COMMIT_REFRESH_INTERVAL);
-
-    // Cleanup interval on unmount
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [handleRefreshAllCommits]);
-
   // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
-    (range: { startIndex: number; endIndex: number }) => {
+    async (range: { startIndex: number; endIndex: number }) => {
       // Get visible files
       const visibleFiles = allFilesMetadata.slice(
         range.startIndex,
         range.endIndex + 1,
       );
 
-      // Load content for visible files that aren't loaded yet
-      const loadedContent = useMarkdownFilesStore.getState().loadedContent;
-      visibleFiles.forEach((file) => {
-        if (!loadedContent.has(file.filePath)) {
-          handleLoadFileContent(file.filePath);
-        }
-      });
+      // Prefetch content for visible files
+      const filePaths = visibleFiles.map((file) => file.filePath);
+      await prefetchFileContents(filePaths);
 
-      // Load git commits for visible files
+      // Prefetch git commits for visible dates
       if (visibleFiles.length > 0) {
-        handleLoadCommitsForVisibleFiles(visibleFiles);
+        const dateKeys = visibleFiles.map((file) => {
+          const dateFromFilename = getDateFromFilename(file.fileName);
+          return dateFromFilename || getDateKey(file.createdAt);
+        });
+        await prefetchCommitsForDates(folderPath, dateKeys);
       }
     },
-    [allFilesMetadata, handleLoadFileContent, handleLoadCommitsForVisibleFiles],
+    [
+      allFilesMetadata,
+      prefetchFileContents,
+      prefetchCommitsForDates,
+      folderPath,
+    ],
   );
 
   const renderItem = useCallback(
@@ -208,6 +146,7 @@ export function FileReaderScreen({
       return (
         <FileCard
           file={file}
+          folderPath={folderPath}
           onToggleFocus={() =>
             setFocusedFile(
               focusedFile?.filePath === file.filePath ? null : file,
@@ -218,8 +157,10 @@ export function FileReaderScreen({
         />
       );
     },
-    [allFilesMetadata, focusedFile],
+    [allFilesMetadata, focusedFile, folderPath],
   );
+
+  const error = metadataError?.message || null;
 
   return (
     <div className="flex h-screen flex-col">
@@ -240,7 +181,7 @@ export function FileReaderScreen({
           {/* Filter controls on the left */}
           {!isLoadingMetadata && (
             <div className="flex-shrink-0">
-              <CommitFilter />
+              <CommitFilter folderPath={folderPath} />
             </div>
           )}
 
@@ -292,6 +233,7 @@ export function FileReaderScreen({
       {focusedFile && (
         <FocusedFileOverlay
           file={focusedFile}
+          folderPath={folderPath}
           onClose={() => setFocusedFile(null)}
           onEditorFocus={() => setActiveEditingFile(focusedFile)}
           footerComponent={

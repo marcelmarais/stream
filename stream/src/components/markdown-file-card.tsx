@@ -20,12 +20,17 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { useCommitsForDateFromCache } from "@/hooks/use-git-queries";
+import {
+  useCreateTodayFile,
+  useFileContentManager,
+  useMarkdownMetadata,
+} from "@/hooks/use-markdown-queries";
 import { filterCommits, getCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
 import { useGitCommitsStore } from "@/stores/git-commits-store";
-import { useMarkdownFilesStore } from "@/stores/markdown-files-store";
 import {
   formatDisplayDate,
   getDateFromFilename,
@@ -114,6 +119,7 @@ export function FileName({
 
 interface FileCardProps {
   file: MarkdownFileMetadata;
+  folderPath: string;
   onToggleFocus?: () => void;
   isFocused?: boolean;
   onEditorFocus?: () => void;
@@ -121,25 +127,24 @@ interface FileCardProps {
 
 export function FileCard({
   file,
+  folderPath,
   onToggleFocus,
   isFocused = false,
   onEditorFocus,
 }: FileCardProps) {
-  const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
-  const loadingFiles = useMarkdownFilesStore((state) => state.loadingFiles);
-  const updateContent = useMarkdownFilesStore(
-    (state) => state.updateContentOptimistically,
-  );
-  const saveDebounced = useMarkdownFilesStore(
-    (state) => state.saveFileContentDebounced,
-  );
-  const saveImmediate = useMarkdownFilesStore((state) => state.saveFileContent);
+  // Use Tanstack Query to manage file content
+  const {
+    content,
+    isLoading,
+    updateContentOptimistically,
+    saveContentDebounced,
+    saveContentImmediate,
+  } = useFileContentManager(file.filePath);
 
-  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
+  // Get commits for this date from React Query cache
+  const dateKey = getDateKey(file.dateFromFilename);
+  const commitsByDate = useCommitsForDateFromCache(folderPath, dateKey) || {};
   const commitFilters = useGitCommitsStore((state) => state.commitFilters);
-
-  const content = loadedContent.get(file.filePath);
-  const isLoading = !content && loadingFiles.has(file.filePath);
 
   const allFileCommits = getCommitsForDate(
     commitsByDate,
@@ -150,16 +155,14 @@ export function FileCard({
   const displayDate = formatDisplayDate(file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
-    updateContent(file.filePath, newContent);
-    saveDebounced(file.filePath, newContent);
+    updateContentOptimistically(newContent);
+    saveContentDebounced(newContent);
   };
 
   const handleSave = async () => {
-    const currentContent = loadedContent.get(file.filePath);
-    if (currentContent) {
-      await saveImmediate(file.filePath, currentContent);
-    }
+    await saveContentImmediate(content);
   };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center pt-4 pb-8">
@@ -181,7 +184,8 @@ export function FileCard({
       />
 
       <MarkdownEditor
-        value={content ?? ""}
+        value={content}
+        folderPath={folderPath}
         onChange={handleContentChange}
         onSave={handleSave}
         onFocus={onEditorFocus || (() => {})}
@@ -248,21 +252,16 @@ export function HeaderNavigation({
   folderPath: string;
   onScrollToDate: (date: Date) => void;
 }) {
-  // Get data from stores
-  const isLoadingMetadata = useMarkdownFilesStore(
-    (state) => state.isLoadingMetadata,
-  );
-  const allFilesMetadata = useMarkdownFilesStore(
-    (state) => state.allFilesMetadata,
-  );
-  const creatingToday = useMarkdownFilesStore((state) => state.creatingToday);
-  const createTodayFile = useMarkdownFilesStore(
-    (state) => state.createTodayFile,
-  );
+  // Use Tanstack Query for metadata
+  const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
+    useMarkdownMetadata(folderPath);
+  const { mutate: createToday, isPending: creatingToday } =
+    useCreateTodayFile();
 
   const handleCreateToday = async () => {
-    await createTodayFile(folderPath);
+    createToday(folderPath);
   };
+
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const todayFileName = getTodayMarkdownFileName();
@@ -354,8 +353,8 @@ export function FileReaderHeader({
   folderPath,
   onScrollToDate,
 }: FileReaderHeaderProps) {
-  // Get error from store
-  const error = useMarkdownFilesStore((state) => state.error);
+  // Use Tanstack Query for error state
+  const { error } = useMarkdownMetadata(folderPath);
 
   return (
     <div className="!bg-transparent flex-shrink-0">
@@ -364,7 +363,7 @@ export function FileReaderHeader({
         onScrollToDate={onScrollToDate}
       />
 
-      {error && <ErrorDisplay error={error} />}
+      {error && <ErrorDisplay error={error.message} />}
     </div>
   );
 }
@@ -372,6 +371,7 @@ export function FileReaderHeader({
 // Focused file overlay component
 interface FocusedFileOverlayProps {
   file: MarkdownFileMetadata;
+  folderPath: string;
   onClose: () => void;
   footerComponent: React.ReactElement<typeof FooterComponent>;
   onEditorFocus?: () => void;
@@ -379,23 +379,18 @@ interface FocusedFileOverlayProps {
 
 export function FocusedFileOverlay({
   file,
+  folderPath,
   onClose,
   footerComponent,
   onEditorFocus,
 }: FocusedFileOverlayProps) {
-  // Get data from markdown files store
-  const loadedContent = useMarkdownFilesStore((state) => state.loadedContent);
-  const updateContent = useMarkdownFilesStore(
-    (state) => state.updateContentOptimistically,
-  );
-  const saveDebounced = useMarkdownFilesStore(
-    (state) => state.saveFileContentDebounced,
-  );
-  const saveImmediate = useMarkdownFilesStore((state) => state.saveFileContent);
-
-  // Get data from git commits store
-  const commitsByDate = useGitCommitsStore((state) => state.commitsByDate);
-  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
+  // Use Tanstack Query to manage file content
+  const {
+    content,
+    updateContentOptimistically,
+    saveContentDebounced,
+    saveContentImmediate,
+  } = useFileContentManager(file.filePath);
 
   // Compute date and display
   const dateFromFilename = getDateFromFilename(file.fileName);
@@ -405,24 +400,23 @@ export function FocusedFileOverlay({
     ? new Date(dateFromFilename)
     : file.createdAt;
 
+  // Get commits for this date from React Query cache
+  const dateKey = getDateKey(fileDate);
+  const commitsByDate = useCommitsForDateFromCache(folderPath, dateKey) || {};
+  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
+
   // Get commits for this file's date
   const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
   const commits = filterCommits(allFileCommits, commitFilters);
 
-  // Get content
-  const content = loadedContent.get(file.filePath);
-
   // Handlers
   const handleContentChange = (newContent: string) => {
-    updateContent(file.filePath, newContent);
-    saveDebounced(file.filePath, newContent);
+    updateContentOptimistically(newContent);
+    saveContentDebounced(newContent);
   };
 
   const handleSave = async () => {
-    const currentContent = loadedContent.get(file.filePath);
-    if (currentContent) {
-      await saveImmediate(file.filePath, currentContent);
-    }
+    await saveContentImmediate(content);
   };
 
   return (
@@ -437,7 +431,8 @@ export function FocusedFileOverlay({
         />
 
         <MarkdownEditor
-          value={content ?? ""}
+          value={content}
+          folderPath={folderPath}
           onChange={handleContentChange}
           onSave={handleSave}
           onFocus={onEditorFocus || (() => {})}

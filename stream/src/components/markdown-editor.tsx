@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -8,11 +9,14 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "tiptap-markdown";
 import { SlashCommand } from "@/components/slash-command";
+import { gitKeys } from "@/hooks/use-git-queries";
+import { markdownKeys } from "@/hooks/use-markdown-queries";
 import { cn } from "@/lib/utils";
 import { formatMarkdown } from "@/utils/markdown-formatter";
 
 interface MarkdownEditorProps {
   value: string;
+  folderPath: string;
   onChange: (value: string) => void;
   onSave: () => void | Promise<void>;
   onFocus?: () => void;
@@ -22,6 +26,7 @@ interface MarkdownEditorProps {
 
 export function MarkdownEditor({
   value,
+  folderPath,
   onChange,
   onSave,
   onFocus,
@@ -31,6 +36,7 @@ export function MarkdownEditor({
   const isUpdatingFromProp = useRef(false);
   const isSavingRef = useRef(false);
   const [isAIGenerating, setIsAIGenerating] = useState(false);
+  const queryClient = useQueryClient();
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -51,6 +57,26 @@ export function MarkdownEditor({
       }),
       SlashCommand.configure({
         onAIGenerationChange: setIsAIGenerating,
+        getMetadata: () => {
+          // Find metadata from cached queries
+          const queries = queryClient.getQueriesData({
+            queryKey: markdownKeys.all,
+          });
+          for (const [key, data] of queries) {
+            if (key[1] === "metadata" && Array.isArray(data)) {
+              return data;
+            }
+          }
+          return [];
+        },
+        getContent: (filePath: string) => {
+          return queryClient.getQueryData<string>(
+            markdownKeys.content(filePath),
+          );
+        },
+        getCommitsForDate: (dateKey: string) => {
+          return queryClient.getQueryData(gitKeys.commits(folderPath, dateKey));
+        },
       }),
     ],
     content: value,
