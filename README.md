@@ -19,7 +19,7 @@
 
 ### Core Notetaking
 - **Daily Markdown Notes**: Date-based note taking using `YYYY-MM-DD.md` format with WYSIWYG editor Markdown editor and automatic location (city, country) detection.
-- **Infinite Scroll**: Endless list of every day's notes.
+- **Infinite Scroll**: Every day's notes in an endless scroll.
 - **Auto-Save & Format**: Press `Cmd+S` (Mac) or `Ctrl+S` (Windows/Linux) to save and auto-format / lint the currently selected Markdown file.
 - **Focus Mode**: Press `Cmd+I` to focus on a single note in full-screen overlay.
 - **Calendar Navigation**: Jump to any date with the calendar picker
