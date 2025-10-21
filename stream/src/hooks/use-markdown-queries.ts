@@ -201,18 +201,17 @@ export function usePrefetchFileContents() {
   const queryClient = useQueryClient();
 
   return async (filePaths: string[]) => {
-    // Filter out files that are already in cache
-    const filesToLoad = filePaths.filter((path) => {
-      const cached = queryClient.getQueryData(markdownKeys.content(path));
-      return cached === undefined;
-    });
+    const filesToLoad = filePaths.filter(
+      (path) => !queryClient.getQueryData(markdownKeys.content(path)),
+    );
 
     if (filesToLoad.length === 0) return;
 
-    // Batch load all files
-    const contentMap = await readMarkdownFilesContentByPaths(filesToLoad);
+    const contentMap = await queryClient.fetchQuery({
+      queryKey: markdownKeys.contents(filesToLoad),
+      queryFn: () => readMarkdownFilesContentByPaths(filesToLoad),
+    });
 
-    // Update cache for each file
     for (const [path, content] of contentMap.entries()) {
       queryClient.setQueryData(markdownKeys.content(path), content);
     }

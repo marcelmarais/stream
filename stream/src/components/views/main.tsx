@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
@@ -8,11 +9,14 @@ import {
   FileReaderHeader,
   FocusedFileOverlay,
 } from "@/components/markdown-file-card";
+import { Button } from "@/components/ui/button";
 import {
   useConnectedRepos,
   usePrefetchCommitsForDates,
 } from "@/hooks/use-git-queries";
+import { useToggleFocusShortcut } from "@/hooks/use-keyboard-shortcut";
 import {
+  useCreateTodayFile,
   useMarkdownMetadata,
   usePrefetchFileContents,
 } from "@/hooks/use-markdown-queries";
@@ -30,6 +34,7 @@ export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
+  useConnectedRepos(folderPath);
   const [showLoading, setShowLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
@@ -40,15 +45,11 @@ export function FileReaderScreen({
   const setActiveEditingFile = useUserStore(
     (state) => state.setActiveEditingFile,
   );
+  useToggleFocusShortcut(activeEditingFile, focusedFile, setFocusedFile);
 
-  const {
-    data: allFilesMetadata = [],
-    isLoading: isLoadingMetadata,
-    error: metadataError,
-  } = useMarkdownMetadata(folderPath);
+  const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
+    useMarkdownMetadata(folderPath);
   const prefetchFileContents = usePrefetchFileContents();
-
-  useConnectedRepos(folderPath);
   const prefetchCommitsForDates = usePrefetchCommitsForDates();
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -72,37 +73,6 @@ export function FileReaderScreen({
     },
     [allFilesMetadata],
   );
-
-  useEffect(() => {
-    const startTime = Date.now();
-    setShowLoading(true);
-
-    if (!isLoadingMetadata) {
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, 200 - elapsed);
-
-      setTimeout(() => {
-        setShowLoading(false);
-      }, remaining);
-    }
-  }, [isLoadingMetadata]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "i") {
-        event.preventDefault();
-        if (focusedFile && activeEditingFile) {
-          setFocusedFile(null);
-        }
-        if (activeEditingFile && !focusedFile) {
-          setFocusedFile(activeEditingFile);
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeEditingFile, focusedFile]);
 
   const handleRangeChanged = useCallback(
     async (range: { startIndex: number; endIndex: number }) => {
@@ -133,6 +103,7 @@ export function FileReaderScreen({
   const renderItem = useCallback(
     (index: number) => {
       const file = allFilesMetadata[index];
+      const isLastFile = index === allFilesMetadata.length - 1;
       if (!file) return null;
 
       return (
@@ -145,13 +116,26 @@ export function FileReaderScreen({
           }
           isFocused={focusedFile?.filePath === file.filePath}
           onEditorFocus={() => setActiveEditingFile(file)}
+          showSeparator={!isLastFile}
         />
       );
     },
     [allFilesMetadata, focusedFile, setActiveEditingFile],
   );
 
-  const error = metadataError?.message || null;
+  useEffect(() => {
+    const startTime = Date.now();
+    setShowLoading(true);
+
+    if (!isLoadingMetadata) {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 200 - elapsed);
+
+      setTimeout(() => {
+        setShowLoading(false);
+      }, remaining);
+    }
+  }, [isLoadingMetadata]);
 
   return (
     <div className="flex h-screen flex-col">
@@ -193,17 +177,8 @@ export function FileReaderScreen({
         </div>
       )}
 
-      {!isLoadingMetadata && allFilesMetadata.length === 0 && !error && (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <div className="mb-2 font-medium text-lg">
-              No markdown files found
-            </div>
-            <div className="text-sm">
-              No .md files were found in the selected folder
-            </div>
-          </div>
-        </div>
+      {!isLoadingMetadata && allFilesMetadata.length === 0 && (
+        <EmptyState folderPath={folderPath} />
       )}
 
       <Footer
@@ -226,6 +201,48 @@ export function FileReaderScreen({
           }
         />
       )}
+    </div>
+  );
+}
+
+function EmptyState({ folderPath }: { folderPath: string }) {
+  const { mutate: createToday, isPending: creatingToday } =
+    useCreateTodayFile();
+
+  return (
+    <div className="flex flex-1 items-center justify-center p-8">
+      <div className="flex max-w-md flex-col items-center gap-6 text-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+          <FileTextIcon
+            className="h-10 w-10 text-muted-foreground"
+            weight="duotone"
+            aria-hidden="true"
+          />
+        </div>
+
+        <div className="flex max-w-[300px] flex-col gap-2">
+          <h3 className="font-semibold text-foreground text-xl">
+            No markdown files found
+          </h3>
+          <p className="text-muted-foreground text-sm">
+            No files matching the{" "}
+            <code className="bg-muted px-0.5 font-mono text-foreground">
+              YYYY-MM-DD.md
+            </code>{" "}
+            format were found in the selected folder.
+          </p>
+        </div>
+
+        <Button
+          onClick={() => createToday(folderPath)}
+          disabled={creatingToday}
+          size="lg"
+          className="min-w-[140px] gap-2"
+        >
+          <CalendarPlusIcon className="h-5 w-5" weight="bold" />
+          {creatingToday ? "Creating..." : "Create Today"}
+        </Button>
+      </div>
     </div>
   );
 }

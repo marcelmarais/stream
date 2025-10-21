@@ -122,6 +122,7 @@ interface FileCardProps {
   onToggleFocus?: () => void;
   isFocused?: boolean;
   onEditorFocus?: () => void;
+  showSeparator: boolean;
 }
 
 export function FileCard({
@@ -129,6 +130,7 @@ export function FileCard({
   onToggleFocus,
   isFocused = false,
   onEditorFocus,
+  showSeparator = true,
 }: FileCardProps) {
   const {
     content,
@@ -195,7 +197,7 @@ export function FileCard({
           />
         </div>
       )}
-      <Separator className="mt-12" />
+      {showSeparator && <Separator className="mt-12" />}
     </div>
   );
 }
