@@ -130,11 +130,11 @@ export function FolderSelectionScreen({
                     console.error("Error opening folder picker:", error);
                   }
                 }}
-                className="h-auto w-full justify-start rounded-md border border-border bg-muted/50 px-3 py-3 text-muted-foreground text-sm transition-colors hover:bg-muted/70"
+                className="h-auto w-full cursor-pointer justify-start rounded-md border border-border bg-muted/50 px-3 py-3 text-muted-foreground text-sm transition-colors hover:bg-muted/70"
               >
-                <div className="flex items-center gap-3">
-                  <FolderIcon className="h-4 w-4 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
+                <div className="flex w-full items-center gap-3">
+                  <FolderIcon className="size-5 flex-shrink-0" />
+                  <div className="flex flex-1 flex-col items-center">
                     <div
                       className="truncate font-mono text-foreground"
                       title={selectedFolder}
