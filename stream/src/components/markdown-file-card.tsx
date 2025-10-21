@@ -144,6 +144,7 @@ export function FileCard({
   const { data: commitsByDate = {} } = useCommitsForDate(
     folderPath || "",
     dateKey,
+    { autoRefresh: true },
   );
 
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
@@ -357,6 +358,7 @@ export function FocusedFileOverlay({
   const { data: commitsByDate = {} } = useCommitsForDate(
     folderPath || "",
     dateKey,
+    { autoRefresh: true },
   );
 
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
