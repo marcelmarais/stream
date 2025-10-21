@@ -8,27 +8,27 @@ import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { useConnectedRepos } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
+import { useUserStore } from "@/stores/user-store";
 
 interface FooterProps {
-  folderPath: string;
   onFolderClick: () => void;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
 }
 
 export function Footer({
-  folderPath,
   onFolderClick,
   settingsOpen,
   onSettingsOpenChange,
 }: FooterProps) {
-  // Get data from queries
-  const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
-  const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath);
+  const folderPath = useUserStore((state) => state.folderPath);
+
+  const { data: connectedRepos = [] } = useConnectedRepos(folderPath || "");
+  const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath || "");
   const fileCount = allFilesMetadata.length;
   const connectedReposCount = connectedRepos.length;
 
-  const folderName = folderPath.split("/").pop() || folderPath;
+  const folderName = folderPath?.split("/").pop() || folderPath || "";
 
   return (
     <div className="flex-shrink-0 border-border border-t bg-muted/30 px-3 py-1 text-muted-foreground text-xs">
@@ -41,7 +41,7 @@ export function Footer({
           title="Click to go back to folder selection"
         >
           <FolderIcon className="size-3" />
-          <span title={folderPath}>{folderName}</span>
+          <span title={folderPath || undefined}>{folderName}</span>
         </Button>
         <div className="flex items-center gap-2">
           <Button
@@ -75,11 +75,7 @@ export function Footer({
           </Button>
         </div>
       </div>
-      <SettingsDialog
-        folderPath={folderPath}
-        open={settingsOpen}
-        onOpenChange={onSettingsOpenChange}
-      />
+      <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useUserStore } from "@/stores/user-store";
 
 /**
  * TypeScript interfaces matching Rust structs
@@ -108,14 +109,15 @@ export function groupCommitsByDate(repoCommits: RepoCommits[]): CommitsByDate {
 }
 
 /**
- * Get commits for a specific date
+ * Get commits for a specific date and apply filters
  */
 export function getCommitsForDate(
   commitsByDate: CommitsByDate,
   date: Date,
 ): GitCommit[] {
+  const commitFilters = useUserStore((state) => state.commitFilters);
   const dateKey = date.toISOString().split("T")[0]; // YYYY-MM-DD format
-  return commitsByDate[dateKey]?.commits || [];
+  return filterCommits(commitsByDate[dateKey]?.commits || [], commitFilters);
 }
 
 /**
@@ -191,7 +193,7 @@ export interface CommitFilters {
   searchTerm: string;
 }
 
-export function filterCommits(
+function filterCommits(
   commits: GitCommit[],
   filters: CommitFilters,
 ): GitCommit[] {

@@ -19,22 +19,18 @@ import {
 } from "@/components/ui/select";
 import { useAllLoadedCommits } from "@/hooks/use-git-queries";
 import { formatCommitAuthor } from "@/ipc/git-reader";
-import { useGitCommitsStore } from "@/stores/git-commits-store";
+import { useUserStore } from "@/stores/user-store";
 
-interface CommitFilterProps {
-  folderPath: string;
-}
+export function CommitFilter() {
+  const folderPath = useUserStore((state) => state.folderPath);
+  const filters = useUserStore((state) => state.commitFilters);
+  const setFilters = useUserStore((state) => state.setCommitFilters);
 
-export function CommitFilter({ folderPath }: CommitFilterProps) {
-  // Get commits from React Query cache
-  const commitsByDate = useAllLoadedCommits(folderPath);
-  const filters = useGitCommitsStore((state) => state.commitFilters);
-  const setFilters = useGitCommitsStore((state) => state.setCommitFilters);
+  const commitsByDate = useAllLoadedCommits(folderPath || "");
   const searchId = useId();
   const authorSelectId = useId();
   const repoSelectId = useId();
 
-  // Compute all commits from commitsByDate
   const commits = useMemo(
     () => Object.values(commitsByDate).flatMap((dateData) => dateData.commits),
     [commitsByDate],

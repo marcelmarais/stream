@@ -17,6 +17,7 @@ import {
   usePrefetchFileContents,
 } from "@/hooks/use-markdown-queries";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
+import { useUserStore } from "@/stores/user-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 import CommitFilter from "../commit-filter";
 
@@ -29,16 +30,17 @@ export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
-  // Local UI state
   const [showLoading, setShowLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,
   );
-  const [activeEditingFile, setActiveEditingFile] =
-    useState<MarkdownFileMetadata | null>(null);
 
-  // Tanstack Query for markdown files
+  const activeEditingFile = useUserStore((state) => state.activeEditingFile);
+  const setActiveEditingFile = useUserStore(
+    (state) => state.setActiveEditingFile,
+  );
+
   const {
     data: allFilesMetadata = [],
     isLoading: isLoadingMetadata,
@@ -46,11 +48,9 @@ export function FileReaderScreen({
   } = useMarkdownMetadata(folderPath);
   const prefetchFileContents = usePrefetchFileContents();
 
-  // Tanstack Query for git repos and commits
-  useConnectedRepos(folderPath); // Ensure repos are loaded
+  useConnectedRepos(folderPath);
   const prefetchCommitsForDates = usePrefetchCommitsForDates();
 
-  // Virtuoso ref for scrolling
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   const handleScrollToDate = useCallback(
@@ -73,13 +73,11 @@ export function FileReaderScreen({
     [allFilesMetadata],
   );
 
-  // Handle loading screen
   useEffect(() => {
     const startTime = Date.now();
     setShowLoading(true);
 
     if (!isLoadingMetadata) {
-      // Ensure loading screen shows for at least 200ms
       const elapsed = Date.now() - startTime;
       const remaining = Math.max(0, 200 - elapsed);
 
@@ -89,10 +87,8 @@ export function FileReaderScreen({
     }
   }, [isLoadingMetadata]);
 
-  // Add keyboard shortcut for Command + I to focus the active editing file
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Handle Cmd+I (Mac) or Ctrl+I (Windows/Linux)
       if ((event.metaKey || event.ctrlKey) && event.key === "i") {
         event.preventDefault();
         if (focusedFile && activeEditingFile) {
@@ -108,20 +104,16 @@ export function FileReaderScreen({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [activeEditingFile, focusedFile]);
 
-  // Handle range changes for virtualized list
   const handleRangeChanged = useCallback(
     async (range: { startIndex: number; endIndex: number }) => {
-      // Get visible files
       const visibleFiles = allFilesMetadata.slice(
         range.startIndex,
         range.endIndex + 1,
       );
 
-      // Prefetch content for visible files
       const filePaths = visibleFiles.map((file) => file.filePath);
       await prefetchFileContents(filePaths);
 
-      // Prefetch git commits for visible dates
       if (visibleFiles.length > 0) {
         const dateKeys = visibleFiles.map((file) => {
           const dateFromFilename = getDateFromFilename(file.fileName);
@@ -146,7 +138,6 @@ export function FileReaderScreen({
       return (
         <FileCard
           file={file}
-          folderPath={folderPath}
           onToggleFocus={() =>
             setFocusedFile(
               focusedFile?.filePath === file.filePath ? null : file,
@@ -157,14 +148,13 @@ export function FileReaderScreen({
         />
       );
     },
-    [allFilesMetadata, focusedFile, folderPath],
+    [allFilesMetadata, focusedFile, setActiveEditingFile],
   );
 
   const error = metadataError?.message || null;
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Full-screen loading overlay */}
       <div
         className={`absolute inset-0 z-50 flex items-center justify-center bg-background transition-opacity duration-500 ${
           showLoading ? "opacity-100" : "pointer-events-none opacity-0"
@@ -178,24 +168,18 @@ export function FileReaderScreen({
 
       <div className="mx-auto w-full max-w-4xl px-6 pt-6">
         <div className="flex items-start justify-between gap-4">
-          {/* Filter controls on the left */}
           {!isLoadingMetadata && (
             <div className="flex-shrink-0">
-              <CommitFilter folderPath={folderPath} />
+              <CommitFilter />
             </div>
           )}
 
-          {/* Navigation buttons on the right */}
           <div className="flex flex-1 justify-end">
-            <FileReaderHeader
-              folderPath={folderPath}
-              onScrollToDate={handleScrollToDate}
-            />
+            <FileReaderHeader onScrollToDate={handleScrollToDate} />
           </div>
         </div>
       </div>
 
-      {/* Virtualized List */}
       {!isLoadingMetadata && allFilesMetadata.length > 0 && (
         <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-4">
           <Virtuoso
@@ -209,7 +193,6 @@ export function FileReaderScreen({
         </div>
       )}
 
-      {/* Empty state */}
       {!isLoadingMetadata && allFilesMetadata.length === 0 && !error && (
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center text-muted-foreground">
@@ -224,7 +207,6 @@ export function FileReaderScreen({
       )}
 
       <Footer
-        folderPath={folderPath}
         onFolderClick={onBack}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
@@ -233,12 +215,10 @@ export function FileReaderScreen({
       {focusedFile && (
         <FocusedFileOverlay
           file={focusedFile}
-          folderPath={folderPath}
           onClose={() => setFocusedFile(null)}
           onEditorFocus={() => setActiveEditingFile(focusedFile)}
           footerComponent={
             <Footer
-              folderPath={folderPath}
               onFolderClick={onBack}
               settingsOpen={settingsOpen}
               onSettingsOpenChange={setSettingsOpen}

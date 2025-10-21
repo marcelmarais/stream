@@ -1,11 +1,11 @@
 import {
-  type QueryClient,
+  useMutation,
   useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { load } from "@tauri-apps/plugin-store";
 import { useMemo } from "react";
-import { getConnectedRepos } from "@/components/repo-connector";
 import {
   type CommitsByDate,
   createDateRange,
@@ -15,13 +15,64 @@ import {
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
-// Query keys
+const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
+
 export const gitKeys = {
   all: ["git"] as const,
   repos: (folderPath: string) => [...gitKeys.all, "repos", folderPath] as const,
   commits: (folderPath: string, dateKey: string) =>
     [...gitKeys.all, "commits", folderPath, dateKey] as const,
 };
+
+/**
+ * Helper function to get connected repos from store
+ */
+export async function getConnectedRepos(
+  markdownDirectory: string,
+): Promise<string[]> {
+  try {
+    const store = await load(REPO_MAPPINGS_STORE_FILE, {
+      autoSave: true,
+      defaults: {},
+    });
+
+    const mappings = await store.get<Record<string, string[]>>("mappings");
+    return mappings?.[markdownDirectory] || [];
+  } catch (error) {
+    console.warn("Failed to get connected repos:", error);
+    return [];
+  }
+}
+
+/**
+ * Helper function to save repo mappings to store
+ */
+async function saveRepoMappings(
+  markdownDirectory: string,
+  repos: string[],
+): Promise<void> {
+  try {
+    const store = await load(REPO_MAPPINGS_STORE_FILE, {
+      autoSave: true,
+      defaults: {},
+    });
+
+    const existingMappings =
+      (await store.get<Record<string, string[]>>("mappings")) || {};
+
+    if (repos.length === 0) {
+      delete existingMappings[markdownDirectory];
+    } else {
+      existingMappings[markdownDirectory] = repos;
+    }
+
+    await store.set("mappings", existingMappings);
+    console.log("Saved repo mappings:", existingMappings);
+  } catch (error) {
+    console.error("Failed to save repo mappings:", error);
+    throw error;
+  }
+}
 
 /**
  * Hook to get connected git repositories for a folder
@@ -35,6 +86,49 @@ export function useConnectedRepos(folderPath: string) {
     },
     enabled: !!folderPath,
     staleTime: 30000, // Consider repos fresh for 30 seconds
+  });
+}
+
+/**
+ * Hook to add a repository to the connected repos list
+ */
+export function useAddRepo(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (repoPath: string) => {
+      const currentRepos = await getConnectedRepos(folderPath);
+
+      if (currentRepos.includes(repoPath)) {
+        return currentRepos;
+      }
+
+      const updatedRepos = [...currentRepos, repoPath];
+      await saveRepoMappings(folderPath, updatedRepos);
+      return updatedRepos;
+    },
+    onSuccess: (updatedRepos) => {
+      queryClient.setQueryData(gitKeys.repos(folderPath), updatedRepos);
+    },
+  });
+}
+
+/**
+ * Hook to remove a repository from the connected repos list
+ */
+export function useRemoveRepo(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (repoPath: string) => {
+      const currentRepos = await getConnectedRepos(folderPath);
+      const updatedRepos = currentRepos.filter((repo) => repo !== repoPath);
+      await saveRepoMappings(folderPath, updatedRepos);
+      return updatedRepos;
+    },
+    onSuccess: (updatedRepos) => {
+      queryClient.setQueryData(gitKeys.repos(folderPath), updatedRepos);
+    },
   });
 }
 
@@ -68,7 +162,7 @@ export function useCommitsForDate(
     },
     enabled: enabled && repos.length > 0,
     refetchInterval: 5000, // Auto-refresh every 5 seconds
-    staleTime: 0, // Always consider stale so refetchInterval works
+    staleTime: 0,
   });
 }
 
@@ -80,7 +174,6 @@ export function useCommitsForVisibleFiles(
   folderPath: string,
   visibleFiles: MarkdownFileMetadata[],
 ) {
-  // Extract unique date keys from visible files
   const dateKeys = useMemo(() => {
     return Array.from(
       new Set(
@@ -92,7 +185,6 @@ export function useCommitsForVisibleFiles(
     );
   }, [visibleFiles]);
 
-  // Use useQueries to fetch commits for all dates in parallel
   const queries = useQueries({
     queries: dateKeys.map((dateKey) => ({
       queryKey: gitKeys.commits(folderPath, dateKey),
@@ -118,7 +210,6 @@ export function useCommitsForVisibleFiles(
     })),
   });
 
-  // Merge all commits from different dates
   const commitsByDate = useMemo(() => {
     const merged: CommitsByDate = {};
     for (const query of queries) {
@@ -129,10 +220,7 @@ export function useCommitsForVisibleFiles(
     return merged;
   }, [queries]);
 
-  // Check if any query is loading
   const isLoading = queries.some((q) => q.isLoading);
-
-  // Get first error if any
   const error = queries.find((q) => q.error)?.error;
 
   return {
@@ -150,11 +238,9 @@ export function usePrefetchCommitsForDates() {
   const queryClient = useQueryClient();
 
   return async (folderPath: string, dateKeys: string[]) => {
-    // Get repos once
     const repos = await getConnectedRepos(folderPath);
     if (repos.length === 0) return;
 
-    // Filter out dates we already have cached
     const datesToPrefetch = dateKeys.filter((dateKey) => {
       const cached = queryClient.getQueryData(
         gitKeys.commits(folderPath, dateKey),
@@ -164,7 +250,6 @@ export function usePrefetchCommitsForDates() {
 
     if (datesToPrefetch.length === 0) return;
 
-    // Prefetch all dates in parallel
     await Promise.all(
       datesToPrefetch.map((dateKey) =>
         queryClient.prefetchQuery({
@@ -206,11 +291,9 @@ export function useAllLoadedCommits(folderPath: string): CommitsByDate {
   const queryClient = useQueryClient();
   const queryCache = queryClient.getQueryCache();
 
-  // Get all commit queries for this folder
   const allCommitQueries = queryCache.findAll({
     predicate: (query) => {
       const key = query.queryKey;
-      // Match queries that start with ["git", "commits", folderPath]
       return (
         Array.isArray(key) &&
         key.length >= 3 &&
@@ -221,7 +304,6 @@ export function useAllLoadedCommits(folderPath: string): CommitsByDate {
     },
   });
 
-  // Merge all commits from different dates
   const merged: CommitsByDate = {};
   for (const query of allCommitQueries) {
     const data = query.state.data as CommitsByDate | undefined;
@@ -231,16 +313,4 @@ export function useAllLoadedCommits(folderPath: string): CommitsByDate {
   }
 
   return merged;
-}
-
-/**
- * Utility function to get commits for a specific date from the query cache
- * Use this in non-React contexts (like Tiptap extensions)
- */
-export function getCommitsForDateFromCache(
-  queryClient: QueryClient,
-  folderPath: string,
-  dateKey: string,
-): CommitsByDate | undefined {
-  return queryClient.getQueryData(gitKeys.commits(folderPath, dateKey));
 }

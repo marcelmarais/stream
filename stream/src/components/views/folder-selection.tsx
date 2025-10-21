@@ -4,6 +4,7 @@ import { FolderIcon } from "@phosphor-icons/react";
 import { load } from "@tauri-apps/plugin-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useUserStore } from "@/stores/user-store";
 
 const STORAGE_KEY = "stream-last-selected-folder";
 const STORE_FILE = "settings.json";
@@ -19,6 +20,7 @@ export function FolderSelectionScreen({
 }: FolderSelectionScreenProps) {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const setFolderPath = useUserStore((state) => state.setFolderPath);
 
   // Load persisted folder after component mounts (client-side only)
   useEffect(() => {
@@ -30,6 +32,7 @@ export function FolderSelectionScreen({
           setSelectedFolder(savedFolder);
           // Auto-navigate to the persisted folder only if autoNavigate is true
           if (autoNavigate) {
+            setFolderPath(savedFolder);
             onFolderConfirmed(savedFolder);
           }
         }
@@ -42,7 +45,7 @@ export function FolderSelectionScreen({
     };
 
     loadPersistedFolder();
-  }, [onFolderConfirmed, autoNavigate]);
+  }, [onFolderConfirmed, autoNavigate, setFolderPath]);
 
   const handleFolderSelected = async (folderPath: string | null) => {
     setSelectedFolder(folderPath);
@@ -62,6 +65,7 @@ export function FolderSelectionScreen({
 
   const handleContinue = () => {
     if (selectedFolder) {
+      setFolderPath(selectedFolder);
       onFolderConfirmed(selectedFolder);
     }
   };

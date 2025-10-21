@@ -26,11 +26,11 @@ import {
   useFileContentManager,
   useMarkdownMetadata,
 } from "@/hooks/use-markdown-queries";
-import { filterCommits, getCommitsForDate } from "@/ipc/git-reader";
+import { getCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
-import { useGitCommitsStore } from "@/stores/git-commits-store";
+import { useUserStore } from "@/stores/user-store";
 import {
   formatDisplayDate,
   getDateFromFilename,
@@ -119,7 +119,6 @@ export function FileName({
 
 interface FileCardProps {
   file: MarkdownFileMetadata;
-  folderPath: string;
   onToggleFocus?: () => void;
   isFocused?: boolean;
   onEditorFocus?: () => void;
@@ -127,12 +126,10 @@ interface FileCardProps {
 
 export function FileCard({
   file,
-  folderPath,
   onToggleFocus,
   isFocused = false,
   onEditorFocus,
 }: FileCardProps) {
-  // Use Tanstack Query to manage file content
   const {
     content,
     isLoading,
@@ -141,16 +138,13 @@ export function FileCard({
     saveContentImmediate,
   } = useFileContentManager(file.filePath);
 
-  // Get commits for this date from React Query cache
-  const dateKey = getDateKey(file.dateFromFilename);
-  const commitsByDate = useCommitsForDateFromCache(folderPath, dateKey) || {};
-  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
+  const folderPath = useUserStore((state) => state.folderPath);
 
-  const allFileCommits = getCommitsForDate(
-    commitsByDate,
-    file.dateFromFilename,
-  );
-  const commits = filterCommits(allFileCommits, commitFilters);
+  const dateKey = getDateKey(file.dateFromFilename);
+  const commitsByDate =
+    useCommitsForDateFromCache(folderPath || "", dateKey) || {};
+
+  const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
 
   const displayDate = formatDisplayDate(file.dateFromFilename);
 
@@ -185,7 +179,6 @@ export function FileCard({
 
       <MarkdownEditor
         value={content}
-        folderPath={folderPath}
         onChange={handleContentChange}
         onSave={handleSave}
         onFocus={onEditorFocus || (() => {})}
@@ -205,11 +198,6 @@ export function FileCard({
       <Separator className="mt-12" />
     </div>
   );
-}
-
-interface FileReaderHeaderProps {
-  folderPath: string;
-  onScrollToDate: (date: Date) => void;
 }
 
 function CustomDayButton({
@@ -245,20 +233,20 @@ function createDayButtonWithDots(hasMarkdownFile: (date: Date) => boolean) {
   };
 }
 
-export function HeaderNavigation({
-  folderPath,
+export function FileReaderHeader({
   onScrollToDate,
 }: {
-  folderPath: string;
   onScrollToDate: (date: Date) => void;
 }) {
-  // Use Tanstack Query for metadata
+  const folderPath = useUserStore((state) => state.folderPath);
+
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
-    useMarkdownMetadata(folderPath);
+    useMarkdownMetadata(folderPath || "");
   const { mutate: createToday, isPending: creatingToday } =
     useCreateTodayFile();
 
   const handleCreateToday = async () => {
+    if (!folderPath) return;
     createToday(folderPath);
   };
 
@@ -269,7 +257,6 @@ export function HeaderNavigation({
     (file) => file.fileName === todayFileName,
   );
 
-  // Get dates that have markdown files (use filename date if available, otherwise fall back to createdAt)
   const datesWithFiles = new Set(
     allFilesMetadata.map((file) => {
       const dateFromFilename = getDateFromFilename(file.fileName);
@@ -296,82 +283,53 @@ export function HeaderNavigation({
   const DayButton = createDayButtonWithDots(hasMarkdownFile);
 
   return (
-    <div className="flex items-center justify-end">
-      <ButtonGroup>
-        {!todayFileExists && (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={handleCreateToday}
-            disabled={isLoadingMetadata || Boolean(creatingToday)}
-          >
-            <CalendarPlusIcon className="size-4" />
-          </Button>
-        )}
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
+    <div className="!bg-transparent flex-shrink-0">
+      <div className="flex items-center justify-end">
+        <ButtonGroup>
+          {!todayFileExists && (
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              disabled={isLoadingMetadata}
+              variant="secondary"
+              onClick={handleCreateToday}
+              disabled={isLoadingMetadata || Boolean(creatingToday)}
             >
-              <CalendarDotsIcon className="size-4" />
+              <CalendarPlusIcon className="size-4" />
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <Calendar
-              mode="single"
-              onSelect={handleDateSelect}
-              disabled={(date) => !hasMarkdownFile(date)}
-              defaultMonth={new Date()}
-              captionLayout="dropdown"
-              components={{
-                DayButton,
-              }}
-              autoFocus
-            />
-          </PopoverContent>
-        </Popover>
-      </ButtonGroup>
+          )}
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={isLoadingMetadata}
+              >
+                <CalendarDotsIcon className="size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                onSelect={handleDateSelect}
+                disabled={(date) => !hasMarkdownFile(date)}
+                defaultMonth={new Date()}
+                captionLayout="dropdown"
+                components={{
+                  DayButton,
+                }}
+                autoFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </ButtonGroup>
+      </div>
     </div>
   );
 }
 
-// Error display component
-function ErrorDisplay({ error }: { error: string }) {
-  return (
-    <div className="mt-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-destructive">
-      {error}
-    </div>
-  );
-}
-
-// Main header component that combines all sub-components
-export function FileReaderHeader({
-  folderPath,
-  onScrollToDate,
-}: FileReaderHeaderProps) {
-  // Use Tanstack Query for error state
-  const { error } = useMarkdownMetadata(folderPath);
-
-  return (
-    <div className="!bg-transparent flex-shrink-0">
-      <HeaderNavigation
-        folderPath={folderPath}
-        onScrollToDate={onScrollToDate}
-      />
-
-      {error && <ErrorDisplay error={error.message} />}
-    </div>
-  );
-}
-
-// Focused file overlay component
 interface FocusedFileOverlayProps {
   file: MarkdownFileMetadata;
-  folderPath: string;
   onClose: () => void;
   footerComponent: React.ReactElement<typeof FooterComponent>;
   onEditorFocus?: () => void;
@@ -379,12 +337,10 @@ interface FocusedFileOverlayProps {
 
 export function FocusedFileOverlay({
   file,
-  folderPath,
   onClose,
   footerComponent,
   onEditorFocus,
 }: FocusedFileOverlayProps) {
-  // Use Tanstack Query to manage file content
   const {
     content,
     updateContentOptimistically,
@@ -392,24 +348,15 @@ export function FocusedFileOverlay({
     saveContentImmediate,
   } = useFileContentManager(file.filePath);
 
-  // Compute date and display
-  const dateFromFilename = getDateFromFilename(file.fileName);
-  const dateStr = dateFromFilename || getDateKey(file.createdAt);
-  const displayDate = formatDisplayDate(dateStr);
-  const fileDate = dateFromFilename
-    ? new Date(dateFromFilename)
-    : file.createdAt;
+  const folderPath = useUserStore((state) => state.folderPath);
+  const displayDate = formatDisplayDate(file.dateFromFilename);
 
-  // Get commits for this date from React Query cache
-  const dateKey = getDateKey(fileDate);
-  const commitsByDate = useCommitsForDateFromCache(folderPath, dateKey) || {};
-  const commitFilters = useGitCommitsStore((state) => state.commitFilters);
+  const dateKey = getDateKey(file.dateFromFilename);
+  const commitsByDate =
+    useCommitsForDateFromCache(folderPath || "", dateKey) || {};
 
-  // Get commits for this file's date
-  const allFileCommits = getCommitsForDate(commitsByDate, fileDate);
-  const commits = filterCommits(allFileCommits, commitFilters);
+  const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
 
-  // Handlers
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
     saveContentDebounced(newContent);
@@ -432,7 +379,6 @@ export function FocusedFileOverlay({
 
         <MarkdownEditor
           value={content}
-          folderPath={folderPath}
           onChange={handleContentChange}
           onSave={handleSave}
           onFocus={onEditorFocus || (() => {})}

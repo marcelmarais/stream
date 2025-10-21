@@ -12,11 +12,11 @@ import { SlashCommand } from "@/components/slash-command";
 import { gitKeys } from "@/hooks/use-git-queries";
 import { markdownKeys } from "@/hooks/use-markdown-queries";
 import { cn } from "@/lib/utils";
+import { useUserStore } from "@/stores/user-store";
 import { formatMarkdown } from "@/utils/markdown-formatter";
 
 interface MarkdownEditorProps {
   value: string;
-  folderPath: string;
   onChange: (value: string) => void;
   onSave: () => void | Promise<void>;
   onFocus?: () => void;
@@ -26,7 +26,6 @@ interface MarkdownEditorProps {
 
 export function MarkdownEditor({
   value,
-  folderPath,
   onChange,
   onSave,
   onFocus,
@@ -37,6 +36,7 @@ export function MarkdownEditor({
   const isSavingRef = useRef(false);
   const [isAIGenerating, setIsAIGenerating] = useState(false);
   const queryClient = useQueryClient();
+  const folderPath = useUserStore((state) => state.folderPath);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -58,7 +58,6 @@ export function MarkdownEditor({
       SlashCommand.configure({
         onAIGenerationChange: setIsAIGenerating,
         getMetadata: () => {
-          // Find metadata from cached queries
           const queries = queryClient.getQueriesData({
             queryKey: markdownKeys.all,
           });
@@ -75,7 +74,9 @@ export function MarkdownEditor({
           );
         },
         getCommitsForDate: (dateKey: string) => {
-          return queryClient.getQueryData(gitKeys.commits(folderPath, dateKey));
+          return queryClient.getQueryData(
+            gitKeys.commits(folderPath || "", dateKey),
+          );
         },
       }),
     ],

@@ -9,6 +9,7 @@ import {
   GitBranchIcon,
   SparkleIcon,
 } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
 import RepoConnector from "@/components/repo-connector";
@@ -31,22 +32,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import { useApiKeyStore } from "@/stores/api-key-store";
+import { useUserStore } from "@/stores/user-store";
 
 interface SettingsDialogProps {
-  folderPath: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
 function OverviewCard({
-  folderPath,
   fileCount,
   isLoading,
 }: {
-  folderPath: string;
   fileCount: number;
   isLoading: boolean;
 }) {
+  const folderPath = useUserStore((state) => state.folderPath);
   return (
     <Card>
       <CardHeader>
@@ -190,32 +190,22 @@ function AISettingsCard() {
   );
 }
 
-export function SettingsDialog({
-  folderPath,
-  open,
-  onOpenChange,
-}: SettingsDialogProps) {
-  // Get data from Tanstack Query
+export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+  const folderPath = useUserStore((state) => state.folderPath);
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
-    useMarkdownMetadata(folderPath);
+    useMarkdownMetadata(folderPath || "");
 
   const [fetchReposFn, setFetchReposFn] = useState<
     (() => Promise<void>) | null
   >(null);
   const [isFetching, setIsFetching] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>("");
 
-  useEffect(() => {
-    const loadVersion = async () => {
-      try {
-        const version = await getVersion();
-        setAppVersion(version);
-      } catch (error) {
-        console.error("Error loading app version:", error);
-      }
-    };
-    loadVersion();
-  }, []);
+  const { data: appVersion } = useQuery<string>({
+    queryKey: ["appVersion"],
+    queryFn: async () => {
+      return await getVersion();
+    },
+  });
 
   const handleFetchRepos = async () => {
     if (fetchReposFn) {
@@ -237,7 +227,6 @@ export function SettingsDialog({
 
         <div className="space-y-6">
           <OverviewCard
-            folderPath={folderPath}
             fileCount={allFilesMetadata.length}
             isLoading={isLoadingMetadata}
           />
@@ -271,11 +260,13 @@ export function SettingsDialog({
               )}
             </CardHeader>
             <CardContent>
-              <RepoConnector
-                key={folderPath}
-                markdownDirectory={folderPath}
-                onFetchRepos={(fn) => setFetchReposFn(() => fn)}
-              />
+              {folderPath && (
+                <RepoConnector
+                  key={folderPath}
+                  markdownDirectory={folderPath}
+                  onFetchRepos={(fn) => setFetchReposFn(() => fn)}
+                />
+              )}
             </CardContent>
           </Card>
           <AISettingsCard />
