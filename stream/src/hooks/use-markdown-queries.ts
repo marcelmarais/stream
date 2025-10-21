@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { debounce } from "lodash";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ensureTodayMarkdownFile,
   readAllMarkdownFilesMetadata,
@@ -106,12 +106,6 @@ export function useSaveMarkdownFile() {
         );
       }
     },
-    onSettled: (_data, _error, { filePath }) => {
-      // Refetch after success or error
-      queryClient.invalidateQueries({
-        queryKey: markdownKeys.content(filePath),
-      });
-    },
   });
 }
 
@@ -128,6 +122,12 @@ export function useDebouncedSave(filePath: string, delay = 500) {
       }, delay),
     [filePath, delay, mutate],
   );
+
+  useEffect(() => {
+    return () => {
+      debouncedSave.cancel();
+    };
+  }, [debouncedSave]);
 
   return debouncedSave;
 }
