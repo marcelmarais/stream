@@ -7,9 +7,9 @@ import Suggestion from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import type { Instance as TippyInstance } from "tippy.js";
 import tippy from "tippy.js";
+import { useApiKey } from "@/hooks/use-user-data";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
-import { useApiKeyStore } from "@/stores/api-key-store";
 import {
   getYesterdayDateString,
   getYesterdayMarkdownFileName,
@@ -35,7 +35,7 @@ const SlashCommandList = forwardRef<
   SlashCommandProps
 >((props, ref) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const apiKey = useApiKeyStore.getState().apiKey;
+  const { data: apiKey } = useApiKey();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset selection when items change
   useEffect(() => {

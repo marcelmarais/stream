@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Fira_Code, Inter } from "next/font/google";
-import { ApiKeyInitializer } from "@/components/api-key-initializer";
 import { AutoUpdater } from "@/components/auto-updater";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -39,7 +38,6 @@ export default function RootLayout({
             enableSystem={false}
             disableTransitionOnChange
           >
-            <ApiKeyInitializer />
             {children}
             <Toaster />
             <AutoUpdater />

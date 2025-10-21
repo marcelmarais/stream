@@ -31,12 +31,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
-import { useApiKeyStore } from "@/stores/api-key-store";
+import {
+  useApiKey,
+  useRemoveApiKey,
+  useSetApiKey,
+} from "@/hooks/use-user-data";
 import { useUserStore } from "@/stores/user-store";
 
 interface SettingsDialogProps {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 function OverviewCard({
@@ -86,8 +90,9 @@ function OverviewCard({
 }
 
 function AISettingsCard() {
-  const { isLoading, isSaving, apiKey, setApiKey, removeApiKey } =
-    useApiKeyStore();
+  const { data: apiKey, isLoading } = useApiKey();
+  const setApiKeyMutation = useSetApiKey();
+  const removeApiKeyMutation = useRemoveApiKey();
 
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -98,6 +103,8 @@ function AISettingsCard() {
   }, [apiKey]);
 
   const hasChanges = apiKeyInput.trim() !== (apiKey || "");
+  const isSaving =
+    setApiKeyMutation.isPending || removeApiKeyMutation.isPending;
   const canSave = !isSaving && apiKeyInput.trim() !== "" && hasChanges;
 
   return (
@@ -157,12 +164,12 @@ function AISettingsCard() {
 
             <div className="flex gap-2">
               <Button
-                onClick={() => setApiKey(apiKeyInput)}
+                onClick={() => setApiKeyMutation.mutateAsync(apiKeyInput)}
                 disabled={!canSave}
                 size="sm"
                 className="text-xs"
               >
-                {isSaving ? (
+                {setApiKeyMutation.isPending ? (
                   <>
                     <CircleNotchIcon className="size-4 animate-spin" />
                     Saving...
@@ -173,7 +180,7 @@ function AISettingsCard() {
               </Button>
               {apiKey && (
                 <Button
-                  onClick={removeApiKey}
+                  onClick={() => removeApiKeyMutation.mutateAsync()}
                   disabled={isSaving}
                   variant="outline"
                   size="sm"
