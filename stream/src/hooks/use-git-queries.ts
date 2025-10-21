@@ -109,6 +109,19 @@ export function useAddRepo(folderPath: string) {
     },
     onSuccess: (updatedRepos) => {
       queryClient.setQueryData(gitKeys.repos(folderPath), updatedRepos);
+      // Refetch all commit queries immediately with the new repos
+      queryClient.refetchQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key.length >= 3 &&
+            key[0] === "git" &&
+            key[1] === "commits" &&
+            key[2] === folderPath
+          );
+        },
+      });
     },
   });
 }
@@ -128,6 +141,19 @@ export function useRemoveRepo(folderPath: string) {
     },
     onSuccess: (updatedRepos) => {
       queryClient.setQueryData(gitKeys.repos(folderPath), updatedRepos);
+      // Refetch all commit queries immediately with the new repos
+      queryClient.refetchQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key.length >= 3 &&
+            key[0] === "git" &&
+            key[1] === "commits" &&
+            key[2] === folderPath
+          );
+        },
+      });
     },
   });
 }
@@ -141,12 +167,16 @@ export function useCommitsForDate(
   dateKey: string,
   enabled = true,
 ) {
+  const queryClient = useQueryClient();
   const { data: repos = [] } = useConnectedRepos(folderPath);
 
   return useQuery({
     queryKey: gitKeys.commits(folderPath, dateKey),
     queryFn: async () => {
-      if (repos.length === 0) {
+      const latestRepos =
+        queryClient.getQueryData<string[]>(gitKeys.repos(folderPath)) || repos;
+
+      if (latestRepos.length === 0) {
         return {} as CommitsByDate;
       }
 
@@ -157,7 +187,7 @@ export function useCommitsForDate(
       endOfDay.setHours(23, 59, 59, 999);
 
       const range = createDateRange.custom(startOfDay, endOfDay);
-      const repoCommits = await getGitCommitsForRepos(repos, range);
+      const repoCommits = await getGitCommitsForRepos(latestRepos, range);
       return groupCommitsByDate(repoCommits);
     },
     enabled: enabled && repos.length > 0,
@@ -174,6 +204,8 @@ export function useCommitsForVisibleFiles(
   folderPath: string,
   visibleFiles: MarkdownFileMetadata[],
 ) {
+  const queryClient = useQueryClient();
+
   const dateKeys = useMemo(() => {
     return Array.from(
       new Set(
@@ -189,7 +221,9 @@ export function useCommitsForVisibleFiles(
     queries: dateKeys.map((dateKey) => ({
       queryKey: gitKeys.commits(folderPath, dateKey),
       queryFn: async () => {
-        const repos = await getConnectedRepos(folderPath);
+        const repos =
+          queryClient.getQueryData<string[]>(gitKeys.repos(folderPath)) ||
+          (await getConnectedRepos(folderPath));
         if (repos.length === 0) {
           return {} as CommitsByDate;
         }
@@ -238,7 +272,9 @@ export function usePrefetchCommitsForDates() {
   const queryClient = useQueryClient();
 
   return async (folderPath: string, dateKeys: string[]) => {
-    const repos = await getConnectedRepos(folderPath);
+    const repos =
+      queryClient.getQueryData<string[]>(gitKeys.repos(folderPath)) ||
+      (await getConnectedRepos(folderPath));
     if (repos.length === 0) return;
 
     const datesToPrefetch = dateKeys.filter((dateKey) => {
@@ -255,6 +291,10 @@ export function usePrefetchCommitsForDates() {
         queryClient.prefetchQuery({
           queryKey: gitKeys.commits(folderPath, dateKey),
           queryFn: async () => {
+            const latestRepos =
+              queryClient.getQueryData<string[]>(gitKeys.repos(folderPath)) ||
+              repos;
+
             const date = new Date(dateKey);
             const startOfDay = new Date(date);
             startOfDay.setHours(0, 0, 0, 0);
@@ -262,7 +302,7 @@ export function usePrefetchCommitsForDates() {
             endOfDay.setHours(23, 59, 59, 999);
 
             const range = createDateRange.custom(startOfDay, endOfDay);
-            const repoCommits = await getGitCommitsForRepos(repos, range);
+            const repoCommits = await getGitCommitsForRepos(latestRepos, range);
             return groupCommitsByDate(repoCommits);
           },
           staleTime: 5000,
@@ -274,13 +314,42 @@ export function usePrefetchCommitsForDates() {
 
 /**
  * Hook to get a specific date's commits from cache
+ * This subscribes to cache updates and will re-render when the cache changes
  */
 export function useCommitsForDateFromCache(
   folderPath: string,
   dateKey: string,
 ): CommitsByDate | undefined {
   const queryClient = useQueryClient();
-  return queryClient.getQueryData(gitKeys.commits(folderPath, dateKey));
+
+  // Use useQuery to subscribe to cache updates, but with initialData from cache
+  const result = useQuery({
+    queryKey: gitKeys.commits(folderPath, dateKey),
+    queryFn: async () => {
+      // This queryFn should rarely run since data is prefetched elsewhere
+      const repos =
+        queryClient.getQueryData<string[]>(gitKeys.repos(folderPath)) ||
+        (await getConnectedRepos(folderPath));
+
+      if (repos.length === 0) {
+        return {} as CommitsByDate;
+      }
+
+      const date = new Date(dateKey);
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const range = createDateRange.custom(startOfDay, endOfDay);
+      const repoCommits = await getGitCommitsForRepos(repos, range);
+      return groupCommitsByDate(repoCommits);
+    },
+    staleTime: 5000,
+    refetchInterval: false, // Don't auto-refetch, rely on prefetch
+  });
+
+  return result.data;
 }
 
 /**
