@@ -14,6 +14,7 @@ export interface GitCommit {
   repo_path: string;
   files_changed: string[];
   branches: string[]; // Branches that contain this commit
+  url?: string; // URL to commit on remote (if available)
 }
 
 export interface RepoCommits {

@@ -27,7 +27,7 @@ export function useSaveShortcut(
 
   useEffect(() => {
     const handleSaveAndFormat = async () => {
-      if (isSavingRef.current || !editor) return;
+      if (isSavingRef.current || !editor || !editor.isFocused) return;
 
       isSavingRef.current = true;
 

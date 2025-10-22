@@ -12,19 +12,14 @@ import { useUserStore } from "@/stores/user-store";
 
 interface FooterProps {
   onFolderClick: () => void;
-  settingsOpen: boolean;
-  onSettingsOpenChange: (open: boolean) => void;
+  folderPath: string;
 }
 
-export function Footer({
-  onFolderClick,
-  settingsOpen,
-  onSettingsOpenChange,
-}: FooterProps) {
-  const folderPath = useUserStore((state) => state.folderPath);
-
-  const { data: connectedRepos = [] } = useConnectedRepos(folderPath || "");
-  const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath || "");
+export function Footer({ onFolderClick, folderPath }: FooterProps) {
+  const settingsOpen = useUserStore((state) => state.settingsOpen);
+  const setSettingsOpen = useUserStore((state) => state.setSettingsOpen);
+  const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
+  const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath);
   const fileCount = allFilesMetadata.length;
   const connectedReposCount = connectedRepos.length;
 
@@ -68,14 +63,14 @@ export function Footer({
             variant="ghost"
             size="icon"
             className="h-auto w-auto"
-            onClick={() => onSettingsOpenChange(true)}
+            onClick={() => setSettingsOpen(true)}
             title="Open settings"
           >
             <GearIcon className="size-3" />
           </Button>
         </div>
       </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={onSettingsOpenChange} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }
