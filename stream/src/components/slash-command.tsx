@@ -1,5 +1,6 @@
 "use client";
 
+import { GearIcon } from "@phosphor-icons/react";
 import type { Editor } from "@tiptap/react";
 import { Extension, ReactRenderer } from "@tiptap/react";
 import type { SuggestionOptions } from "@tiptap/suggestion";
@@ -7,9 +8,11 @@ import Suggestion from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import type { Instance as TippyInstance } from "tippy.js";
 import tippy from "tippy.js";
+import { Button } from "@/components/ui/button";
 import { useApiKey } from "@/hooks/use-user-data";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
+import { useUserStore } from "@/stores/user-store";
 import {
   getYesterdayDateString,
   getYesterdayMarkdownFileName,
@@ -34,6 +37,8 @@ const SlashCommandList = forwardRef<
   { onKeyDown: (props: { event: KeyboardEvent }) => boolean },
   SlashCommandProps
 >((props, ref) => {
+  const setSettingsOpen = useUserStore((state) => state.setSettingsOpen);
+  const settingsOpen = useUserStore((state) => state.settingsOpen);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const { data: apiKey } = useApiKey();
 
@@ -84,15 +89,22 @@ const SlashCommandList = forwardRef<
     },
   }));
 
+  if (settingsOpen) return null;
+
   if (!apiKey)
     return (
-      <div className="z-50 min-w-[220px] rounded-xl border bg-popover p-1 shadow-xl">
-        <div className="flex flex-col gap-2 px-3 py-2 text-muted-foreground">
-          <span className="text-xs">
-            Configure your API key in settings to use AI features
-          </span>
-        </div>
-      </div>
+      <Button
+        variant="outline"
+        className="min-w-[220px] cursor-pointer gap-2 rounded-xl border bg-popover p-4 text-muted-foreground text-xs"
+        onClick={() => setSettingsOpen(true)}
+      >
+        <GearIcon className="h-4 w-4 shrink-0" />
+        <span className="flex-1">
+          Configure your API key in{" "}
+          <span className="font-semibold underline">settings</span> to use AI
+          features
+        </span>
+      </Button>
     );
 
   return (
