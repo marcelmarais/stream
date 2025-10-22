@@ -227,6 +227,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       <DialogContent
         className="max-h-[80vh] min-w-[70vw] overflow-y-scroll"
         onOpenAutoFocus={(e) => e.preventDefault()}
+        aria-describedby="settings-dialog-description"
       >
         <DialogHeader className="pb-6">
           <DialogTitle className="text-2xl">Settings</DialogTitle>

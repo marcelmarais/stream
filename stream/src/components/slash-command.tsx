@@ -233,7 +233,6 @@ function getAICommands(
           const { doc } = state;
           let loadingPos = -1;
 
-          // Locate loading text position
           doc.descendants((node, pos) => {
             if (node.isText && node.text?.includes(loadingText)) {
               loadingPos = pos;
@@ -242,7 +241,6 @@ function getAICommands(
             return true;
           });
 
-          // Replace loading with prefix
           if (loadingPos !== -1) {
             editor
               .chain()
@@ -255,7 +253,6 @@ function getAICommands(
               .run();
           }
 
-          // Buffer streaming tokens and flush periodically
           let buffer = "";
           let flushTimer: number | null = null;
           const flush = () => {
@@ -271,7 +268,6 @@ function getAICommands(
             }, 60);
           };
 
-          // Stream the summary
           await streamYesterdaySummary(
             markdownContent,
             yesterdayCommits,
@@ -281,7 +277,6 @@ function getAICommands(
             },
           );
 
-          // Final flush and suffix
           flush();
           editor.chain().focus().insertContent("\n\n").run();
 

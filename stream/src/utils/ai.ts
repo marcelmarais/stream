@@ -1,5 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
+import { toast } from "sonner";
 import { getApiKey } from "@/ipc/settings";
 import type { GitCommit } from "../ipc/git-reader";
 
@@ -82,16 +83,22 @@ Example format:
 
 Return ONLY the markdown list, no additional commentary or explanation.`;
 
-    const result = await streamText({
+    const result = streamText({
       model: google("gemini-2.5-flash"),
       prompt,
+      onError: (error) => {
+        toast.error(`Error calling Gemini API: ${error.error}`, {
+          duration: 6000,
+        });
+      },
     });
 
     for await (const delta of result.textStream) {
       onToken(delta);
     }
   } catch (error) {
-    console.error("Error streaming summary:", error);
-    throw error;
+    toast.error(`Error calling Gemini API: ${error}`, {
+      duration: 6000,
+    });
   }
 }
