@@ -1,6 +1,7 @@
 "use client";
 
-import { GitBranchIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, GitBranchIcon } from "@phosphor-icons/react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
 import {
   Accordion,
@@ -69,6 +70,7 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
               <div className="max-h-[250px] space-y-2 overflow-y-scroll">
                 {commits.map((commit) => {
                   const time = new Date(commit.timestamp).toLocaleTimeString();
+                  const url = commit.url;
                   return (
                     <div
                       key={commit.id}
@@ -76,9 +78,28 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
                     >
                       <div className="mb-1 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-muted-foreground text-xs">
-                            {getShortCommitId(commit.id)}
-                          </span>
+                          {url ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                openUrl(url);
+                              }}
+                              className="inline-flex cursor-pointer items-center gap-1 font-mono text-muted-foreground text-xs transition-colors hover:text-foreground"
+                              title="View commit on remote"
+                            >
+                              <span className="leading-none">
+                                {getShortCommitId(commit.id)}
+                              </span>
+                              <ArrowSquareOutIcon
+                                className="mb-0.25 h-3 w-3"
+                                weight="regular"
+                              />
+                            </button>
+                          ) : (
+                            <span className="font-mono text-muted-foreground text-xs">
+                              {getShortCommitId(commit.id)}
+                            </span>
+                          )}
                           <span className="text-muted-foreground text-xs">
                             {time}
                           </span>

@@ -31,6 +31,7 @@ pub struct GitCommit {
     pub repo_path: String,
     pub files_changed: Vec<String>,
     pub branches: Vec<String>, // Branches that contain this commit
+    pub url: Option<String>, // URL to commit on remote (if available)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,12 +39,6 @@ pub struct RepoCommits {
     pub repo_path: String,
     pub commits: Vec<GitCommit>,
     pub error: Option<String>,
-}
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
 // Compile regex once on first use for efficient reuse
@@ -223,10 +218,11 @@ fn time_to_iso_date(time: Time) -> String {
     dt.format("%Y-%m-%d").to_string()
 }
 
-fn get_branches_for_commit(repo: &Repository, commit_oid: git2::Oid) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+fn get_branches_for_commit(repo: &Repository, commit_oid: git2::Oid) -> Result<(Vec<String>, bool), Box<dyn std::error::Error>> {
     let mut all_branches = std::collections::HashSet::new();
     let mut main_branches = std::collections::HashSet::new();
     let mut feature_branches = std::collections::HashSet::new();
+    let mut found_on_remote = false;
     
     // Check local branches
     let local_branches = repo.branches(Some(git2::BranchType::Local))?;
@@ -267,6 +263,8 @@ fn get_branches_for_commit(repo: &Repository, commit_oid: git2::Oid) -> Result<V
                 for oid in revwalk {
                     let oid = oid?;
                     if oid == commit_oid {
+                        found_on_remote = true; // Mark that we found it on a remote branch
+                        
                         // Only add if we don't already have the local equivalent
                         let normalized = normalize_branch_name(name);
                         if !all_branches.contains(&normalized) {
@@ -309,7 +307,7 @@ fn get_branches_for_commit(repo: &Repository, commit_oid: git2::Oid) -> Result<V
         result.push("unknown".to_string());
     }
     
-    Ok(result)
+    Ok((result, found_on_remote))
 }
 
 fn normalize_branch_name(branch_name: &str) -> String {
@@ -436,6 +434,63 @@ async fn get_git_commits_for_repos(
     Ok(results)
 }
 
+/// Get the remote URL for a repository (prefers 'origin' remote)
+fn get_remote_url(repo: &Repository) -> Option<String> {
+    // Try to get 'origin' remote first
+    if let Ok(remote) = repo.find_remote("origin") {
+        if let Some(url) = remote.url() {
+            return Some(url.to_string());
+        }
+    }
+    
+    // Fallback: get first available remote
+    if let Ok(remotes) = repo.remotes() {
+        for remote_name in remotes.iter() {
+            if let Some(remote_name) = remote_name {
+                if let Ok(remote) = repo.find_remote(remote_name) {
+                    if let Some(url) = remote.url() {
+                        return Some(url.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    None
+}
+
+/// Convert a git remote URL to a web URL for a specific commit
+fn build_commit_url(remote_url: &str, commit_id: &str) -> Option<String> {
+    // Handle SSH URLs (e.g., git@github.com:owner/repo.git)
+    let url = if remote_url.starts_with("git@") {
+        // Convert git@host:owner/repo.git to https://host/owner/repo
+        let parts: Vec<&str> = remote_url.split(':').collect();
+        if parts.len() != 2 {
+            return None;
+        }
+        let host = parts[0].replace("git@", "");
+        let path = parts[1].trim_end_matches(".git");
+        format!("https://{}/{}", host, path)
+    } else if remote_url.starts_with("https://") || remote_url.starts_with("http://") {
+        // Handle HTTPS URLs
+        remote_url.trim_end_matches(".git").to_string()
+    } else {
+        return None;
+    };
+    
+    // Build commit URL based on hosting service
+    if url.contains("github.com") {
+        Some(format!("{}/commit/{}", url, commit_id))
+    } else if url.contains("gitlab.com") || url.contains("gitlab.") {
+        Some(format!("{}/-/commit/{}", url, commit_id))
+    } else if url.contains("bitbucket.org") {
+        Some(format!("{}/commits/{}", url, commit_id))
+    } else {
+        // Generic format (works for many git hosting services)
+        Some(format!("{}/commit/{}", url, commit_id))
+    }
+}
+
 fn get_repo_commits(repo_path: &str, start_seconds: i64, end_seconds: i64) -> Result<Vec<GitCommit>, Box<dyn std::error::Error>> {
     let repo = Repository::open(repo_path)?;
     let mut revwalk = repo.revwalk()?;
@@ -444,6 +499,9 @@ fn get_repo_commits(repo_path: &str, start_seconds: i64, end_seconds: i64) -> Re
     revwalk.push_glob("refs/heads/*")?;  // All local branches
     revwalk.push_glob("refs/remotes/*")?; // All remote branches
     revwalk.set_sorting(git2::Sort::TIME)?;
+    
+    // Get remote URL once for all commits
+    let remote_url = get_remote_url(&repo);
     
     let mut commits = Vec::new();
     let mut seen_commits = std::collections::HashSet::new();
@@ -487,11 +545,19 @@ fn get_repo_commits(repo_path: &str, start_seconds: i64, end_seconds: i64) -> Re
                 )?;
             }
             
-            // Get branches that contain this commit (simplified approach)
-            let branches = get_branches_for_commit(&repo, oid)?;
+            // Get branches that contain this commit and check if it's on remote
+            let (branches, is_on_remote) = get_branches_for_commit(&repo, oid)?;
+            
+            // Build commit URL only if commit exists on remote AND remote URL exists
+            let commit_id = format!("{}", oid);
+            let url = if is_on_remote {
+                remote_url.as_ref().and_then(|remote| build_commit_url(remote, &commit_id))
+            } else {
+                None
+            };
             
             let git_commit = GitCommit {
-                id: format!("{}", oid),
+                id: commit_id,
                 message: message.lines().next().unwrap_or("").to_string(), // First line only
                 author_name: author.name().unwrap_or("Unknown").to_string(),
                 author_email: author.email().unwrap_or("").to_string(),
@@ -500,6 +566,7 @@ fn get_repo_commits(repo_path: &str, start_seconds: i64, end_seconds: i64) -> Re
                 repo_path: repo_path.to_string(),
                 files_changed,
                 branches,
+                url,
             };
             
             commits.push(git_commit);
@@ -550,7 +617,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, read_markdown_files_metadata, read_markdown_files_content, get_git_commits_for_repos, fetch_repos, set_file_location_metadata])
+        .invoke_handler(tauri::generate_handler![read_markdown_files_metadata, read_markdown_files_content, get_git_commits_for_repos, fetch_repos, set_file_location_metadata])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
