@@ -117,14 +117,16 @@ export function FileName({
 
 interface FileCardProps {
   file: MarkdownFileMetadata;
-  onToggleFocus?: () => void;
-  isFocused?: boolean;
-  onEditorFocus?: () => void;
+  folderPath: string;
+  onToggleFocus: () => void;
+  isFocused: boolean;
+  onEditorFocus: () => void;
   showSeparator: boolean;
 }
 
 export function FileCard({
   file,
+  folderPath,
   onToggleFocus,
   isFocused = false,
   onEditorFocus,
@@ -138,14 +140,10 @@ export function FileCard({
     saveContentImmediate,
   } = useFileContentManager(file.filePath);
 
-  const folderPath = useUserStore((state) => state.folderPath);
-
   const dateKey = getDateKey(file.dateFromFilename);
-  const { data: commitsByDate = {} } = useCommitsForDate(
-    folderPath || "",
-    dateKey,
-    { autoRefresh: true },
-  );
+  const { data: commitsByDate = {} } = useCommitsForDate(folderPath, dateKey, {
+    autoRefresh: true,
+  });
 
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
 
@@ -154,10 +152,6 @@ export function FileCard({
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
     saveContentDebounced(newContent);
-  };
-
-  const handleSave = async () => {
-    await saveContentImmediate(content);
   };
 
   if (isLoading) {
@@ -175,7 +169,7 @@ export function FileCard({
       <DateHeader
         displayDate={displayDate}
         isFocused={isFocused}
-        onToggleFocus={onToggleFocus || (() => {})}
+        onToggleFocus={onToggleFocus}
         country={file.country}
         city={file.city}
       />
@@ -183,8 +177,8 @@ export function FileCard({
       <MarkdownEditor
         value={content}
         onChange={handleContentChange}
-        onSave={handleSave}
-        onFocus={onEditorFocus || (() => {})}
+        onSave={async () => await saveContentImmediate(content)}
+        onFocus={onEditorFocus}
         isEditable={!isFocused}
       />
 
@@ -236,24 +230,18 @@ function createDayButtonWithDots(hasMarkdownFile: (date: Date) => boolean) {
   };
 }
 
-export function FileReaderHeader({
+export function Header({
   onScrollToDate,
+  folderPath,
 }: {
   onScrollToDate: (date: Date) => void;
+  folderPath: string;
 }) {
-  const folderPath = useUserStore((state) => state.folderPath);
-
-  const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
-    useMarkdownMetadata(folderPath || "");
-  const { mutate: createToday, isPending: creatingToday } =
-    useCreateTodayFile();
-
-  const handleCreateToday = async () => {
-    if (!folderPath) return;
-    createToday(folderPath);
-  };
-
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
+    useMarkdownMetadata(folderPath);
+  const { mutateAsync: createToday, isPending: creatingToday } =
+    useCreateTodayFile();
 
   const todayFileName = getTodayMarkdownFileName();
   const todayFileExists = allFilesMetadata.some(
@@ -294,7 +282,7 @@ export function FileReaderHeader({
               type="button"
               size="sm"
               variant="secondary"
-              onClick={handleCreateToday}
+              onClick={async () => await createToday(folderPath)}
               disabled={isLoadingMetadata || Boolean(creatingToday)}
             >
               <CalendarPlusIcon className="size-4" />

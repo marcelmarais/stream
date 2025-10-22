@@ -6,8 +6,8 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
 import {
   FileCard,
-  FileReaderHeader,
   FocusedFileOverlay,
+  Header,
 } from "@/components/markdown-file-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +36,6 @@ export function FileReaderScreen({
 }: FileReaderScreenProps) {
   useConnectedRepos(folderPath);
   const [showLoading, setShowLoading] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,
   );
@@ -109,6 +108,7 @@ export function FileReaderScreen({
       return (
         <FileCard
           file={file}
+          folderPath={folderPath}
           onToggleFocus={() =>
             setFocusedFile(
               focusedFile?.filePath === file.filePath ? null : file,
@@ -120,7 +120,7 @@ export function FileReaderScreen({
         />
       );
     },
-    [allFilesMetadata, focusedFile, setActiveEditingFile],
+    [allFilesMetadata, focusedFile, setActiveEditingFile, folderPath],
   );
 
   useEffect(() => {
@@ -159,7 +159,10 @@ export function FileReaderScreen({
           )}
 
           <div className="flex flex-1 justify-end">
-            <FileReaderHeader onScrollToDate={handleScrollToDate} />
+            <Header
+              onScrollToDate={handleScrollToDate}
+              folderPath={folderPath}
+            />
           </div>
         </div>
       </div>
@@ -171,7 +174,7 @@ export function FileReaderScreen({
             totalCount={allFilesMetadata.length}
             itemContent={renderItem}
             rangeChanged={handleRangeChanged}
-            overscan={2}
+            overscan={25}
             className="h-full"
           />
         </div>
@@ -181,11 +184,7 @@ export function FileReaderScreen({
         <EmptyState folderPath={folderPath} />
       )}
 
-      <Footer
-        onFolderClick={onBack}
-        settingsOpen={settingsOpen}
-        onSettingsOpenChange={setSettingsOpen}
-      />
+      <Footer onFolderClick={onBack} folderPath={folderPath} />
 
       {focusedFile && (
         <FocusedFileOverlay
@@ -193,11 +192,7 @@ export function FileReaderScreen({
           onClose={() => setFocusedFile(null)}
           onEditorFocus={() => setActiveEditingFile(focusedFile)}
           footerComponent={
-            <Footer
-              onFolderClick={onBack}
-              settingsOpen={settingsOpen}
-              onSettingsOpenChange={setSettingsOpen}
-            />
+            <Footer onFolderClick={onBack} folderPath={folderPath} />
           }
         />
       )}

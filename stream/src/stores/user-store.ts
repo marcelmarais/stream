@@ -5,12 +5,15 @@ import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 
 /**
  * Global user state store for UI preferences and current context
- * Server state (data fetching) is handled by Tanstack Query
+ * Server state is handled by Tanstack Query
  */
 interface UserState {
   // Current context
   folderPath: string | null;
   activeEditingFile: MarkdownFileMetadata | null;
+
+  // UI state
+  settingsOpen: boolean;
 
   // Filters
   commitFilters: CommitFilters;
@@ -18,6 +21,7 @@ interface UserState {
   // Actions
   setFolderPath: (path: string | null) => void;
   setActiveEditingFile: (file: MarkdownFileMetadata | null) => void;
+  setSettingsOpen: (open: boolean) => void;
   setCommitFilters: (filters: CommitFilters) => void;
   reset: () => void;
 }
@@ -25,6 +29,7 @@ interface UserState {
 const initialState = {
   folderPath: null,
   activeEditingFile: null,
+  settingsOpen: false,
   commitFilters: {
     authors: [],
     repos: [],
@@ -41,6 +46,8 @@ export const useUserStore = create<UserState>()(
 
       setActiveEditingFile: (file) => set({ activeEditingFile: file }),
 
+      setSettingsOpen: (open) => set({ settingsOpen: open }),
+
       setCommitFilters: (filters) => set({ commitFilters: filters }),
 
       reset: () => set(initialState),
@@ -48,12 +55,8 @@ export const useUserStore = create<UserState>()(
     {
       name: "user-state",
       partialize: (state) => ({
-        // Only persist folder path, not active editing file or filters
         folderPath: state.folderPath,
       }),
     },
   ),
 );
-
-// Legacy export for backward compatibility during migration
-export const useGitCommitsStore = useUserStore;
