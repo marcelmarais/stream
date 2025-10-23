@@ -6,9 +6,17 @@ import {
   EyeIcon,
   EyeSlashIcon,
   MapPinIcon,
+  PenIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { type ComponentProps, useState } from "react";
+import {
+  type ComponentProps,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import CommitOverlay from "@/components/commit-overlay";
 import type { Footer as FooterComponent } from "@/components/footer";
@@ -62,6 +70,11 @@ export function DateHeader({
   const [editCity, setEditCity] = useState(city || "");
   const [editCountry, setEditCountry] = useState(country || "");
 
+  const cityMirrorRef = useRef<HTMLSpanElement>(null);
+  const countryMirrorRef = useRef<HTMLSpanElement>(null);
+  const [cityWidthPx, setCityWidthPx] = useState<number>(0);
+  const [countryWidthPx, setCountryWidthPx] = useState<number>(0);
+
   const { mutate: updateLocation, isPending } =
     useUpdateFileLocation(folderPath);
 
@@ -113,6 +126,23 @@ export function DateHeader({
     }
   };
 
+  const updateMeasuredWidths = useCallback(() => {
+    const cityMeasured = (cityMirrorRef.current?.offsetWidth || 0) - 2; // small buffer for caret
+    const countryMeasured = (countryMirrorRef.current?.offsetWidth || 0) + 2;
+    setCityWidthPx(cityMeasured);
+    setCountryWidthPx(countryMeasured);
+  }, [editCity, editCountry, isEditing]);
+
+  useLayoutEffect(() => {
+    updateMeasuredWidths();
+  }, [updateMeasuredWidths]);
+
+  useEffect(() => {
+    const onResize = () => updateMeasuredWidths();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [updateMeasuredWidths]);
+
   return (
     <div className="flex flex-col items-start gap-2.5 pb-2">
       <button
@@ -130,15 +160,58 @@ export function DateHeader({
         )}
       </button>
       <div className="group flex items-center justify-start gap-1">
-        <MapPinIcon className="size-3.5 flex-shrink-0 text-muted-foreground/60" />
-        <div className="flex items-center">
+        <MapPinIcon
+          className={cn(
+            "size-3.5 flex-shrink-0 text-muted-foreground/60 group-hover:hidden",
+            isEditing && "hidden",
+          )}
+        />
+        <PenIcon
+          className={cn(
+            "hidden size-3.5 flex-shrink-0 text-muted-foreground/60 group-hover:block",
+            isEditing && "block",
+          )}
+        />
+        <div className="relative flex items-center text-sm">
+          {/* Hidden mirrors to measure text width precisely */}
+          <span
+            ref={cityMirrorRef}
+            aria-hidden
+            style={{
+              // Match input typography for accurate measurement
+              position: "absolute",
+              zIndex: -1,
+              visibility: "hidden",
+              whiteSpace: "pre",
+              font: "inherit",
+              padding: 0,
+              border: 0,
+            }}
+          >
+            {`${editCity || "City"} `}
+          </span>
+          <span
+            ref={countryMirrorRef}
+            aria-hidden
+            style={{
+              position: "absolute",
+              zIndex: -1,
+              visibility: "hidden",
+              whiteSpace: "pre",
+              font: "inherit",
+              padding: 0,
+              border: 0,
+            }}
+          >
+            {`${editCountry || "Country"} `}
+          </span>
           <Input
             value={editCity}
             onChange={(e) => setEditCity(e.target.value)}
             onKeyDown={handleKeyDown}
             onClick={!isEditing ? handleStartEdit : undefined}
             placeholder="City"
-            style={{ width: `${Math.max(editCity.length, 4) * 0.55}em` }}
+            style={{ width: cityWidthPx ? `${cityWidthPx}px` : undefined }}
             className="m-0 h-6 min-w-0 cursor-text border-none bg-transparent p-0 text-muted-foreground/60 text-sm shadow-none transition-colors placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
             autoFocus={isEditing}
             disabled={isPending}
@@ -151,7 +224,9 @@ export function DateHeader({
             onKeyDown={handleKeyDown}
             onClick={!isEditing ? handleStartEdit : undefined}
             placeholder="Country"
-            style={{ width: `${Math.max(editCountry.length, 7) * 0.55}em` }}
+            style={{
+              width: countryWidthPx ? `${countryWidthPx}px` : undefined,
+            }}
             className="m-0 h-6 min-w-0 cursor-text border-none bg-transparent p-0 text-muted-foreground/60 text-sm shadow-none transition-colors placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
             disabled={isPending}
             readOnly={!isEditing}
