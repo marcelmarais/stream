@@ -5,6 +5,7 @@ import {
   ensureTodayMarkdownFile,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
+  setFileLocationMetadata,
   writeMarkdownFileContent,
 } from "@/ipc/markdown-reader";
 
@@ -216,4 +217,64 @@ export function usePrefetchFileContents() {
       queryClient.setQueryData(markdownKeys.content(path), content);
     }
   };
+}
+
+/**
+ * Hook to update file location metadata with optimistic updates
+ */
+export function useUpdateFileLocation(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      filePath,
+      country,
+      city,
+    }: {
+      filePath: string;
+      country: string;
+      city: string;
+    }) => {
+      await setFileLocationMetadata(filePath, country, city);
+      return { filePath, country, city };
+    },
+    onMutate: async ({ filePath, country, city }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: markdownKeys.metadata(folderPath),
+      });
+
+      // Snapshot the previous metadata
+      const previousMetadata = queryClient.getQueryData<
+        Awaited<ReturnType<typeof readAllMarkdownFilesMetadata>>
+      >(markdownKeys.metadata(folderPath));
+
+      // Optimistically update the metadata
+      queryClient.setQueryData<
+        Awaited<ReturnType<typeof readAllMarkdownFilesMetadata>>
+      >(markdownKeys.metadata(folderPath), (old) => {
+        if (!old) return old;
+        return old.map((file) =>
+          file.filePath === filePath ? { ...file, country, city } : file,
+        );
+      });
+
+      return { previousMetadata };
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback on error
+      if (context?.previousMetadata) {
+        queryClient.setQueryData(
+          markdownKeys.metadata(folderPath),
+          context.previousMetadata,
+        );
+      }
+    },
+    onSuccess: () => {
+      // Refetch metadata to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.metadata(folderPath),
+      });
+    },
+  });
 }

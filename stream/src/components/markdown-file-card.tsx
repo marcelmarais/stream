@@ -1,10 +1,12 @@
 import {
   CalendarDotsIcon,
   CalendarPlusIcon,
+  CheckIcon,
   CopyIcon,
   EyeIcon,
   EyeSlashIcon,
   MapPinIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
@@ -14,6 +16,7 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -25,6 +28,7 @@ import {
   useCreateTodayFile,
   useFileContentManager,
   useMarkdownMetadata,
+  useUpdateFileLocation,
 } from "@/hooks/use-markdown-queries";
 import { getCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
@@ -43,15 +47,71 @@ export function DateHeader({
   onToggleFocus,
   country,
   city,
+  filePath,
+  folderPath,
 }: {
   displayDate: string;
   isFocused: boolean;
   onToggleFocus: () => void;
   country?: string;
   city?: string;
+  filePath: string;
+  folderPath: string;
 }) {
-  const hasLocation = city || country;
-  const locationText = [city, country].filter(Boolean).join(", ");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editCity, setEditCity] = useState(city || "");
+  const [editCountry, setEditCountry] = useState(country || "");
+
+  const { mutate: updateLocation, isPending } =
+    useUpdateFileLocation(folderPath);
+
+  const handleStartEdit = () => {
+    setEditCity(city || "");
+    setEditCountry(country || "");
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setEditCity(city || "");
+    setEditCountry(country || "");
+  };
+
+  const handleSave = () => {
+    const trimmedCity = editCity.trim();
+    const trimmedCountry = editCountry.trim();
+
+    if (!trimmedCity || !trimmedCountry) {
+      toast.error("Both city and country are required");
+      return;
+    }
+
+    updateLocation(
+      {
+        filePath,
+        country: trimmedCountry,
+        city: trimmedCity,
+      },
+      {
+        onSuccess: () => {
+          setIsEditing(false);
+          toast.success("Location updated");
+        },
+        onError: () => {
+          toast.error("Failed to update location");
+        },
+      },
+    );
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === "Escape") {
+      handleCancel();
+    }
+  };
 
   return (
     <div className="flex flex-col items-start gap-2.5 pb-2">
@@ -69,12 +129,59 @@ export function DateHeader({
           <EyeIcon className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
         )}
       </button>
-      {hasLocation && (
-        <div className="flex items-center gap-1.5 text-muted-foreground/60 text-sm">
-          <MapPinIcon className="size-3.5" />
-          <span>{locationText}</span>
+      <div className="group flex items-center justify-start gap-1">
+        <MapPinIcon className="size-3.5 flex-shrink-0 text-muted-foreground/60" />
+        <div className="flex items-center">
+          <Input
+            value={editCity}
+            onChange={(e) => setEditCity(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onClick={!isEditing ? handleStartEdit : undefined}
+            placeholder="City"
+            style={{ width: `${Math.max(editCity.length, 4) * 0.55}em` }}
+            className="m-0 h-6 min-w-0 cursor-text border-none bg-transparent p-0 text-muted-foreground/60 text-sm shadow-none transition-colors placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
+            autoFocus={isEditing}
+            disabled={isPending}
+            readOnly={!isEditing}
+          />
+          <span className="text-muted-foreground/60 text-sm">,&nbsp;</span>
+          <Input
+            value={editCountry}
+            onChange={(e) => setEditCountry(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onClick={!isEditing ? handleStartEdit : undefined}
+            placeholder="Country"
+            style={{ width: `${Math.max(editCountry.length, 7) * 0.55}em` }}
+            className="m-0 h-6 min-w-0 cursor-text border-none bg-transparent p-0 text-muted-foreground/60 text-sm shadow-none transition-colors placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
+            disabled={isPending}
+            readOnly={!isEditing}
+          />
         </div>
-      )}
+        {isEditing && (
+          <div className="ml-1 flex items-center gap-0.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground/60"
+              onClick={handleSave}
+              disabled={isPending}
+            >
+              <CheckIcon className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground/60"
+              onClick={handleCancel}
+              disabled={isPending}
+            >
+              <XIcon className="size-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -172,6 +279,8 @@ export function FileCard({
         onToggleFocus={onToggleFocus}
         country={file.country}
         city={file.city}
+        filePath={file.filePath}
+        folderPath={folderPath}
       />
 
       <MarkdownEditor
@@ -369,6 +478,8 @@ export function FocusedFileOverlay({
           onToggleFocus={onClose}
           country={file.country}
           city={file.city}
+          filePath={file.filePath}
+          folderPath={folderPath || ""}
         />
 
         <MarkdownEditor
