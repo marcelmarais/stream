@@ -189,6 +189,7 @@ export function FileReaderScreen({
       {focusedFile && (
         <FocusedFileOverlay
           file={focusedFile}
+          folderPath={folderPath}
           onClose={() => setFocusedFile(null)}
           onEditorFocus={() => setActiveEditingFile(focusedFile)}
           footerComponent={

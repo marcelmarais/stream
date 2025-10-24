@@ -1,30 +1,17 @@
 import {
   CalendarDotsIcon,
   CalendarPlusIcon,
-  CheckIcon,
   CopyIcon,
-  EyeIcon,
-  EyeSlashIcon,
-  MapPinIcon,
-  PenIcon,
-  XIcon,
 } from "@phosphor-icons/react";
-import {
-  type ComponentProps,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
 import CommitOverlay from "@/components/commit-overlay";
+import { DateHeader } from "@/components/date-header";
 import type { Footer as FooterComponent } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -36,230 +23,12 @@ import {
   useCreateTodayFile,
   useFileContentManager,
   useMarkdownMetadata,
-  useUpdateFileLocation,
 } from "@/hooks/use-markdown-queries";
 import { getCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
-import { useUserStore } from "@/stores/user-store";
-import {
-  formatDisplayDate,
-  getDateFromFilename,
-  getDateKey,
-} from "@/utils/date-utils";
-
-export function DateHeader({
-  displayDate,
-  isFocused,
-  onToggleFocus,
-  country,
-  city,
-  filePath,
-  folderPath,
-}: {
-  displayDate: string;
-  isFocused: boolean;
-  onToggleFocus: () => void;
-  country?: string;
-  city?: string;
-  filePath: string;
-  folderPath: string;
-}) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editCity, setEditCity] = useState(city || "");
-  const [editCountry, setEditCountry] = useState(country || "");
-
-  const cityMirrorRef = useRef<HTMLSpanElement>(null);
-  const countryMirrorRef = useRef<HTMLSpanElement>(null);
-  const [cityWidthPx, setCityWidthPx] = useState<number>(0);
-  const [countryWidthPx, setCountryWidthPx] = useState<number>(0);
-
-  const { mutate: updateLocation, isPending } =
-    useUpdateFileLocation(folderPath);
-
-  const handleStartEdit = () => {
-    setEditCity(city || "");
-    setEditCountry(country || "");
-    setIsEditing(true);
-  };
-
-  const handleCancel = () => {
-    setIsEditing(false);
-    setEditCity(city || "");
-    setEditCountry(country || "");
-  };
-
-  const handleSave = () => {
-    const trimmedCity = editCity.trim();
-    const trimmedCountry = editCountry.trim();
-
-    if (!trimmedCity || !trimmedCountry) {
-      toast.error("Both city and country are required");
-      return;
-    }
-
-    updateLocation(
-      {
-        filePath,
-        country: trimmedCountry,
-        city: trimmedCity,
-      },
-      {
-        onSuccess: () => {
-          setIsEditing(false);
-          toast.success("Location updated");
-        },
-        onError: () => {
-          toast.error("Failed to update location");
-        },
-      },
-    );
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSave();
-    } else if (e.key === "Escape") {
-      handleCancel();
-    }
-  };
-
-  const updateMeasuredWidths = useCallback(() => {
-    const cityMeasured = (cityMirrorRef.current?.offsetWidth || 0) - 2; // small buffer for caret
-    const countryMeasured = (countryMirrorRef.current?.offsetWidth || 0) + 2;
-    setCityWidthPx(cityMeasured);
-    setCountryWidthPx(countryMeasured);
-  }, [editCity, editCountry, isEditing]);
-
-  useLayoutEffect(() => {
-    updateMeasuredWidths();
-  }, [updateMeasuredWidths]);
-
-  useEffect(() => {
-    const onResize = () => updateMeasuredWidths();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [updateMeasuredWidths]);
-
-  return (
-    <div className="flex flex-col items-start gap-2.5 pb-2">
-      <button
-        type="button"
-        className="group flex w-full items-center justify-start gap-3 bg-transparent p-0 hover:bg-transparent"
-        onClick={onToggleFocus}
-      >
-        <h1 className="m-0 line-clamp-1 min-w-0 flex-shrink-0 cursor-pointer text-left font-semibold text-3xl text-muted-foreground/90 transition-colors group-hover:text-muted-foreground sm:text-4xl">
-          {displayDate}
-        </h1>
-        {isFocused ? (
-          <EyeSlashIcon className="size-4 text-muted-foreground/50" />
-        ) : (
-          <EyeIcon className="size-4 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
-        )}
-      </button>
-      <div className="group flex items-center justify-start gap-1">
-        <MapPinIcon
-          className={cn(
-            "size-3.5 flex-shrink-0 text-muted-foreground/60 group-hover:hidden",
-            isEditing && "hidden",
-          )}
-        />
-        <PenIcon
-          className={cn(
-            "hidden size-3.5 flex-shrink-0 text-muted-foreground/60 group-hover:block",
-            isEditing && "block",
-          )}
-        />
-        <div className="relative flex items-center text-sm">
-          {/* Hidden mirrors to measure text width precisely */}
-          <span
-            ref={cityMirrorRef}
-            aria-hidden
-            style={{
-              // Match input typography for accurate measurement
-              position: "absolute",
-              zIndex: -1,
-              visibility: "hidden",
-              whiteSpace: "pre",
-              font: "inherit",
-              padding: 0,
-              border: 0,
-            }}
-          >
-            {`${editCity || "City"} `}
-          </span>
-          <span
-            ref={countryMirrorRef}
-            aria-hidden
-            style={{
-              position: "absolute",
-              zIndex: -1,
-              visibility: "hidden",
-              whiteSpace: "pre",
-              font: "inherit",
-              padding: 0,
-              border: 0,
-            }}
-          >
-            {`${editCountry || "Country"} `}
-          </span>
-          <Input
-            value={editCity}
-            onChange={(e) => setEditCity(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onClick={!isEditing ? handleStartEdit : undefined}
-            placeholder="City"
-            style={{ width: cityWidthPx ? `${cityWidthPx}px` : undefined }}
-            className="m-0 h-6 min-w-0 cursor-text border-none bg-transparent p-0 text-muted-foreground/60 text-sm shadow-none transition-colors placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
-            autoFocus={isEditing}
-            disabled={isPending}
-            readOnly={!isEditing}
-          />
-          <span className="text-muted-foreground/60 text-sm">,&nbsp;</span>
-          <Input
-            value={editCountry}
-            onChange={(e) => setEditCountry(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onClick={!isEditing ? handleStartEdit : undefined}
-            placeholder="Country"
-            style={{
-              width: countryWidthPx ? `${countryWidthPx}px` : undefined,
-            }}
-            className="m-0 h-6 min-w-0 cursor-text border-none bg-transparent p-0 text-muted-foreground/60 text-sm shadow-none transition-colors placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
-            disabled={isPending}
-            readOnly={!isEditing}
-          />
-        </div>
-        {isEditing && (
-          <div className="ml-1 flex items-center gap-0.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground/60"
-              onClick={handleSave}
-              disabled={isPending}
-            >
-              <CheckIcon className="size-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground/60"
-              onClick={handleCancel}
-              disabled={isPending}
-            >
-              <XIcon className="size-3.5" />
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
 export function FileName({
   content,
@@ -329,8 +98,6 @@ export function FileCard({
 
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
 
-  const displayDate = formatDisplayDate(file.dateFromFilename);
-
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
     saveContentDebounced(newContent);
@@ -349,12 +116,9 @@ export function FileCard({
   return (
     <div className="px-4 pt-8">
       <DateHeader
-        displayDate={displayDate}
+        fileMetadata={file}
         isFocused={isFocused}
         onToggleFocus={onToggleFocus}
-        country={file.country}
-        city={file.city}
-        filePath={file.filePath}
         folderPath={folderPath}
       />
 
@@ -505,6 +269,7 @@ export function Header({
 
 interface FocusedFileOverlayProps {
   file: MarkdownFileMetadata;
+  folderPath: string;
   onClose: () => void;
   footerComponent: React.ReactElement<typeof FooterComponent>;
   onEditorFocus?: () => void;
@@ -515,6 +280,7 @@ export function FocusedFileOverlay({
   onClose,
   footerComponent,
   onEditorFocus,
+  folderPath,
 }: FocusedFileOverlayProps) {
   const {
     content,
@@ -523,16 +289,12 @@ export function FocusedFileOverlay({
     saveContentImmediate,
   } = useFileContentManager(file.filePath);
 
-  const folderPath = useUserStore((state) => state.folderPath);
-  const displayDate = formatDisplayDate(file.dateFromFilename);
-
   const dateKey = getDateKey(file.dateFromFilename);
   const { data: commitsByDate = {} } = useCommitsForDate(
     folderPath || "",
     dateKey,
     { autoRefresh: true },
   );
-
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
@@ -548,13 +310,10 @@ export function FocusedFileOverlay({
     <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-10 pt-16">
         <DateHeader
-          displayDate={displayDate}
+          fileMetadata={file}
           isFocused={true}
           onToggleFocus={onClose}
-          country={file.country}
-          city={file.city}
-          filePath={file.filePath}
-          folderPath={folderPath || ""}
+          folderPath={folderPath}
         />
 
         <MarkdownEditor
