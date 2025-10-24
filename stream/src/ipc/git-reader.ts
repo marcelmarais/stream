@@ -112,7 +112,7 @@ export function groupCommitsByDate(repoCommits: RepoCommits[]): CommitsByDate {
 /**
  * Get commits for a specific date and apply filters
  */
-export function getCommitsForDate(
+export function filterCommitsForDate(
   commitsByDate: CommitsByDate,
   date: Date,
 ): GitCommit[] {

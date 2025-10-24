@@ -77,7 +77,7 @@ export function useSaveShortcut(
 }
 
 /**
- * Hook that handles Cmd/Ctrl+I to toggle focused file overlay
+ * Hook that handles Cmd/Ctrl+O to toggle focused file overlay
  */
 export function useToggleFocusShortcut(
   activeEditingFile: MarkdownFileMetadata | null,
@@ -86,7 +86,7 @@ export function useToggleFocusShortcut(
 ) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "i") {
+      if ((event.metaKey || event.ctrlKey) && event.key === "o") {
         event.preventDefault();
         if (focusedFile && activeEditingFile) {
           setFocusedFile(null);
