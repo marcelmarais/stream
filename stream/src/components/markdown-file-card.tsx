@@ -24,7 +24,7 @@ import {
   useFileContentManager,
   useMarkdownMetadata,
 } from "@/hooks/use-markdown-queries";
-import { getCommitsForDate } from "@/ipc/git-reader";
+import { filterCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
@@ -91,12 +91,15 @@ export function FileCard({
     saveContentImmediate,
   } = useFileContentManager(file.filePath);
 
-  const dateKey = getDateKey(file.dateFromFilename);
-  const { data: commitsByDate = {} } = useCommitsForDate(folderPath, dateKey, {
-    autoRefresh: true,
-  });
+  const { data: commitsByDate = {} } = useCommitsForDate(
+    folderPath,
+    file.dateFromFilename,
+    {
+      autoRefresh: true,
+    },
+  );
 
-  const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
+  const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
@@ -289,13 +292,12 @@ export function FocusedFileOverlay({
     saveContentImmediate,
   } = useFileContentManager(file.filePath);
 
-  const dateKey = getDateKey(file.dateFromFilename);
   const { data: commitsByDate = {} } = useCommitsForDate(
     folderPath || "",
-    dateKey,
+    file.dateFromFilename,
     { autoRefresh: true },
   );
-  const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
+  const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);

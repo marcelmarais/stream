@@ -138,23 +138,22 @@ export function useRemoveRepo(folderPath: string) {
  */
 export function useCommitsForDate(
   folderPath: string,
-  dateKey: string,
+  date: Date,
   options?: { enabled?: boolean; autoRefresh?: boolean },
 ) {
   const { enabled = true, autoRefresh = false } = options || {};
   const { data: repos = [] } = useConnectedRepos(folderPath);
 
   return useQuery({
-    queryKey: gitKeys.commits(folderPath, dateKey, repos),
+    queryKey: gitKeys.commits(folderPath, getDateKey(date), repos),
     queryFn: async () => {
       if (repos.length === 0) {
         return {} as CommitsByDate;
       }
 
-      const date = new Date(dateKey);
-      const startOfDay = new Date(date);
+      const startOfDay = date;
       startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
+      const endOfDay = date;
       endOfDay.setHours(23, 59, 59, 999);
 
       const range = createDateRange.custom(startOfDay, endOfDay);
