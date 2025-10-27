@@ -92,13 +92,17 @@ export function FileName({
             </Button>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem onClick={handleCopyToClipboard}>
+            <ContextMenuItem
+              onClick={handleCopyToClipboard}
+              disabled={isDeleting}
+            >
               <CopyIcon className="size-4" />
               Copy content
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem
-              onClick={()=> setDeleteDialogOpen(true)}
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={isDeleting}
               className="text-destructive focus:text-destructive"
             >
               <TrashIcon className="size-4 text-destructive" />
@@ -114,8 +118,10 @@ export function FileName({
             <DialogTitle>Delete file?</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete{" "}
-              <span className="font-medium text-primary">{metadata.fileName}</span>? This
-              action cannot be undone.
+              <span className="font-medium text-primary">
+                {metadata.fileName}
+              </span>
+              ? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

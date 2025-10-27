@@ -211,7 +211,7 @@ export function useCreateTodayFile() {
 export function useFileContentManager(filePath: string) {
   const queryClient = useQueryClient();
   const { data: content, isLoading } = useMarkdownFileContent(filePath);
-  const { mutate: saveFile } = useSaveMarkdownFile();
+  const { mutateAsync: saveFile } = useSaveMarkdownFile();
   const debouncedSave = useDebouncedSave(filePath);
 
   const updateContentOptimistically = (newContent: string) => {
@@ -223,7 +223,7 @@ export function useFileContentManager(filePath: string) {
   };
 
   const saveContentImmediate = async (newContent: string) => {
-    saveFile({ filePath, content: newContent });
+    await saveFile({ filePath, content: newContent });
   };
 
   return {
