@@ -13,6 +13,14 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -20,6 +28,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useCommitsForDate } from "@/hooks/use-git-queries";
 import {
+  useCreateFileForDate,
   useCreateTodayFile,
   useFileContentManager,
   useMarkdownMetadata,
@@ -189,10 +198,15 @@ export function Header({
   folderPath: string;
 }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
     useMarkdownMetadata(folderPath);
   const { mutateAsync: createToday, isPending: creatingToday } =
     useCreateTodayFile();
+  const { mutateAsync: createFileForDate, isPending: creatingFile } =
+    useCreateFileForDate();
 
   const todayFileName = getTodayMarkdownFileName();
   const todayFileExists = allFilesMetadata.some(
@@ -216,9 +230,30 @@ export function Header({
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    if (date && hasMarkdownFile(date)) {
+    if (!date) return;
+
+    if (hasMarkdownFile(date)) {
       onScrollToDate(date);
       setCalendarOpen(false);
+      return;
+    }
+
+    setSelectedDate(date);
+    setDialogOpen(true);
+    setCalendarOpen(false);
+  };
+
+  const handleCreateFile = async () => {
+    if (!selectedDate) return;
+
+    try {
+      await createFileForDate({ folderPath, date: selectedDate });
+      setDialogOpen(false);
+
+      // Give query time to refetch, then scroll
+      setTimeout(() => onScrollToDate(selectedDate), 300);
+    } catch (error) {
+      console.error("Failed to create file:", error);
     }
   };
 
@@ -254,7 +289,6 @@ export function Header({
               <Calendar
                 mode="single"
                 onSelect={handleDateSelect}
-                disabled={(date) => !hasMarkdownFile(date)}
                 defaultMonth={new Date()}
                 captionLayout="dropdown"
                 components={{
@@ -266,6 +300,45 @@ export function Header({
           </Popover>
         </ButtonGroup>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create file for this date?</DialogTitle>
+            <DialogDescription>
+              {selectedDate && (
+                <>
+                  Would you like to create a file for{" "}
+                  {selectedDate.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                  ?
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDialogOpen(false)}
+              disabled={creatingFile}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreateFile}
+              disabled={creatingFile}
+            >
+              {creatingFile ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

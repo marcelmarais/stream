@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { debounce } from "lodash";
 import { useEffect, useMemo } from "react";
 import {
+  ensureMarkdownFileForDate,
   ensureTodayMarkdownFile,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
@@ -131,6 +132,44 @@ export function useDebouncedSave(filePath: string, delay = 500) {
   }, [debouncedSave]);
 
   return debouncedSave;
+}
+
+/**
+ * Hook to create a markdown file for a specific date
+ */
+export function useCreateFileForDate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      folderPath,
+      date,
+    }: {
+      folderPath: string;
+      date: Date;
+    }) => {
+      const result = await ensureMarkdownFileForDate(folderPath, date);
+      return result;
+    },
+    onSuccess: async (result, { folderPath }) => {
+      // Invalidate metadata to refresh the file list
+      await queryClient.invalidateQueries({
+        queryKey: markdownKeys.metadata(folderPath),
+      });
+
+      // Pre-load the content for the new file
+      if (result.filePath) {
+        const contentMap = await readMarkdownFilesContentByPaths([
+          result.filePath,
+        ]);
+        const content = contentMap.get(result.filePath) ?? "";
+        queryClient.setQueryData(
+          markdownKeys.content(result.filePath),
+          content,
+        );
+      }
+    },
+  });
 }
 
 /**

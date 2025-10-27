@@ -167,25 +167,32 @@ export async function writeMarkdownFileContent(
 }
 
 /**
- * Returns today's file name in YYYY-MM-DD.md format using local time.
+ * Returns a file name in YYYY-MM-DD.md format for the given date.
  */
-export function getTodayMarkdownFileName(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+export function getMarkdownFileName(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}.md`;
 }
 
 /**
- * Ensures that a markdown file for today exists at the root of directoryPath.
+ * Returns today's file name in YYYY-MM-DD.md format using local time.
+ */
+export function getTodayMarkdownFileName(): string {
+  return getMarkdownFileName(new Date());
+}
+
+/**
+ * Ensures that a markdown file for the given date exists at the root of directoryPath.
  * If it doesn't exist, it is created with empty content.
  * Returns the absolute file path and whether it was created.
  */
-export async function ensureTodayMarkdownFile(
+export async function ensureMarkdownFileForDate(
   directoryPath: string,
+  date: Date,
 ): Promise<{ filePath: string; created: boolean }> {
-  const fileName = getTodayMarkdownFileName();
+  const fileName = getMarkdownFileName(date);
   const filePath = directoryPath.endsWith("/")
     ? `${directoryPath}${fileName}`
     : `${directoryPath}/${fileName}`;
@@ -198,6 +205,17 @@ export async function ensureTodayMarkdownFile(
     await writeMarkdownFileContent(filePath, "");
     return { filePath, created: true };
   }
+}
+
+/**
+ * Ensures that a markdown file for today exists at the root of directoryPath.
+ * If it doesn't exist, it is created with empty content.
+ * Returns the absolute file path and whether it was created.
+ */
+export async function ensureTodayMarkdownFile(
+  directoryPath: string,
+): Promise<{ filePath: string; created: boolean }> {
+  return ensureMarkdownFileForDate(directoryPath, new Date());
 }
 
 /**
