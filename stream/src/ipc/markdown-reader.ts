@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { stat } from "@tauri-apps/plugin-fs";
+import { remove, stat } from "@tauri-apps/plugin-fs";
 
 /**
  * Represents markdown file metadata without content
@@ -65,7 +65,6 @@ export async function readAllMarkdownFilesMetadata(
   } = options;
 
   try {
-    // Use the fast Rust-based implementation
     const rustMetadata: RustMarkdownFileMetadata[] = await invoke(
       "read_markdown_files_metadata",
       {
@@ -74,7 +73,6 @@ export async function readAllMarkdownFilesMetadata(
       },
     );
 
-    // Convert Rust metadata to TypeScript format
     const files: MarkdownFileMetadata[] = rustMetadata.map((rustFile) => ({
       filePath: rustFile.file_path,
       fileName: rustFile.file_name,
@@ -277,4 +275,14 @@ export async function setFileLocationMetadata(
     console.error(`Error setting location metadata for ${filePath}:`, error);
     throw new Error(`Failed to set location metadata: ${error}`);
   }
+}
+
+/**
+ * Deletes a markdown file at the specified path.
+ *
+ * @param filePath - The absolute path to the file to delete
+ * @returns Promise<void>
+ */
+export async function deleteMarkdownFile(filePath: string): Promise<void> {
+  await remove(filePath);
 }

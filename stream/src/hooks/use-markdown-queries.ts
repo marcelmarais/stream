@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { debounce } from "lodash";
 import { useEffect, useMemo } from "react";
 import {
+  deleteMarkdownFile,
   ensureMarkdownFileForDate,
   ensureTodayMarkdownFile,
   readAllMarkdownFilesMetadata,
@@ -311,6 +312,28 @@ export function useUpdateFileLocation(folderPath: string) {
     },
     onSuccess: () => {
       // Refetch metadata to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.metadata(folderPath),
+      });
+    },
+  });
+}
+
+/**
+ * Hook to delete a markdown file
+ */
+export function useDeleteMarkdownFile(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (filePath: string) => {
+      await deleteMarkdownFile(filePath);
+      return filePath;
+    },
+    onSuccess: (filePath) => {
+      queryClient.removeQueries({
+        queryKey: markdownKeys.content(filePath),
+      });
       queryClient.invalidateQueries({
         queryKey: markdownKeys.metadata(folderPath),
       });

@@ -1,4 +1,5 @@
-import { CalendarPlusIcon, CopyIcon } from "@phosphor-icons/react";
+import { CalendarPlusIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react";
+import { useState } from "react";
 import { toast } from "sonner";
 import CommitOverlay from "@/components/commit-overlay";
 import { DateHeader } from "@/components/date-header";
@@ -7,10 +8,26 @@ import type { Footer as FooterComponent } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useCommitsForDate } from "@/hooks/use-git-queries";
 import {
   useCreateTodayFile,
+  useDeleteMarkdownFile,
   useFileContentManager,
   useMarkdownMetadata,
 } from "@/hooks/use-markdown-queries";
@@ -21,11 +38,19 @@ import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 export function FileName({
   content,
   metadata,
+  folderPath,
+  onDelete,
 }: {
   content: string | undefined;
   metadata: MarkdownFileMetadata;
+  folderPath: string;
+  onDelete?: () => void;
 }) {
   const fileName = metadata.fileName.split(".")[0];
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { mutateAsync: deleteFile, isPending: isDeleting } =
+    useDeleteMarkdownFile(folderPath);
+
   const handleCopyToClipboard = async () => {
     if (!content) {
       toast.error("No content to copy");
@@ -37,20 +62,83 @@ export function FileName({
     toast.success("File content copied to clipboard");
   };
 
-  return (
-    <div className="group relative flex items-center justify-end bg-transparent">
-      <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
+  const handleConfirmDelete = async () => {
+    try {
+      await deleteFile(metadata.filePath);
+      setDeleteDialogOpen(false);
+      toast.success("File deleted");
+      onDelete?.();
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+      toast.error("Failed to delete file");
+    }
+  };
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleCopyToClipboard}
-        className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
-      >
-        <CopyIcon className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
-        {metadata.fileName}
-      </Button>
-    </div>
+  return (
+    <>
+      <div className="group relative flex items-center justify-end bg-transparent">
+        <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
+
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyToClipboard}
+              className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
+            >
+              <CopyIcon className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+              {metadata.fileName}
+            </Button>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={handleCopyToClipboard}>
+              <CopyIcon className="size-4" />
+              Copy content
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onClick={()=> setDeleteDialogOpen(true)}
+              className="text-destructive focus:text-destructive"
+            >
+              <TrashIcon className="size-4 text-destructive" />
+              Delete file
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete file?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-primary">{metadata.fileName}</span>? This
+              action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -121,7 +209,7 @@ export function FileCard({
         isEditable={!isFocused}
       />
 
-      <FileName content={content} metadata={file} />
+      <FileName content={content} metadata={file} folderPath={folderPath} />
       {commits.length > 0 && (
         <div className="mt-2">
           <CommitOverlay
@@ -237,7 +325,12 @@ export function FocusedFileOverlay({
       </div>
       <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto w-full max-w-4xl px-6 py-6">
-          <FileName content={content} metadata={file} />
+          <FileName
+            content={content}
+            metadata={file}
+            folderPath={folderPath}
+            onDelete={onClose}
+          />
           {commits.length > 0 && (
             <div className="mt-4">
               <CommitOverlay
