@@ -1,43 +1,56 @@
-import {
-  CalendarDotsIcon,
-  CalendarPlusIcon,
-  CopyIcon,
-} from "@phosphor-icons/react";
-import { type ComponentProps, useState } from "react";
+import { CalendarPlusIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react";
+import { useState } from "react";
 import { toast } from "sonner";
 import CommitOverlay from "@/components/commit-overlay";
 import { DateHeader } from "@/components/date-header";
+import { FileCalendar } from "@/components/file-calendar";
 import type { Footer as FooterComponent } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useCommitsForDate } from "@/hooks/use-git-queries";
 import {
   useCreateTodayFile,
+  useDeleteMarkdownFile,
   useFileContentManager,
   useMarkdownMetadata,
 } from "@/hooks/use-markdown-queries";
 import { filterCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
-import { cn } from "@/lib/utils";
-import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
 export function FileName({
   content,
   metadata,
+  folderPath,
+  onDelete,
 }: {
   content: string | undefined;
   metadata: MarkdownFileMetadata;
+  folderPath: string;
+  onDelete?: () => void;
 }) {
   const fileName = metadata.fileName.split(".")[0];
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { mutateAsync: deleteFile, isPending: isDeleting } =
+    useDeleteMarkdownFile(folderPath);
+
   const handleCopyToClipboard = async () => {
     if (!content) {
       toast.error("No content to copy");
@@ -49,20 +62,89 @@ export function FileName({
     toast.success("File content copied to clipboard");
   };
 
-  return (
-    <div className="group relative flex items-center justify-end bg-transparent">
-      <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
+  const handleConfirmDelete = async () => {
+    try {
+      await deleteFile(metadata.filePath);
+      setDeleteDialogOpen(false);
+      toast.success("File deleted");
+      onDelete?.();
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+      toast.error("Failed to delete file");
+    }
+  };
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleCopyToClipboard}
-        className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
-      >
-        <CopyIcon className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
-        {metadata.fileName}
-      </Button>
-    </div>
+  return (
+    <>
+      <div className="group relative flex items-center justify-end bg-transparent">
+        <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
+
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyToClipboard}
+              className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
+            >
+              <CopyIcon className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
+              {metadata.fileName}
+            </Button>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem
+              onClick={handleCopyToClipboard}
+              disabled={isDeleting}
+            >
+              <CopyIcon className="size-4" />
+              Copy content
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={isDeleting}
+              className="text-destructive focus:text-destructive"
+            >
+              <TrashIcon className="size-4 text-destructive" />
+              Delete file
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete file?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-primary">
+                {metadata.fileName}
+              </span>
+              ? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -133,7 +215,7 @@ export function FileCard({
         isEditable={!isFocused}
       />
 
-      <FileName content={content} metadata={file} />
+      <FileName content={content} metadata={file} folderPath={folderPath} />
       {commits.length > 0 && (
         <div className="mt-2">
           <CommitOverlay
@@ -148,39 +230,6 @@ export function FileCard({
   );
 }
 
-function CustomDayButton({
-  day,
-  modifiers,
-  hasFile,
-  ...props
-}: ComponentProps<typeof CalendarDayButton> & { hasFile: boolean }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className={cn(
-        "relative h-9 w-9 p-0 font-normal",
-        modifiers.selected &&
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        modifiers.today && "bg-accent text-accent-foreground",
-      )}
-      {...props}
-    >
-      <span>{day.date.getDate()}</span>
-      {hasFile && (
-        <span className="-translate-x-1/2 absolute bottom-1 left-1/2 h-1 w-1 rounded-full bg-primary" />
-      )}
-    </Button>
-  );
-}
-
-function createDayButtonWithDots(hasMarkdownFile: (date: Date) => boolean) {
-  return (props: ComponentProps<typeof CalendarDayButton>) => {
-    const hasFile = hasMarkdownFile(props.day.date);
-    return <CustomDayButton {...props} hasFile={hasFile} />;
-  };
-}
-
 export function Header({
   onScrollToDate,
   folderPath,
@@ -188,7 +237,6 @@ export function Header({
   onScrollToDate: (date: Date) => void;
   folderPath: string;
 }) {
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
     useMarkdownMetadata(folderPath);
   const { mutateAsync: createToday, isPending: creatingToday } =
@@ -198,31 +246,6 @@ export function Header({
   const todayFileExists = allFilesMetadata.some(
     (file) => file.fileName === todayFileName,
   );
-
-  const datesWithFiles = new Set(
-    allFilesMetadata.map((file) => {
-      const dateFromFilename = getDateFromFilename(file.fileName);
-      if (dateFromFilename) {
-        return dateFromFilename;
-      }
-
-      return getDateKey(new Date(file.createdAt));
-    }),
-  );
-
-  const hasMarkdownFile = (date: Date) => {
-    const key = getDateKey(date);
-    return datesWithFiles.has(key);
-  };
-
-  const handleDateSelect = (date: Date | undefined) => {
-    if (date && hasMarkdownFile(date)) {
-      onScrollToDate(date);
-      setCalendarOpen(false);
-    }
-  };
-
-  const DayButton = createDayButtonWithDots(hasMarkdownFile);
 
   return (
     <div className="!bg-transparent flex-shrink-0">
@@ -239,31 +262,10 @@ export function Header({
               <CalendarPlusIcon className="size-4" />
             </Button>
           )}
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={isLoadingMetadata}
-              >
-                <CalendarDotsIcon className="size-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                mode="single"
-                onSelect={handleDateSelect}
-                disabled={(date) => !hasMarkdownFile(date)}
-                defaultMonth={new Date()}
-                captionLayout="dropdown"
-                components={{
-                  DayButton,
-                }}
-                autoFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <FileCalendar
+            folderPath={folderPath}
+            onScrollToDate={onScrollToDate}
+          />
         </ButtonGroup>
       </div>
     </div>
@@ -329,7 +331,12 @@ export function FocusedFileOverlay({
       </div>
       <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto w-full max-w-4xl px-6 py-6">
-          <FileName content={content} metadata={file} />
+          <FileName
+            content={content}
+            metadata={file}
+            folderPath={folderPath}
+            onDelete={onClose}
+          />
           {commits.length > 0 && (
             <div className="mt-4">
               <CommitOverlay

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { stat } from "@tauri-apps/plugin-fs";
+import { remove, stat } from "@tauri-apps/plugin-fs";
 
 /**
  * Represents markdown file metadata without content
@@ -65,7 +65,6 @@ export async function readAllMarkdownFilesMetadata(
   } = options;
 
   try {
-    // Use the fast Rust-based implementation
     const rustMetadata: RustMarkdownFileMetadata[] = await invoke(
       "read_markdown_files_metadata",
       {
@@ -74,7 +73,6 @@ export async function readAllMarkdownFilesMetadata(
       },
     );
 
-    // Convert Rust metadata to TypeScript format
     const files: MarkdownFileMetadata[] = rustMetadata.map((rustFile) => ({
       filePath: rustFile.file_path,
       fileName: rustFile.file_name,
@@ -167,25 +165,32 @@ export async function writeMarkdownFileContent(
 }
 
 /**
- * Returns today's file name in YYYY-MM-DD.md format using local time.
+ * Returns a file name in YYYY-MM-DD.md format for the given date.
  */
-export function getTodayMarkdownFileName(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+export function getMarkdownFileName(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}.md`;
 }
 
 /**
- * Ensures that a markdown file for today exists at the root of directoryPath.
+ * Returns today's file name in YYYY-MM-DD.md format using local time.
+ */
+export function getTodayMarkdownFileName(): string {
+  return getMarkdownFileName(new Date());
+}
+
+/**
+ * Ensures that a markdown file for the given date exists at the root of directoryPath.
  * If it doesn't exist, it is created with empty content.
  * Returns the absolute file path and whether it was created.
  */
-export async function ensureTodayMarkdownFile(
+export async function ensureMarkdownFileForDate(
   directoryPath: string,
+  date: Date,
 ): Promise<{ filePath: string; created: boolean }> {
-  const fileName = getTodayMarkdownFileName();
+  const fileName = getMarkdownFileName(date);
   const filePath = directoryPath.endsWith("/")
     ? `${directoryPath}${fileName}`
     : `${directoryPath}/${fileName}`;
@@ -198,6 +203,17 @@ export async function ensureTodayMarkdownFile(
     await writeMarkdownFileContent(filePath, "");
     return { filePath, created: true };
   }
+}
+
+/**
+ * Ensures that a markdown file for today exists at the root of directoryPath.
+ * If it doesn't exist, it is created with empty content.
+ * Returns the absolute file path and whether it was created.
+ */
+export async function ensureTodayMarkdownFile(
+  directoryPath: string,
+): Promise<{ filePath: string; created: boolean }> {
+  return ensureMarkdownFileForDate(directoryPath, new Date());
 }
 
 /**
@@ -259,4 +275,14 @@ export async function setFileLocationMetadata(
     console.error(`Error setting location metadata for ${filePath}:`, error);
     throw new Error(`Failed to set location metadata: ${error}`);
   }
+}
+
+/**
+ * Deletes a markdown file at the specified path.
+ *
+ * @param filePath - The absolute path to the file to delete
+ * @returns Promise<void>
+ */
+export async function deleteMarkdownFile(filePath: string): Promise<void> {
+  await remove(filePath);
 }

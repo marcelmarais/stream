@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { debounce } from "lodash";
 import { useEffect, useMemo } from "react";
 import {
+  deleteMarkdownFile,
+  ensureMarkdownFileForDate,
   ensureTodayMarkdownFile,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
@@ -134,6 +136,44 @@ export function useDebouncedSave(filePath: string, delay = 500) {
 }
 
 /**
+ * Hook to create a markdown file for a specific date
+ */
+export function useCreateFileForDate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      folderPath,
+      date,
+    }: {
+      folderPath: string;
+      date: Date;
+    }) => {
+      const result = await ensureMarkdownFileForDate(folderPath, date);
+      return result;
+    },
+    onSuccess: async (result, { folderPath }) => {
+      // Invalidate metadata to refresh the file list
+      await queryClient.invalidateQueries({
+        queryKey: markdownKeys.metadata(folderPath),
+      });
+
+      // Pre-load the content for the new file
+      if (result.filePath) {
+        const contentMap = await readMarkdownFilesContentByPaths([
+          result.filePath,
+        ]);
+        const content = contentMap.get(result.filePath) ?? "";
+        queryClient.setQueryData(
+          markdownKeys.content(result.filePath),
+          content,
+        );
+      }
+    },
+  });
+}
+
+/**
  * Hook to create today's markdown file
  */
 export function useCreateTodayFile() {
@@ -171,7 +211,7 @@ export function useCreateTodayFile() {
 export function useFileContentManager(filePath: string) {
   const queryClient = useQueryClient();
   const { data: content, isLoading } = useMarkdownFileContent(filePath);
-  const { mutate: saveFile } = useSaveMarkdownFile();
+  const { mutateAsync: saveFile } = useSaveMarkdownFile();
   const debouncedSave = useDebouncedSave(filePath);
 
   const updateContentOptimistically = (newContent: string) => {
@@ -183,7 +223,7 @@ export function useFileContentManager(filePath: string) {
   };
 
   const saveContentImmediate = async (newContent: string) => {
-    saveFile({ filePath, content: newContent });
+    await saveFile({ filePath, content: newContent });
   };
 
   return {
@@ -272,6 +312,28 @@ export function useUpdateFileLocation(folderPath: string) {
     },
     onSuccess: () => {
       // Refetch metadata to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.metadata(folderPath),
+      });
+    },
+  });
+}
+
+/**
+ * Hook to delete a markdown file
+ */
+export function useDeleteMarkdownFile(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (filePath: string) => {
+      await deleteMarkdownFile(filePath);
+      return filePath;
+    },
+    onSuccess: (filePath) => {
+      queryClient.removeQueries({
+        queryKey: markdownKeys.content(filePath),
+      });
       queryClient.invalidateQueries({
         queryKey: markdownKeys.metadata(folderPath),
       });

@@ -98,6 +98,23 @@
         }
       ]
     },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/Users/**"
+        },
+        {
+          "path": "/home/**"
+        }
+      ]
+    },
     "fs:allow-exists",
     "store:default",
     "updater:default",

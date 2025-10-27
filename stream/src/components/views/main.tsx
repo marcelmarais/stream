@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
@@ -16,6 +17,7 @@ import {
 } from "@/hooks/use-git-queries";
 import { useToggleFocusShortcut } from "@/hooks/use-keyboard-shortcut";
 import {
+  markdownKeys,
   useCreateTodayFile,
   useMarkdownMetadata,
   usePrefetchFileContents,
@@ -46,6 +48,7 @@ export function FileReaderScreen({
   );
   useToggleFocusShortcut(activeEditingFile, focusedFile, setFocusedFile);
 
+  const queryClient = useQueryClient();
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
     useMarkdownMetadata(folderPath);
   const prefetchFileContents = usePrefetchFileContents();
@@ -55,8 +58,14 @@ export function FileReaderScreen({
 
   const handleScrollToDate = useCallback(
     (date: Date) => {
+      const metadata = queryClient.getQueryData<MarkdownFileMetadata[]>(
+        markdownKeys.metadata(folderPath),
+      );
+
+      if (!metadata) return;
+
       const dateStr = getDateKey(date);
-      const index = allFilesMetadata.findIndex((file) => {
+      const index = metadata.findIndex((file) => {
         const dateFromFilename = getDateFromFilename(file.fileName);
         const fileDateStr = dateFromFilename || getDateKey(file.createdAt);
         return fileDateStr === dateStr;
@@ -70,7 +79,7 @@ export function FileReaderScreen({
         });
       }
     },
-    [allFilesMetadata],
+    [folderPath, queryClient],
   );
 
   const handleRangeChanged = useCallback(
