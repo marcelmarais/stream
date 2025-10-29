@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
 import { useMemo } from "react";
 import {
@@ -16,6 +17,12 @@ import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
 const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
+
+export interface FetchResult {
+  repo_path: string;
+  success: boolean;
+  message: string;
+}
 
 export const gitKeys = {
   all: ["git"] as const,
@@ -128,6 +135,40 @@ export function useRemoveRepo(folderPath: string) {
     },
     onSuccess: (updatedRepos) => {
       queryClient.setQueryData(gitKeys.repos(folderPath), updatedRepos);
+    },
+  });
+}
+
+/**
+ * Hook to fetch (git fetch) all connected repositories
+ */
+export function useFetchRepos(folderPath: string) {
+  const queryClient = useQueryClient();
+  const { data: repos = [] } = useConnectedRepos(folderPath);
+
+  return useMutation({
+    mutationFn: async () => {
+      if (repos.length === 0) {
+        return [];
+      }
+      const results: FetchResult[] = await invoke("fetch_repos", {
+        repoPaths: repos,
+      });
+      return results;
+    },
+    onSuccess: () => {
+      // Invalidate all commit queries for this folder to refetch fresh data
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === "git" &&
+            key[1] === "commits" &&
+            key[2] === folderPath
+          );
+        },
+      });
     },
   });
 }

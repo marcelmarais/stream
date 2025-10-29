@@ -12,6 +12,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
+import { toast } from "sonner";
 import RepoConnector from "@/components/repo-connector";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import {
   useApiKey,
@@ -202,10 +204,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
     useMarkdownMetadata(folderPath || "");
 
-  const [fetchReposFn, setFetchReposFn] = useState<
-    (() => Promise<void>) | null
-  >(null);
-  const [isFetching, setIsFetching] = useState(false);
+  const { data: connectedRepos = [] } = useConnectedRepos(folderPath || "");
+  const { mutateAsync: fetchReposMutation, isPending: isFetchingRepos } =
+    useFetchRepos(folderPath || "");
 
   const { data: appVersion } = useQuery<string>({
     queryKey: ["appVersion"],
@@ -215,10 +216,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   });
 
   const handleFetchRepos = async () => {
-    if (fetchReposFn) {
-      setIsFetching(true);
-      await fetchReposFn();
-      setIsFetching(false);
+    try {
+      const results = await fetchReposMutation();
+      results.forEach((result) => {
+        if (result.success) {
+          toast.success(
+            `${result.repo_path.split("/").pop()}: ${result.message}`,
+          );
+        } else {
+          toast.error(
+            `${result.repo_path.split("/").pop()}: ${result.message}`,
+          );
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching repositories:", error);
+      toast.error(`Failed to fetch repositories: ${error}`);
     }
   };
 
@@ -248,17 +261,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               <CardDescription>
                 Show your commits with your notes
               </CardDescription>
-              {fetchReposFn && (
+              {connectedRepos.length > 0 && (
                 <CardAction>
                   <Button
                     onClick={handleFetchRepos}
-                    disabled={isFetching}
+                    disabled={isFetchingRepos}
                     variant="ghost"
                     size="icon"
                     className="size-8"
                     title="Git fetch all repositories"
                   >
-                    {isFetching ? (
+                    {isFetchingRepos ? (
                       <CircleNotchIcon className="size-4 animate-spin" />
                     ) : (
                       <ArrowsClockwiseIcon className="size-4" />
@@ -272,7 +285,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <RepoConnector
                   key={folderPath}
                   markdownDirectory={folderPath}
-                  onFetchRepos={(fn) => setFetchReposFn(() => fn)}
                 />
               )}
             </CardContent>
