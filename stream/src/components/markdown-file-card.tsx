@@ -182,6 +182,7 @@ export function FileCard({
   );
 
   const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
+  const hasCommits = commits.length > 0;
 
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
@@ -216,8 +217,8 @@ export function FileCard({
       />
 
       <FileName content={content} metadata={file} folderPath={folderPath} />
-      {commits.length > 0 && (
-        <div className="mt-2">
+      {hasCommits && (
+        <div className="mt-2 mb-6">
           <CommitOverlay
             commits={commits}
             date={file.createdAt}
@@ -225,7 +226,9 @@ export function FileCard({
           />
         </div>
       )}
-      {showSeparator && <Separator className="mt-12" />}
+      {showSeparator && <Separator className="mt-2" />}
+      {/* makes the last file look less awkward / squished */}
+      {!showSeparator && <div className="pb-10" />}
     </div>
   );
 }
