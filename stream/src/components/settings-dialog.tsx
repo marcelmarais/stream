@@ -217,15 +217,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[80vh] min-w-[70vw] overflow-y-scroll"
+        className="max-h-[80vh] w-full max-w-2xl overflow-y-scroll px-4 py-6 sm:px-6"
         onOpenAutoFocus={(e) => e.preventDefault()}
         aria-describedby="settings-dialog-description"
       >
-        <DialogHeader className="pb-6">
+        <DialogHeader className="pb-4">
           <DialogTitle className="text-2xl">Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           <OverviewCard
             fileCount={allFilesMetadata.length}
             isLoading={isLoadingMetadata}
