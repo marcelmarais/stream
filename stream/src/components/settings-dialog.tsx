@@ -12,7 +12,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
-import { toast } from "sonner";
 import RepoConnector from "@/components/repo-connector";
 import { Button } from "@/components/ui/button";
 import {
@@ -215,26 +214,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     },
   });
 
-  const handleFetchRepos = async () => {
-    try {
-      const results = await fetchReposMutation();
-      results.forEach((result) => {
-        if (result.success) {
-          toast.success(
-            `${result.repo_path.split("/").pop()}: ${result.message}`,
-          );
-        } else {
-          toast.error(
-            `${result.repo_path.split("/").pop()}: ${result.message}`,
-          );
-        }
-      });
-    } catch (error) {
-      console.error("Error fetching repositories:", error);
-      toast.error(`Failed to fetch repositories: ${error}`);
-    }
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -264,7 +243,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               {connectedRepos.length > 0 && (
                 <CardAction>
                   <Button
-                    onClick={handleFetchRepos}
+                    onClick={async () => await fetchReposMutation()}
                     disabled={isFetchingRepos}
                     variant="ghost"
                     size="icon"

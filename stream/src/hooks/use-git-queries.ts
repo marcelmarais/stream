@@ -7,6 +7,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import {
   type CommitsByDate,
   createDateRange,
@@ -156,8 +157,18 @@ export function useFetchRepos(folderPath: string) {
       });
       return results;
     },
-    onSuccess: () => {
-      // Invalidate all commit queries for this folder to refetch fresh data
+    onSuccess: (results) => {
+      results.forEach((result) => {
+        if (result.success) {
+          toast.success(
+            `${result.repo_path.split("/").pop()}: ${result.message}`,
+          );
+        } else {
+          toast.error(
+            `${result.repo_path.split("/").pop()}: ${result.message}`,
+          );
+        }
+      });
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
@@ -169,6 +180,10 @@ export function useFetchRepos(folderPath: string) {
           );
         },
       });
+    },
+    onError: (error) => {
+      console.error("Error fetching repositories:", error);
+      toast.error(`Failed to fetch repositories: ${error}`);
     },
   });
 }
