@@ -1,4 +1,6 @@
 import {
+  ArrowsClockwiseIcon,
+  CircleNotchIcon,
   FileTextIcon,
   FolderIcon,
   GearIcon,
@@ -6,7 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
-import { useConnectedRepos } from "@/hooks/use-git-queries";
+import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import { useUserStore } from "@/stores/user-store";
 
@@ -20,6 +22,9 @@ export function Footer({ onFolderClick, folderPath }: FooterProps) {
   const setSettingsOpen = useUserStore((state) => state.setSettingsOpen);
   const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
   const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath);
+  const { mutateAsync: fetchRepos, isPending: isFetching } =
+    useFetchRepos(folderPath);
+
   const fileCount = allFilesMetadata.length;
   const connectedReposCount = connectedRepos.length;
 
@@ -52,11 +57,23 @@ export function Footer({ onFolderClick, folderPath }: FooterProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-auto w-auto gap-1 text-xs"
-            disabled
-            title="Connected repositories"
+            className="group h-auto w-auto gap-1 text-xs transition-colors hover:text-foreground"
+            disabled={connectedReposCount === 0 || isFetching}
+            onClick={async () => await fetchRepos()}
+            title={
+              connectedReposCount === 0
+                ? "No repositories connected"
+                : "Click to fetch all repositories"
+            }
           >
-            <GitBranchIcon className="size-3" />
+            {isFetching ? (
+              <CircleNotchIcon className="size-3 animate-spin" />
+            ) : (
+              <>
+                <GitBranchIcon className="size-3 group-hover:hidden" />
+                <ArrowsClockwiseIcon className="hidden size-3 group-hover:block" />
+              </>
+            )}
             <span>{connectedReposCount}</span>
           </Button>
           <Button

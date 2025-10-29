@@ -6,9 +6,8 @@ import {
   FolderPlusIcon,
   PlusIcon,
 } from "@phosphor-icons/react";
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,21 +23,11 @@ export interface RepoMapping {
   codeDirectories: string[];
 }
 
-export interface FetchResult {
-  repo_path: string;
-  success: boolean;
-  message: string;
-}
-
 interface RepoConnectorProps {
   markdownDirectory: string;
-  onFetchRepos?: (fetchFn: () => Promise<void>) => void;
 }
 
-export function RepoConnector({
-  markdownDirectory,
-  onFetchRepos,
-}: RepoConnectorProps) {
+export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
   const [isAddingRepo, setIsAddingRepo] = useState(false);
 
   const { data: connectedRepos = [], isLoading } =
@@ -69,39 +58,6 @@ export function RepoConnector({
       toast.error("Failed to remove repository");
     }
   };
-
-  const handleFetchRepos = useCallback(async () => {
-    if (connectedRepos.length === 0) return;
-
-    try {
-      const results: FetchResult[] = await invoke("fetch_repos", {
-        repoPaths: connectedRepos,
-      });
-
-      // Show toasts for each result
-      results.forEach((result) => {
-        if (result.success) {
-          toast.success(
-            `${result.repo_path.split("/").pop()}: ${result.message}`,
-          );
-        } else {
-          toast.error(
-            `${result.repo_path.split("/").pop()}: ${result.message}`,
-          );
-        }
-      });
-    } catch (error) {
-      console.error("Error fetching repositories:", error);
-      toast.error(`Failed to fetch repositories: ${error}`);
-    }
-  }, [connectedRepos]);
-
-  // Expose fetch function to parent
-  useEffect(() => {
-    if (onFetchRepos && connectedRepos.length > 0) {
-      onFetchRepos(handleFetchRepos);
-    }
-  }, [onFetchRepos, handleFetchRepos, connectedRepos]);
 
   if (isLoading) {
     return (

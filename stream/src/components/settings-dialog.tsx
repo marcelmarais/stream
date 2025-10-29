@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import {
   useApiKey,
@@ -202,10 +203,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
     useMarkdownMetadata(folderPath || "");
 
-  const [fetchReposFn, setFetchReposFn] = useState<
-    (() => Promise<void>) | null
-  >(null);
-  const [isFetching, setIsFetching] = useState(false);
+  const { data: connectedRepos = [] } = useConnectedRepos(folderPath || "");
+  const { mutateAsync: fetchReposMutation, isPending: isFetchingRepos } =
+    useFetchRepos(folderPath || "");
 
   const { data: appVersion } = useQuery<string>({
     queryKey: ["appVersion"],
@@ -213,14 +213,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       return await getVersion();
     },
   });
-
-  const handleFetchRepos = async () => {
-    if (fetchReposFn) {
-      setIsFetching(true);
-      await fetchReposFn();
-      setIsFetching(false);
-    }
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -248,17 +240,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               <CardDescription>
                 Show your commits with your notes
               </CardDescription>
-              {fetchReposFn && (
+              {connectedRepos.length > 0 && (
                 <CardAction>
                   <Button
-                    onClick={handleFetchRepos}
-                    disabled={isFetching}
+                    onClick={async () => await fetchReposMutation()}
+                    disabled={isFetchingRepos}
                     variant="ghost"
                     size="icon"
                     className="size-8"
                     title="Git fetch all repositories"
                   >
-                    {isFetching ? (
+                    {isFetchingRepos ? (
                       <CircleNotchIcon className="size-4 animate-spin" />
                     ) : (
                       <ArrowsClockwiseIcon className="size-4" />
@@ -272,7 +264,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <RepoConnector
                   key={folderPath}
                   markdownDirectory={folderPath}
-                  onFetchRepos={(fn) => setFetchReposFn(() => fn)}
                 />
               )}
             </CardContent>

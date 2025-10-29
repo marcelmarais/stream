@@ -119,6 +119,19 @@ export function FileCalendar({
     }
   };
 
+  const handleJumpToToday = () => {
+    const today = new Date();
+
+    if (hasMarkdownFile(today)) {
+      onScrollToDate(today);
+      setCalendarOpen(false);
+    } else {
+      setSelectedDate(today);
+      setDialogOpen(true);
+      setCalendarOpen(false);
+    }
+  };
+
   const DayButton = createDayButtonWithDots(hasMarkdownFile);
 
   return (
@@ -130,6 +143,7 @@ export function FileCalendar({
             size="sm"
             variant="ghost"
             disabled={isLoadingMetadata}
+            title="Open calendar"
           >
             <CalendarDotsIcon className="size-4" />
           </Button>
@@ -145,26 +159,45 @@ export function FileCalendar({
             }}
             autoFocus
           />
+          <div className="border-t p-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleJumpToToday}
+              className="w-full justify-center"
+            >
+              Today
+            </Button>
+          </div>
         </PopoverContent>
       </Popover>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create file for this date?</DialogTitle>
+            <DialogTitle>
+              {selectedDate &&
+              getDateKey(selectedDate) === getDateKey(new Date())
+                ? "Create today's file?"
+                : "Create file for this date?"}
+            </DialogTitle>
             <DialogDescription>
-              {selectedDate && (
-                <>
-                  Would you like to create a file for{" "}
-                  {selectedDate.toLocaleDateString("en-US", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                  ?
-                </>
-              )}
+              {selectedDate &&
+                (getDateKey(selectedDate) === getDateKey(new Date()) ? (
+                  "No file exists for today. Would you like to create one?"
+                ) : (
+                  <>
+                    Would you like to create a file for{" "}
+                    {selectedDate.toLocaleDateString("en-US", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                    ?
+                  </>
+                ))}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
