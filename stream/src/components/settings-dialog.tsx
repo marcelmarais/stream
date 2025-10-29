@@ -225,7 +225,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           <DialogTitle className="text-2xl">Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col gap-4">
           <OverviewCard
             fileCount={allFilesMetadata.length}
             isLoading={isLoadingMetadata}
