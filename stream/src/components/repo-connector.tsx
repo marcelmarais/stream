@@ -82,7 +82,7 @@ export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
                         <div className="truncate font-mono text-sm">
                           {repo.split("/").pop()}
                         </div>
-                        <div className="truncate text-muted-foreground text-xs">
+                        <div className="mt-1 truncate text-[12px] text-muted-foreground">
                           {repo}
                         </div>
                       </div>
