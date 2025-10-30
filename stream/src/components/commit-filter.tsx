@@ -121,7 +121,7 @@ export function CommitFilter() {
     <div className="flex items-center gap-2">
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-auto p-1 text-xs">
+          <Button variant="ghost" size="sm" className="p-1 text-xs">
             <SlidersHorizontalIcon
               className={`h-4 w-4 ${hasActiveFilters ? "fill-white" : ""}`}
             />

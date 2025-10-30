@@ -1,6 +1,10 @@
 "use client";
 
-import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
+import {
+  CalendarPlusIcon,
+  FileTextIcon,
+  MagnifyingGlassIcon,
+} from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
@@ -10,12 +14,16 @@ import {
   FocusedFileOverlay,
   Header,
 } from "@/components/markdown-file-card";
+import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import {
   useConnectedRepos,
   usePrefetchCommitsForDates,
 } from "@/hooks/use-git-queries";
-import { useToggleFocusShortcut } from "@/hooks/use-keyboard-shortcut";
+import {
+  useSearchShortcut,
+  useToggleFocusShortcut,
+} from "@/hooks/use-keyboard-shortcut";
 import {
   markdownKeys,
   useCreateTodayFile,
@@ -41,12 +49,14 @@ export function FileReaderScreen({
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,
   );
+  const [showSearch, setShowSearch] = useState(false);
 
   const activeEditingFile = useUserStore((state) => state.activeEditingFile);
   const setActiveEditingFile = useUserStore(
     (state) => state.setActiveEditingFile,
   );
   useToggleFocusShortcut(activeEditingFile, focusedFile, setFocusedFile);
+  useSearchShortcut(showSearch, setShowSearch);
 
   const queryClient = useQueryClient();
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
@@ -77,6 +87,33 @@ export function FileReaderScreen({
           align: "start",
           behavior: "auto",
         });
+      }
+    },
+    [folderPath, queryClient],
+  );
+
+  const handleFileSelectFromSearch = useCallback(
+    (filePath: string) => {
+      const metadata = queryClient.getQueryData<MarkdownFileMetadata[]>(
+        markdownKeys.metadata(folderPath),
+      );
+
+      if (!metadata) return;
+
+      const fileIndex = metadata.findIndex(
+        (file) => file.filePath === filePath,
+      );
+
+      if (fileIndex !== -1) {
+        setShowSearch(false);
+
+        if (virtuosoRef.current) {
+          virtuosoRef.current.scrollToIndex({
+            index: fileIndex,
+            align: "start",
+            behavior: "smooth",
+          });
+        }
       }
     },
     [folderPath, queryClient],
@@ -162,8 +199,17 @@ export function FileReaderScreen({
       <div className="mx-auto w-full max-w-4xl px-6 pt-6">
         <div className="flex items-start justify-between gap-4">
           {!isLoadingMetadata && (
-            <div className="flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center">
               <CommitFilter />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => setShowSearch(!showSearch)}
+                title="Search markdown files (Cmd+F)"
+              >
+                <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
+              </Button>
             </div>
           )}
 
@@ -194,6 +240,13 @@ export function FileReaderScreen({
       )}
 
       <Footer onFolderClick={onBack} folderPath={folderPath} />
+
+      <SearchBar
+        open={showSearch}
+        onOpenChange={setShowSearch}
+        folderPath={folderPath}
+        onFileSelect={handleFileSelectFromSearch}
+      />
 
       {focusedFile && (
         <FocusedFileOverlay

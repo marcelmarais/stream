@@ -1,3 +1,5 @@
+mod search;
+
 use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -617,7 +619,15 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![read_markdown_files_metadata, read_markdown_files_content, get_git_commits_for_repos, fetch_repos, set_file_location_metadata])
+        .invoke_handler(tauri::generate_handler![
+            read_markdown_files_metadata, 
+            read_markdown_files_content, 
+            get_git_commits_for_repos, 
+            fetch_repos, 
+            set_file_location_metadata, 
+            search::search_markdown_files, 
+            search::rebuild_search_index
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
