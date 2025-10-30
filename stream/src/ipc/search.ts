@@ -12,7 +12,7 @@ export interface SearchMatch {
   matchRanges: Array<[number, number]>;
   /** Context snippet around the match for preview */
   contextSnippet: string;
-  /** BM25 relevance score */
+  /** Relevance score (based on number of matches) */
   score: number;
 }
 
@@ -49,11 +49,11 @@ interface RustSearchResults {
 }
 
 /**
- * Search through markdown files in a folder using BM25 algorithm.
- * The index is automatically synced with file changes.
+ * Search through markdown files in a folder with prefix matching support.
+ * Always searches the current state of files (no indexing required).
  *
  * @param folderPath - Path to the folder containing markdown files
- * @param query - Search query string
+ * @param query - Search query string (last term uses prefix matching for type-ahead)
  * @param limit - Maximum number of results to return (default: 100)
  * @param sortByDate - Sort results by date in filename (newest first) (default: false)
  * @returns Promise<SearchResults> - Search results with matches and metadata
@@ -105,8 +105,8 @@ export async function searchMarkdownFiles(
 
 /**
  * Rebuild the search index from scratch.
- * This forces a complete reindex of all markdown files.
- * Useful for recovery or debugging.
+ * Note: This is a no-op for the grep-based search (no index required).
+ * Kept for API compatibility.
  *
  * @param folderPath - Path to the folder containing markdown files
  * @returns Promise<void>

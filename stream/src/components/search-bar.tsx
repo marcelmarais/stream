@@ -39,8 +39,11 @@ export function SearchBar({
     isLoading,
     error,
   } = useSearchMarkdownFiles(folderPath, searchQuery, {
-    limit: 1000,
+    limit: 100, // Reduced from 1000 - faster rendering, still plenty of results
   });
+
+  // Defer the results to prevent blocking the input
+  const deferredResults = React.useDeferredValue(results);
 
   // Reset scroll position when query changes
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -52,19 +55,20 @@ export function SearchBar({
   };
 
   const groupedResults = useMemo(() => {
-    if (!results?.matches) return {};
+    if (!deferredResults?.matches) return {};
 
-    const groups: Record<string, typeof results.matches> = {};
-    for (const match of results.matches) {
+    const groups: Record<string, typeof deferredResults.matches> = {};
+    for (const match of deferredResults.matches) {
       if (!groups[match.filePath]) {
         groups[match.filePath] = [];
       }
       groups[match.filePath].push(match);
     }
     return groups;
-  }, [results?.matches]);
+  }, [deferredResults?.matches]);
 
   const fileCount = Object.keys(groupedResults).length;
+  const isStale = results !== deferredResults;
 
   return (
     <CommandDialog
@@ -86,26 +90,43 @@ export function SearchBar({
       <div
         className={cn(
           "flex h-8 items-center px-4",
-          searchQuery && results && "border-b",
+          searchQuery && deferredResults && "border-b",
         )}
       >
-        {searchQuery && results && (
+        {searchQuery && deferredResults && (
           <div className="flex items-center text-muted-foreground text-xs">
-            <span>
-              {results.totalResults}{" "}
-              {results.totalResults === 1 ? "match" : "matches"}
+            <span className={cn(isStale && "opacity-50")}>
+              {deferredResults.totalResults}{" "}
+              {deferredResults.totalResults === 1 ? "match" : "matches"}
             </span>
             <DotIcon className="h-6 w-6" />
-            <span>
+            <span className={cn(isStale && "opacity-50")}>
               {fileCount} {fileCount === 1 ? "file" : "files"}
             </span>
             <DotIcon className="h-6 w-6" />
-            <span>{results.searchTimeMs}ms</span>
+            <span className={cn(isStale && "opacity-50")}>
+              {deferredResults.searchTimeMs}ms
+            </span>
+            {isStale && (
+              <>
+                <DotIcon className="h-6 w-6" />
+                <CircleNotchIcon
+                  className="h-3 w-3 animate-spin"
+                  weight="bold"
+                />
+              </>
+            )}
           </div>
         )}
       </div>
 
-      <CommandList ref={scrollRef} className="h-[400px] max-h-[70vh]">
+      <CommandList
+        ref={scrollRef}
+        className={cn(
+          "h-[400px] max-h-[70vh] transition-opacity duration-200",
+          isStale && "opacity-60",
+        )}
+      >
         {isLoading && (
           <div className="flex h-[400px] items-center justify-center text-muted-foreground">
             <CircleNotchIcon
@@ -116,19 +137,22 @@ export function SearchBar({
           </div>
         )}
 
-        {!isLoading && !error && searchQuery && results?.totalResults === 0 && (
-          <CommandEmpty>
-            <div className="flex h-[350px] flex-col items-center justify-center gap-3">
-              <MagnifyingGlassIcon
-                className="h-10 w-10 text-muted-foreground opacity-50"
-                weight="duotone"
-              />
-              <p className="text-muted-foreground text-sm">
-                No results found for "{searchQuery}"
-              </p>
-            </div>
-          </CommandEmpty>
-        )}
+        {!isLoading &&
+          !error &&
+          searchQuery &&
+          deferredResults?.totalResults === 0 && (
+            <CommandEmpty>
+              <div className="flex h-[350px] flex-col items-center justify-center gap-3">
+                <MagnifyingGlassIcon
+                  className="h-10 w-10 text-muted-foreground opacity-50"
+                  weight="duotone"
+                />
+                <p className="text-muted-foreground text-sm">
+                  No results found for "{searchQuery}"
+                </p>
+              </div>
+            </CommandEmpty>
+          )}
 
         {!searchQuery && !isLoading && (
           <div className="flex h-[350px] flex-col items-center justify-center gap-3">
@@ -143,8 +167,8 @@ export function SearchBar({
         )}
 
         {!isLoading &&
-          results &&
-          results.totalResults > 0 &&
+          deferredResults &&
+          deferredResults.totalResults > 0 &&
           Object.entries(groupedResults).map(([filePath, matches]) => {
             const fileName = filePath.split("/").pop() || filePath;
 
@@ -167,18 +191,14 @@ export function SearchBar({
                 }
               >
                 {matches.map((match, idx) => (
-                  <CommandItem
+                  <MatchItem
                     key={`${match.filePath}-${match.lineNumber}-${idx}`}
-                    value={`${match.filePath}-${match.lineNumber}-${idx}`}
-                    onSelect={() =>
+                    match={match}
+                    idx={idx}
+                    onClick={() =>
                       handleFileClick(match.filePath, match.lineNumber)
                     }
-                    className="flex flex-col items-start gap-2 py-3"
-                  >
-                    <p className="text-sm leading-relaxed">
-                      {highlightMatch(match.contextSnippet, match.matchRanges)}
-                    </p>
-                  </CommandItem>
+                  />
                 ))}
               </CommandGroup>
             );
@@ -187,6 +207,40 @@ export function SearchBar({
     </CommandDialog>
   );
 }
+
+/**
+ * Memoized match item component to prevent unnecessary re-renders
+ */
+const MatchItem = React.memo(
+  ({
+    match,
+    idx,
+    onClick,
+  }: {
+    match: {
+      filePath: string;
+      lineNumber: number;
+      contextSnippet: string;
+      matchRanges: Array<[number, number]>;
+    };
+    idx: number;
+    onClick: () => void;
+  }) => {
+    return (
+      <CommandItem
+        key={`${match.filePath}-${match.lineNumber}-${idx}`}
+        value={`${match.filePath}-${match.lineNumber}-${idx}`}
+        onSelect={onClick}
+        className="flex flex-col items-start gap-2 py-3"
+      >
+        <p className="text-sm leading-relaxed">
+          {highlightMatch(match.contextSnippet, match.matchRanges)}
+        </p>
+      </CommandItem>
+    );
+  },
+);
+MatchItem.displayName = "MatchItem";
 
 /**
  * Highlight multiple matched text ranges in the context snippet
