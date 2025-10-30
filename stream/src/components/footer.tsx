@@ -1,13 +1,16 @@
 import {
   ArrowsClockwiseIcon,
+  CalendarBlankIcon,
   CircleNotchIcon,
   FileTextIcon,
   FolderIcon,
   GearIcon,
   GitBranchIcon,
+  ListBulletsIcon,
 } from "@phosphor-icons/react";
 import SettingsDialog from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import { useUserStore } from "@/stores/user-store";
@@ -20,6 +23,8 @@ interface FooterProps {
 export function Footer({ onFolderClick, folderPath }: FooterProps) {
   const settingsOpen = useUserStore((state) => state.settingsOpen);
   const setSettingsOpen = useUserStore((state) => state.setSettingsOpen);
+  const viewMode = useUserStore((state) => state.viewMode);
+  const setViewMode = useUserStore((state) => state.setViewMode);
   const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
   const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath);
   const { mutateAsync: fetchRepos, isPending: isFetching } =
@@ -33,16 +38,38 @@ export function Footer({ onFolderClick, folderPath }: FooterProps) {
   return (
     <div className="flex-shrink-0 border-border border-t bg-muted/30 px-3 py-1 text-muted-foreground text-xs">
       <div className="flex items-center justify-between">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-auto w-auto text-xs"
-          onClick={onFolderClick}
-          title="Click to go back to folder selection"
-        >
-          <FolderIcon className="size-3" />
-          <span title={folderPath || undefined}>{folderName}</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-auto w-auto text-xs"
+            onClick={onFolderClick}
+            title="Click to go back to folder selection"
+          >
+            <FolderIcon className="size-3" />
+            <span title={folderPath || undefined}>{folderName}</span>
+          </Button>
+          <ButtonGroup className="border-muted-foreground/20 border-l pl-2">
+            <Button
+              variant={viewMode === "timeline" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-auto w-auto rounded-l-full border px-2 py-0.5"
+              onClick={() => setViewMode("timeline")}
+              title="Timeline view"
+            >
+              <ListBulletsIcon className="size-3" weight="bold" />
+            </Button>
+            <Button
+              variant={viewMode === "calendar" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-auto w-auto rounded-r-full border px-2 py-0.5"
+              onClick={() => setViewMode("calendar")}
+              title="Calendar view"
+            >
+              <CalendarBlankIcon className="size-3" weight="bold" />
+            </Button>
+          </ButtonGroup>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"

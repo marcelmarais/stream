@@ -16,6 +16,7 @@ import {
 } from "@/components/markdown-file-card";
 import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
+import { CalendarView } from "@/components/views/calendar";
 import {
   useConnectedRepos,
   usePrefetchCommitsForDates,
@@ -51,6 +52,7 @@ export function FileReaderScreen({
   );
   const [showSearch, setShowSearch] = useState(false);
 
+  const viewMode = useUserStore((state) => state.viewMode);
   const activeEditingFile = useUserStore((state) => state.activeEditingFile);
   const setActiveEditingFile = useUserStore(
     (state) => state.setActiveEditingFile,
@@ -183,6 +185,40 @@ export function FileReaderScreen({
     }
   }, [isLoadingMetadata]);
 
+  // Render calendar view
+  if (viewMode === "calendar") {
+    return (
+      <div className="flex h-screen flex-col">
+        <div
+          className={`absolute inset-0 z-50 flex items-center justify-center bg-background transition-opacity duration-500 ${
+            showLoading ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
+          <div className="text-center">
+            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+            <div className="text-muted-foreground text-sm">Loading...</div>
+          </div>
+        </div>
+
+        {!isLoadingMetadata && allFilesMetadata.length === 0 ? (
+          <EmptyState folderPath={folderPath} />
+        ) : (
+          !isLoadingMetadata && (
+            <CalendarView
+              folderPath={folderPath}
+              footerComponent={
+                <Footer onFolderClick={onBack} folderPath={folderPath} />
+              }
+            />
+          )
+        )}
+
+        <Footer onFolderClick={onBack} folderPath={folderPath} />
+      </div>
+    );
+  }
+
+  // Render timeline view (default)
   return (
     <div className="flex h-screen flex-col">
       <div
