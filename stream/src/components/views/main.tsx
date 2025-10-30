@@ -200,7 +200,6 @@ export function FileReaderScreen({
         <div className="flex items-start justify-between gap-4">
           {!isLoadingMetadata && (
             <div className="flex flex-shrink-0 items-center">
-              <CommitFilter />
               <Button
                 variant="ghost"
                 size="sm"
@@ -210,6 +209,7 @@ export function FileReaderScreen({
               >
                 <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
               </Button>
+              <CommitFilter />
             </div>
           )}
 

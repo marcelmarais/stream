@@ -227,7 +227,7 @@ const MatchItem = React.memo(
         onSelect={onClick}
         className="mx-0 flex flex-col items-start gap-2 px-0 py-3"
       >
-        <p className="text-sm leading-relaxed">
+        <p className="text-xs leading-relaxed">
           {highlightMatch(match.contextSnippet, match.matchRanges)}
         </p>
       </CommandItem>
