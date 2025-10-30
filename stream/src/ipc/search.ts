@@ -8,10 +8,8 @@ export interface SearchMatch {
   filePath: string;
   /** The line number where the match was found (1-indexed) */
   lineNumber: number;
-  /** Character offset where the match starts in the line */
-  charStart: number;
-  /** Character offset where the match ends in the line */
-  charEnd: number;
+  /** Array of [start, end] UTF-16 positions for all matched terms in the snippet */
+  matchRanges: Array<[number, number]>;
   /** Context snippet around the match for preview */
   contextSnippet: string;
   /** BM25 relevance score */
@@ -24,8 +22,7 @@ export interface SearchMatch {
 interface RustSearchMatch {
   file_path: string;
   line_number: number;
-  char_start: number;
-  char_end: number;
+  match_ranges: Array<[number, number]>;
   context_snippet: string;
   score: number;
 }
@@ -90,8 +87,7 @@ export async function searchMarkdownFiles(
     const matches: SearchMatch[] = rustResults.matches.map((rustMatch) => ({
       filePath: rustMatch.file_path,
       lineNumber: rustMatch.line_number,
-      charStart: rustMatch.char_start,
-      charEnd: rustMatch.char_end,
+      matchRanges: rustMatch.match_ranges,
       contextSnippet: rustMatch.context_snippet,
       score: rustMatch.score,
     }));

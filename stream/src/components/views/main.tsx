@@ -14,7 +14,7 @@ import {
   FocusedFileOverlay,
   Header,
 } from "@/components/markdown-file-card";
-import { SearchPanel } from "@/components/search-panel";
+import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import {
   useConnectedRepos,
@@ -209,7 +209,7 @@ export function FileReaderScreen({
                 title="Search markdown files (Cmd+F)"
               >
                 <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-              </Button>   
+              </Button>
             </div>
           )}
 
@@ -241,8 +241,7 @@ export function FileReaderScreen({
 
       <Footer onFolderClick={onBack} folderPath={folderPath} />
 
-      {/* Search Panel */}
-      <SearchPanel
+      <SearchBar
         open={showSearch}
         onOpenChange={setShowSearch}
         folderPath={folderPath}

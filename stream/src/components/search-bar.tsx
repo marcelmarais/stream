@@ -6,7 +6,7 @@ import {
   FileTextIcon,
   MagnifyingGlassIcon,
 } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,
@@ -26,7 +26,7 @@ interface SearchPanelProps {
   onFileSelect?: (filePath: string, lineNumber?: number) => void;
 }
 
-export function SearchPanel({
+export function SearchBar({
   open,
   onOpenChange,
   folderPath,
@@ -41,6 +41,9 @@ export function SearchPanel({
   } = useSearchMarkdownFiles(folderPath, searchQuery, {
     limit: 1000,
   });
+
+  // Reset scroll position when query changes
+  const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const handleFileClick = (filePath: string, lineNumber: number) => {
     onFileSelect?.(filePath, lineNumber);
@@ -102,7 +105,7 @@ export function SearchPanel({
         )}
       </div>
 
-      <CommandList className="h-[400px] max-h-[70vh]">
+      <CommandList ref={scrollRef} className="h-[400px] max-h-[70vh]">
         {isLoading && (
           <div className="flex h-[400px] items-center justify-center text-muted-foreground">
             <CircleNotchIcon
@@ -165,19 +168,15 @@ export function SearchPanel({
               >
                 {matches.map((match, idx) => (
                   <CommandItem
-                    key={`${match.filePath}-${match.lineNumber}-${match.charStart}-${match.charEnd}-${idx}`}
-                    value={`${match.filePath}-${match.lineNumber}-${match.charStart}-${match.charEnd}-${idx}`}
+                    key={`${match.filePath}-${match.lineNumber}-${idx}`}
+                    value={`${match.filePath}-${match.lineNumber}-${idx}`}
                     onSelect={() =>
                       handleFileClick(match.filePath, match.lineNumber)
                     }
                     className="flex flex-col items-start gap-2 py-3"
                   >
                     <p className="text-sm leading-relaxed">
-                      {highlightMatch(
-                        match.contextSnippet,
-                        match.charStart,
-                        match.charEnd,
-                      )}
+                      {highlightMatch(match.contextSnippet, match.matchRanges)}
                     </p>
                   </CommandItem>
                 ))}
@@ -190,25 +189,49 @@ export function SearchPanel({
 }
 
 /**
- * Highlight the matched text in the context snippet
+ * Highlight multiple matched text ranges in the context snippet
  */
-function highlightMatch(text: string, start: number, end: number) {
-  // If the match positions are within the snippet
-  if (start < text.length && end <= text.length && start < end) {
-    const before = text.slice(0, start);
-    const match = text.slice(start, end);
-    const after = text.slice(end);
-
-    return (
-      <>
-        {before}
-        <mark className="rounded bg-yellow-500/30 px-0.5 text-yellow-200">
-          {match}
-        </mark>
-        {after}
-      </>
-    );
+function highlightMatch(text: string, ranges: Array<[number, number]>) {
+  if (!ranges || ranges.length === 0) {
+    return text;
   }
 
-  return text;
+  // Sort ranges by start position
+  const sortedRanges = [...ranges].sort((a, b) => a[0] - b[0]);
+
+  const parts: Array<React.ReactNode> = [];
+  let lastEnd = 0;
+
+  for (let i = 0; i < sortedRanges.length; i++) {
+    const [start, end] = sortedRanges[i];
+
+    // Validate range
+    if (start >= text.length || end > text.length || start >= end) {
+      continue;
+    }
+
+    // Add text before this match
+    if (start > lastEnd) {
+      parts.push(text.slice(lastEnd, start));
+    }
+
+    // Add highlighted match
+    parts.push(
+      <mark
+        key={`match-${i}`}
+        className="rounded bg-yellow-500/30 px-0.5 text-yellow-200"
+      >
+        {text.slice(start, end)}
+      </mark>,
+    );
+
+    lastEnd = end;
+  }
+
+  // Add remaining text after last match
+  if (lastEnd < text.length) {
+    parts.push(text.slice(lastEnd));
+  }
+
+  return <>{parts}</>;
 }

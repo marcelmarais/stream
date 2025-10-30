@@ -5,7 +5,13 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Arc, LazyLock, Mutex};
 use tantivy::{
-    collector::TopDocs, doc, query::QueryParser, schema::*, Index, IndexWriter,
+    collector::TopDocs, 
+    doc, 
+    query::{BooleanQuery, Occur, Query, TermQuery}, 
+    schema::*, 
+    Index, 
+    IndexWriter,
+    Term,
 };
 use regex::Regex;
 use tauri::Manager;
@@ -14,8 +20,7 @@ use tauri::Manager;
 pub struct SearchMatch {
     pub file_path: String,
     pub line_number: u64,
-    pub char_start: usize,
-    pub char_end: usize,
+    pub match_ranges: Vec<(usize, usize)>, // Vec of (start, end) UTF-16 positions
     pub context_snippet: String,
     pub score: f32,
 }
@@ -246,6 +251,33 @@ fn sync_index(folder_path: &str, index: &Index) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
+// Build a literal text search query from user input (no query syntax parsing)
+fn build_literal_query(query_str: &str, field: Field) -> Box<dyn Query> {
+    // Split on both whitespace AND punctuation to match Tantivy's default tokenizer behavior
+    let terms: Vec<String> = query_str
+        .to_lowercase()
+        .split(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+    
+    if terms.is_empty() {
+        return Box::new(BooleanQuery::new(vec![]));
+    }
+    
+    // Create a term query for each word (treating everything as literal text)
+    let sub_queries: Vec<(Occur, Box<dyn Query>)> = terms
+        .iter()
+        .map(|term| {
+            let term_obj = Term::from_field_text(field, term);
+            let query: Box<dyn Query> = Box::new(TermQuery::new(term_obj, Default::default()));
+            (Occur::Should, query)
+        })
+        .collect();
+    
+    Box::new(BooleanQuery::new(sub_queries))
+}
+
 // Search the index and return formatted results
 fn search_index(
     index: &Index,
@@ -263,17 +295,18 @@ fn search_index(
     let reader = index.reader()?;
     let searcher = reader.searcher();
 
-    // Parse query
-    let query_parser = QueryParser::for_index(index, vec![line_content_field]);
-    let query = query_parser.parse_query(query_str)?;
+    // Build a literal text query (no query syntax, just search for words)
+    let query = build_literal_query(query_str, line_content_field);
 
     // Execute search
     let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))?;
 
     let mut matches = Vec::new();
+    // Extract terms the same way we do for the query (split on whitespace and punctuation)
     let query_terms: Vec<String> = query_str
         .to_lowercase()
-        .split_whitespace()
+        .split(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
+        .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .collect();
 
@@ -330,17 +363,15 @@ fn search_index(
             }
         }
 
-        // Use the first match position or default to start of line
-        let (match_char_idx_start, match_char_idx_end) =
-            if let Some(&(char_start, char_end, _, _)) = match_positions.first() {
-                (char_start, char_end)
-            } else {
-                (0, char_indices.len().min(50))
-            };
+        // Determine context window based on first match or default to start
+        let first_match_start = match_positions
+            .first()
+            .map(|(char_start, _, _, _)| *char_start)
+            .unwrap_or(0);
 
         // Create context snippet (surrounding context) - safely using char boundaries
-        let context_start_char_idx = match_char_idx_start.saturating_sub(50);
-        let context_end_char_idx = (match_char_idx_end + 50).min(char_indices.len());
+        let context_start_char_idx = first_match_start.saturating_sub(50);
+        let context_end_char_idx = (first_match_start + 100).min(char_indices.len());
 
         let context_start_byte = char_indices
             .get(context_start_char_idx)
@@ -352,28 +383,38 @@ fn search_index(
             .unwrap_or(line_content.len());
 
         let context_snippet = line_content[context_start_byte..context_end_byte].to_string();
-
         let snippet_chars: Vec<char> = context_snippet.chars().collect();
-        let relative_match_start = match_char_idx_start.saturating_sub(context_start_char_idx);
-        let relative_match_end = match_char_idx_end.saturating_sub(context_start_char_idx);
 
-        // Count UTF-16 code units up to each position
-        let utf16_start = snippet_chars
-            .iter()
-            .take(relative_match_start)
-            .map(|c| c.len_utf16())
-            .sum::<usize>();
-        let utf16_end = snippet_chars
-            .iter()
-            .take(relative_match_end)
-            .map(|c| c.len_utf16())
-            .sum::<usize>();
+        // Convert all match positions to UTF-16 offsets relative to the snippet
+        let mut utf16_ranges = Vec::new();
+        for &(match_char_start, match_char_end, _, _) in &match_positions {
+            // Check if this match is within our context window
+            if match_char_start >= context_start_char_idx && match_char_start < context_end_char_idx {
+                let relative_start = match_char_start.saturating_sub(context_start_char_idx);
+                let relative_end = match_char_end
+                    .saturating_sub(context_start_char_idx)
+                    .min(snippet_chars.len());
+
+                // Count UTF-16 code units up to each position
+                let utf16_start = snippet_chars
+                    .iter()
+                    .take(relative_start)
+                    .map(|c| c.len_utf16())
+                    .sum::<usize>();
+                let utf16_end = snippet_chars
+                    .iter()
+                    .take(relative_end)
+                    .map(|c| c.len_utf16())
+                    .sum::<usize>();
+
+                utf16_ranges.push((utf16_start, utf16_end));
+            }
+        }
 
         matches.push(SearchMatch {
             file_path,
             line_number,
-            char_start: utf16_start,
-            char_end: utf16_end,
+            match_ranges: utf16_ranges,
             context_snippet,
             score: _score,
         });

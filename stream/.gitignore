@@ -28,3 +28,4 @@ dist-ssr
 out
 .DS_Store
 *.tsbuildinfo
+target/
