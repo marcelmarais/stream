@@ -122,4 +122,3 @@ export async function rebuildSearchIndex(folderPath: string): Promise<void> {
     throw new Error(`Failed to rebuild search index: ${error}`);
   }
 }
-

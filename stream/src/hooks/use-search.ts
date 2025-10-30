@@ -1,5 +1,9 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { searchMarkdownFiles, rebuildSearchIndex, type SearchResults } from "@/ipc/search";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  rebuildSearchIndex,
+  type SearchResults,
+  searchMarkdownFiles,
+} from "@/ipc/search";
 
 // Query keys
 export const searchKeys = {
@@ -47,4 +51,3 @@ export function useRebuildSearchIndex() {
     },
   });
 }
-

@@ -1,6 +1,11 @@
 "use client";
 
-import { CalendarPlusIcon, FileTextIcon, MagnifyingGlass, X as XIcon } from "@phosphor-icons/react";
+import {
+  CalendarPlusIcon,
+  FileTextIcon,
+  MagnifyingGlassIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
@@ -10,8 +15,8 @@ import {
   FocusedFileOverlay,
   Header,
 } from "@/components/markdown-file-card";
-import { Button } from "@/components/ui/button";
 import { SearchPanel } from "@/components/search-panel";
+import { Button } from "@/components/ui/button";
 import {
   useConnectedRepos,
   usePrefetchCommitsForDates,
@@ -85,18 +90,20 @@ export function FileReaderScreen({
   );
 
   const handleFileSelectFromSearch = useCallback(
-    (filePath: string, lineNumber?: number) => {
+    (filePath: string) => {
       const metadata = queryClient.getQueryData<MarkdownFileMetadata[]>(
         markdownKeys.metadata(folderPath),
       );
 
       if (!metadata) return;
 
-      const fileIndex = metadata.findIndex((file) => file.filePath === filePath);
-      
+      const fileIndex = metadata.findIndex(
+        (file) => file.filePath === filePath,
+      );
+
       if (fileIndex !== -1) {
         setShowSearch(false);
-        
+
         if (virtuosoRef.current) {
           virtuosoRef.current.scrollToIndex({
             index: fileIndex,
@@ -189,7 +196,7 @@ export function FileReaderScreen({
       <div className="mx-auto w-full max-w-4xl px-6 pt-6">
         <div className="flex items-start justify-between gap-4">
           {!isLoadingMetadata && (
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center gap-2">
               <CommitFilter />
               <Button
                 variant="outline"
@@ -201,7 +208,7 @@ export function FileReaderScreen({
                 {showSearch ? (
                   <XIcon className="h-4 w-4" weight="bold" />
                 ) : (
-                  <MagnifyingGlass className="h-4 w-4" weight="bold" />
+                  <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
                 )}
               </Button>
             </div>
@@ -238,10 +245,12 @@ export function FileReaderScreen({
       {/* Search Panel Overlay */}
       {showSearch && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-          <div className="fixed right-0 top-0 bottom-0 w-full max-w-2xl bg-stone-950 shadow-2xl border-l border-stone-800">
-            <div className="flex flex-col h-full">
-              <div className="flex items-center justify-between p-4 border-b border-stone-800">
-                <h2 className="text-lg font-semibold text-stone-100">Search Markdown Files</h2>
+          <div className="fixed top-0 right-0 bottom-0 w-full max-w-2xl border-stone-800 border-l bg-stone-950 shadow-2xl">
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-stone-800 border-b p-4">
+                <h2 className="font-semibold text-lg text-stone-100">
+                  Search Markdown Files
+                </h2>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -251,7 +260,7 @@ export function FileReaderScreen({
                   <XIcon className="h-4 w-4" weight="bold" />
                 </Button>
               </div>
-              <div className="flex-1 min-h-0">
+              <div className="min-h-0 flex-1">
                 <SearchPanel
                   folderPath={folderPath}
                   onFileSelect={handleFileSelectFromSearch}
