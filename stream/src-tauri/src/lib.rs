@@ -329,12 +329,13 @@ fn search_index(index: &Index, query_str: &str, limit: usize) -> Result<SearchRe
             while i + term_chars.len() <= line_lower_chars.len() {
                 // Check if term matches at position i
                 if line_lower_chars[i..i + term_chars.len()] == term_chars[..] {
-                    // Found a match - get byte positions for char indices i and i+term_len
+                    // Found a match - store both char index and byte positions
                     let byte_start = char_indices.get(i).map(|(byte_idx, _)| *byte_idx).unwrap_or(0);
                     let byte_end = char_indices.get(i + term_chars.len())
                         .map(|(byte_idx, _)| *byte_idx)
                         .unwrap_or(line_content.len());
-                    match_positions.push((byte_start, byte_end));
+                    // Store as (char_idx_start, char_idx_end, byte_start, byte_end)
+                    match_positions.push((i, i + term_chars.len(), byte_start, byte_end));
                     i += term_chars.len();
                 } else {
                     i += 1;
@@ -343,22 +344,16 @@ fn search_index(index: &Index, query_str: &str, limit: usize) -> Result<SearchRe
         }
         
         // Use the first match position or default to start of line
-        let (char_start, char_end) = if let Some(&(start, end)) = match_positions.first() {
-            (start, end)
-        } else {
-            (0, char_indices.get(50).map(|(idx, _)| *idx).unwrap_or(line_content.len()))
-        };
+        let (match_char_idx_start, match_char_idx_end) = 
+            if let Some(&(char_start, char_end, _, _)) = match_positions.first() {
+                (char_start, char_end)
+            } else {
+                (0, char_indices.len().min(50))
+            };
         
         // Create context snippet (surrounding context) - safely using char boundaries
-        let context_start_char_idx = char_indices.iter()
-            .position(|(byte_idx, _)| *byte_idx >= char_start)
-            .unwrap_or(0)
-            .saturating_sub(50);
-        let context_end_char_idx = char_indices.iter()
-            .position(|(byte_idx, _)| *byte_idx >= char_end)
-            .unwrap_or(char_indices.len())
-            .saturating_add(50)
-            .min(char_indices.len());
+        let context_start_char_idx = match_char_idx_start.saturating_sub(50);
+        let context_end_char_idx = (match_char_idx_end + 50).min(char_indices.len());
         
         let context_start_byte = char_indices.get(context_start_char_idx)
             .map(|(idx, _)| *idx)
@@ -369,11 +364,27 @@ fn search_index(index: &Index, query_str: &str, limit: usize) -> Result<SearchRe
         
         let context_snippet = line_content[context_start_byte..context_end_byte].to_string();
         
+        // Convert character indices to UTF-16 code unit positions for JavaScript
+        // JavaScript uses UTF-16, where some characters (like emojis) take 2 code units
+        let snippet_chars: Vec<char> = context_snippet.chars().collect();
+        let relative_match_start = match_char_idx_start.saturating_sub(context_start_char_idx);
+        let relative_match_end = match_char_idx_end.saturating_sub(context_start_char_idx);
+        
+        // Count UTF-16 code units up to each position
+        let utf16_start = snippet_chars.iter()
+            .take(relative_match_start)
+            .map(|c| c.len_utf16())
+            .sum::<usize>();
+        let utf16_end = snippet_chars.iter()
+            .take(relative_match_end)
+            .map(|c| c.len_utf16())
+            .sum::<usize>();
+        
         matches.push(SearchMatch {
             file_path,
             line_number,
-            char_start,
-            char_end,
+            char_start: utf16_start,
+            char_end: utf16_end,
             context_snippet,
             score: _score,
         });

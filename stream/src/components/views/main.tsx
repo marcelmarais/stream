@@ -20,7 +20,10 @@ import {
   useConnectedRepos,
   usePrefetchCommitsForDates,
 } from "@/hooks/use-git-queries";
-import { useToggleFocusShortcut } from "@/hooks/use-keyboard-shortcut";
+import {
+  useSearchShortcut,
+  useToggleFocusShortcut,
+} from "@/hooks/use-keyboard-shortcut";
 import {
   markdownKeys,
   useCreateTodayFile,
@@ -53,6 +56,7 @@ export function FileReaderScreen({
     (state) => state.setActiveEditingFile,
   );
   useToggleFocusShortcut(activeEditingFile, focusedFile, setFocusedFile);
+  useSearchShortcut(showSearch, setShowSearch);
 
   const queryClient = useQueryClient();
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
@@ -202,7 +206,7 @@ export function FileReaderScreen({
                 size="icon"
                 onClick={() => setShowSearch(!showSearch)}
                 className="h-9 w-9"
-                title="Search markdown files (Cmd+K)"
+                title="Search markdown files (Cmd+F)"
               >
                 <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
               </Button>

@@ -101,3 +101,23 @@ export function useToggleFocusShortcut(
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [activeEditingFile, focusedFile, setFocusedFile]);
 }
+
+/**
+ * Hook that handles Cmd/Ctrl+F to toggle search panel
+ */
+export function useSearchShortcut(
+  showSearch: boolean,
+  setShowSearch: (show: boolean) => void,
+) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "f") {
+        event.preventDefault();
+        setShowSearch(!showSearch);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showSearch, setShowSearch]);
+}
