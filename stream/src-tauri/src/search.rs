@@ -111,8 +111,16 @@ fn match_and_find_positions(
         let mut i = 0;
 
         while i < line_lower_chars.len() {
-            let match_len = if is_last_term {
-                // Prefix match: find words starting with this term
+            // Check if we're at a word boundary (start of line or after whitespace/punctuation)
+            let at_word_boundary = i == 0 
+                || line_lower_chars[i - 1].is_whitespace() 
+                || line_lower_chars[i - 1].is_ascii_punctuation();
+            
+            // Only attempt match if we're at a word boundary
+            let match_len = if !at_word_boundary {
+                None
+            } else if is_last_term {
+                // Prefix match: find words starting with this term (at word boundary)
                 if i + term_chars.len() <= line_lower_chars.len()
                     && line_lower_chars[i..i + term_chars.len()] == term_chars[..]
                 {
@@ -129,11 +137,21 @@ fn match_and_find_positions(
                     None
                 }
             } else {
-                // Exact match
+                // Exact word match: must match full word at word boundary
                 if i + term_chars.len() <= line_lower_chars.len()
                     && line_lower_chars[i..i + term_chars.len()] == term_chars[..]
                 {
-                    Some(term_chars.len())
+                    // Check that match ends at word boundary too (complete word)
+                    let end = i + term_chars.len();
+                    let at_end_boundary = end >= line_lower_chars.len()
+                        || line_lower_chars[end].is_whitespace()
+                        || line_lower_chars[end].is_ascii_punctuation();
+                    
+                    if at_end_boundary {
+                        Some(term_chars.len())
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }

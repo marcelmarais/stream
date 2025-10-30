@@ -16,6 +16,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+
 import { useSearchMarkdownFiles } from "@/hooks/use-search";
 import { cn } from "@/lib/utils";
 
@@ -39,13 +40,11 @@ export function SearchBar({
     isLoading,
     error,
   } = useSearchMarkdownFiles(folderPath, searchQuery, {
-    limit: 100, // Reduced from 1000 - faster rendering, still plenty of results
+    limit: 250,
   });
 
-  // Defer the results to prevent blocking the input
   const deferredResults = React.useDeferredValue(results);
 
-  // Reset scroll position when query changes
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const handleFileClick = (filePath: string, lineNumber: number) => {
@@ -86,7 +85,6 @@ export function SearchBar({
         className="border-0"
       />
 
-      {/* Search Stats */}
       <div
         className={cn(
           "flex h-8 items-center px-4",
@@ -97,7 +95,7 @@ export function SearchBar({
           <div className="flex items-center text-muted-foreground text-xs">
             <span className={cn(isStale && "opacity-50")}>
               {deferredResults.totalResults}{" "}
-              {deferredResults.totalResults === 1 ? "match" : "matches"}
+              {deferredResults.totalResults === 1 ? "result" : "results"}
             </span>
             <DotIcon className="h-6 w-6" />
             <span className={cn(isStale && "opacity-50")}>
@@ -107,15 +105,6 @@ export function SearchBar({
             <span className={cn(isStale && "opacity-50")}>
               {deferredResults.searchTimeMs}ms
             </span>
-            {isStale && (
-              <>
-                <DotIcon className="h-6 w-6" />
-                <CircleNotchIcon
-                  className="h-3 w-3 animate-spin"
-                  weight="bold"
-                />
-              </>
-            )}
           </div>
         )}
       </div>
@@ -176,9 +165,17 @@ export function SearchBar({
               <CommandGroup
                 key={filePath}
                 heading={
-                  <div className="flex items-center gap-2">
-                    <FileTextIcon className="h-4 w-4" />
-                    <span className="truncate">{fileName}</span>
+                  <div className="flex w-full items-center">
+                    <Badge
+                      variant="default"
+                      className="cursor-pointer truncate font-medium"
+                      onClick={() =>
+                        handleFileClick(filePath, matches[0].lineNumber)
+                      }
+                    >
+                      <FileTextIcon className="h-4 w-4" />
+                      {fileName}
+                    </Badge>
                     {matches.length > 1 && (
                       <Badge
                         variant="secondary"
@@ -208,9 +205,6 @@ export function SearchBar({
   );
 }
 
-/**
- * Memoized match item component to prevent unnecessary re-renders
- */
 const MatchItem = React.memo(
   ({
     match,
@@ -231,7 +225,7 @@ const MatchItem = React.memo(
         key={`${match.filePath}-${match.lineNumber}-${idx}`}
         value={`${match.filePath}-${match.lineNumber}-${idx}`}
         onSelect={onClick}
-        className="flex flex-col items-start gap-2 py-3"
+        className="mx-0 flex flex-col items-start gap-2 px-0 py-3"
       >
         <p className="text-sm leading-relaxed">
           {highlightMatch(match.contextSnippet, match.matchRanges)}
@@ -242,15 +236,11 @@ const MatchItem = React.memo(
 );
 MatchItem.displayName = "MatchItem";
 
-/**
- * Highlight multiple matched text ranges in the context snippet
- */
 function highlightMatch(text: string, ranges: Array<[number, number]>) {
   if (!ranges || ranges.length === 0) {
     return text;
   }
 
-  // Sort ranges by start position
   const sortedRanges = [...ranges].sort((a, b) => a[0] - b[0]);
 
   const parts: Array<React.ReactNode> = [];
@@ -260,7 +250,14 @@ function highlightMatch(text: string, ranges: Array<[number, number]>) {
     const [start, end] = sortedRanges[i];
 
     // Validate range
-    if (start >= text.length || end > text.length || start >= end) {
+    const isValidRange =
+      start >= 0 &&
+      end >= 0 &&
+      start < text.length &&
+      end <= text.length &&
+      start < end;
+
+    if (!isValidRange) {
       continue;
     }
 
@@ -269,7 +266,6 @@ function highlightMatch(text: string, ranges: Array<[number, number]>) {
       parts.push(text.slice(lastEnd, start));
     }
 
-    // Add highlighted match
     parts.push(
       <mark
         key={`match-${i}`}
