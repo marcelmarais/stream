@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { debounce } from "lodash";
+import { useState, useMemo } from "react";
 import { MagnifyingGlass, X as XIcon, FileText, CircleNotch, ArrowsClockwise } from "@phosphor-icons/react";
 import { useSearchMarkdownFiles, useRebuildSearchIndex } from "@/hooks/use-search";
 import { Input } from "@/components/ui/input";
@@ -17,23 +16,10 @@ interface SearchPanelProps {
 
 export function SearchPanel({ folderPath, onFileSelect }: SearchPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-
-  const debouncedSetQuery = useMemo(
-    () => debounce((query: string) => setDebouncedQuery(query), 300),
-    [],
-  );
-
-  useEffect(() => {
-    debouncedSetQuery(searchQuery);
-    return () => {
-      debouncedSetQuery.cancel();
-    };
-  }, [searchQuery, debouncedSetQuery]);
 
   const { data: results, isLoading, error } = useSearchMarkdownFiles(
     folderPath,
-    debouncedQuery,
+    searchQuery,
     {
       limit: 100,
     }
@@ -106,7 +92,7 @@ export function SearchPanel({ folderPath, onFileSelect }: SearchPanelProps) {
         </div>
 
         {/* Search Stats */}
-        {debouncedQuery && results && (
+        {searchQuery && results && (
           <div className="flex items-center gap-3 text-xs text-stone-400">
             <span>
               {results.totalResults} {results.totalResults === 1 ? "match" : "matches"}
@@ -139,15 +125,15 @@ export function SearchPanel({ folderPath, onFileSelect }: SearchPanelProps) {
           )}
 
           {/* Empty State */}
-          {!isLoading && !error && debouncedQuery && results?.totalResults === 0 && (
+          {!isLoading && !error && searchQuery && results?.totalResults === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-stone-500">
               <MagnifyingGlass className="h-12 w-12 mb-3 opacity-50" weight="duotone" />
-              <p className="text-sm">No results found for "{debouncedQuery}"</p>
+              <p className="text-sm">No results found for "{searchQuery}"</p>
             </div>
           )}
 
           {/* Initial State */}
-          {!debouncedQuery && (
+          {!searchQuery && (
             <div className="flex flex-col items-center justify-center py-12 text-stone-500">
               <MagnifyingGlass className="h-12 w-12 mb-3 opacity-50" weight="duotone" />
               <p className="text-sm">Start typing to search your markdown files</p>

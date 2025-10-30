@@ -71,6 +71,16 @@ static INDEX_CACHE: LazyLock<Mutex<HashMap<String, Arc<Index>>>> = LazyLock::new
     Mutex::new(HashMap::new())
 });
 
+// Mutex per folder to prevent concurrent sync operations
+static SYNC_LOCKS: LazyLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = LazyLock::new(|| {
+    Mutex::new(HashMap::new())
+});
+
+// Track last sync time per folder to avoid frequent syncs
+static LAST_SYNC_TIME: LazyLock<Mutex<HashMap<String, std::time::Instant>>> = LazyLock::new(|| {
+    Mutex::new(HashMap::new())
+});
+
 // Search index schema
 fn create_search_schema() -> Schema {
     let mut schema_builder = Schema::builder();
@@ -301,16 +311,34 @@ fn search_index(index: &Index, query_str: &str, limit: usize) -> Result<SearchRe
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
         
-        // Find character positions of matches in the line
+        // Find character positions of matches in the line (using char indices, not byte indices)
         let line_lower = line_content.to_lowercase();
         let mut match_positions = Vec::new();
         
+        // Convert to char indices for safe slicing
+        let char_indices: Vec<(usize, char)> = line_content.char_indices().collect();
+        let line_lower_chars: Vec<char> = line_lower.chars().collect();
+        
         for term in &query_terms {
-            let mut start = 0;
-            while let Some(pos) = line_lower[start..].find(term) {
-                let actual_pos = start + pos;
-                match_positions.push((actual_pos, actual_pos + term.len()));
-                start = actual_pos + term.len();
+            let term_chars: Vec<char> = term.chars().collect();
+            if term_chars.is_empty() {
+                continue;
+            }
+            
+            let mut i = 0;
+            while i + term_chars.len() <= line_lower_chars.len() {
+                // Check if term matches at position i
+                if line_lower_chars[i..i + term_chars.len()] == term_chars[..] {
+                    // Found a match - get byte positions for char indices i and i+term_len
+                    let byte_start = char_indices.get(i).map(|(byte_idx, _)| *byte_idx).unwrap_or(0);
+                    let byte_end = char_indices.get(i + term_chars.len())
+                        .map(|(byte_idx, _)| *byte_idx)
+                        .unwrap_or(line_content.len());
+                    match_positions.push((byte_start, byte_end));
+                    i += term_chars.len();
+                } else {
+                    i += 1;
+                }
             }
         }
         
@@ -318,13 +346,28 @@ fn search_index(index: &Index, query_str: &str, limit: usize) -> Result<SearchRe
         let (char_start, char_end) = if let Some(&(start, end)) = match_positions.first() {
             (start, end)
         } else {
-            (0, line_content.len().min(50))
+            (0, char_indices.get(50).map(|(idx, _)| *idx).unwrap_or(line_content.len()))
         };
         
-        // Create context snippet (surrounding context)
-        let context_start = char_start.saturating_sub(50);
-        let context_end = (char_end + 50).min(line_content.len());
-        let context_snippet = line_content[context_start..context_end].to_string();
+        // Create context snippet (surrounding context) - safely using char boundaries
+        let context_start_char_idx = char_indices.iter()
+            .position(|(byte_idx, _)| *byte_idx >= char_start)
+            .unwrap_or(0)
+            .saturating_sub(50);
+        let context_end_char_idx = char_indices.iter()
+            .position(|(byte_idx, _)| *byte_idx >= char_end)
+            .unwrap_or(char_indices.len())
+            .saturating_add(50)
+            .min(char_indices.len());
+        
+        let context_start_byte = char_indices.get(context_start_char_idx)
+            .map(|(idx, _)| *idx)
+            .unwrap_or(0);
+        let context_end_byte = char_indices.get(context_end_char_idx)
+            .map(|(idx, _)| *idx)
+            .unwrap_or(line_content.len());
+        
+        let context_snippet = line_content[context_start_byte..context_end_byte].to_string();
         
         matches.push(SearchMatch {
             file_path,
@@ -895,9 +938,41 @@ async fn search_markdown_files(
     let index = get_or_create_index(&folder_path, &app_data_dir)
         .map_err(|e| format!("Failed to get or create index: {}", e))?;
     
-    // Sync index with current files
-    sync_index(&folder_path, &index)
-        .map_err(|e| format!("Failed to sync index: {}", e))?;
+    // Get or create sync lock for this folder
+    let folder_hash = hash_folder_path(&folder_path);
+    let sync_lock = {
+        let mut locks = SYNC_LOCKS.lock().unwrap();
+        locks.entry(folder_hash.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    };
+    
+    // Try to acquire sync lock (non-blocking)
+    if let Ok(_guard) = sync_lock.try_lock() {
+        // We got the lock! Check if we need to sync
+        let should_sync = {
+            let last_sync = LAST_SYNC_TIME.lock().unwrap();
+            
+            if let Some(last_time) = last_sync.get(&folder_hash) {
+                // Sync if more than 5 seconds have passed
+                last_time.elapsed().as_secs() >= 5
+            } else {
+                // First sync for this folder
+                true
+            }
+        };
+        
+        if should_sync {
+            // Sync index with current files
+            sync_index(&folder_path, &index)
+                .map_err(|e| format!("Failed to sync index: {}", e))?;
+            
+            // Update last sync time
+            let mut last_sync = LAST_SYNC_TIME.lock().unwrap();
+            last_sync.insert(folder_hash, std::time::Instant::now());
+        }
+    }
+    // If we couldn't get the lock, another sync is in progress - skip it and just search
     
     // Search
     let results = search_index(&index, &query, limit)
@@ -917,10 +992,16 @@ async fn rebuild_search_index(
     let folder_hash = hash_folder_path(&folder_path);
     let index_dir = app_data_dir.join("search_indices").join(&folder_hash);
     
-    // Remove from cache
+    // Remove from caches
     {
         let mut cache = INDEX_CACHE.lock().unwrap();
         cache.remove(&folder_hash);
+        
+        let mut locks = SYNC_LOCKS.lock().unwrap();
+        locks.remove(&folder_hash);
+        
+        let mut last_sync = LAST_SYNC_TIME.lock().unwrap();
+        last_sync.remove(&folder_hash);
     }
     
     // Delete the index directory
@@ -933,9 +1014,24 @@ async fn rebuild_search_index(
     let index = get_or_create_index(&folder_path, &app_data_dir)
         .map_err(|e| format!("Failed to recreate index: {}", e))?;
     
-    // Sync to populate it
+    // Recreate the sync lock for this folder
+    let sync_lock = {
+        let mut locks = SYNC_LOCKS.lock().unwrap();
+        let new_lock = Arc::new(Mutex::new(()));
+        locks.insert(folder_hash.clone(), new_lock.clone());
+        new_lock
+    };
+    
+    // Acquire lock and sync to populate the new index
+    let _guard = sync_lock.lock().unwrap();
     sync_index(&folder_path, &index)
         .map_err(|e| format!("Failed to populate new index: {}", e))?;
+    
+    // Update last sync time
+    {
+        let mut last_sync = LAST_SYNC_TIME.lock().unwrap();
+        last_sync.insert(folder_hash, std::time::Instant::now());
+    }
     
     Ok(())
 }
