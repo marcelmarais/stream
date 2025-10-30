@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { debounce } from "lodash";
 import { MagnifyingGlass, X as XIcon, FileText, CircleNotch, ArrowsClockwise } from "@phosphor-icons/react";
 import { useSearchMarkdownFiles, useRebuildSearchIndex } from "@/hooks/use-search";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { useDebounce } from "@/hooks/use-keyboard-shortcut";
 
 interface SearchPanelProps {
   folderPath: string;
@@ -17,7 +17,19 @@ interface SearchPanelProps {
 
 export function SearchPanel({ folderPath, onFileSelect }: SearchPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedQuery = useDebounce(searchQuery, 300);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  const debouncedSetQuery = useMemo(
+    () => debounce((query: string) => setDebouncedQuery(query), 300),
+    [],
+  );
+
+  useEffect(() => {
+    debouncedSetQuery(searchQuery);
+    return () => {
+      debouncedSetQuery.cancel();
+    };
+  }, [searchQuery, debouncedSetQuery]);
 
   const { data: results, isLoading, error } = useSearchMarkdownFiles(
     folderPath,
@@ -109,10 +121,8 @@ export function SearchPanel({ folderPath, onFileSelect }: SearchPanelProps) {
         )}
       </div>
 
-      {/* Results */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 max-h-[calc(100vh-300px)]">
         <div className="p-4 space-y-4">
-          {/* Loading State */}
           {isLoading && (
             <div className="flex items-center justify-center py-8 text-stone-400">
               <CircleNotch className="h-6 w-6 animate-spin mr-2" weight="bold" />
@@ -120,10 +130,9 @@ export function SearchPanel({ folderPath, onFileSelect }: SearchPanelProps) {
             </div>
           )}
 
-          {/* Error State */}
           {error && (
             <Card className="p-4 bg-red-950/20 border-red-800">
-              <p className="text-sm text-red-400">
+              <p className="text-sm text-destructive">
                 Error: {error instanceof Error ? error.message : "Failed to search"}
               </p>
             </Card>
