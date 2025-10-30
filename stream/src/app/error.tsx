@@ -36,7 +36,7 @@ export default function ErrorPage({
             Something went wrong
           </CardTitle>
           <CardDescription className="text-stone-400">
-            An unexpected error occurred while running the application.
+            An unexpected error occurred.
           </CardDescription>
         </CardHeader>
 

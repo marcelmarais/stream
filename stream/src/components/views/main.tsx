@@ -4,7 +4,6 @@ import {
   CalendarPlusIcon,
   FileTextIcon,
   MagnifyingGlassIcon,
-  XIcon,
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -205,11 +204,7 @@ export function FileReaderScreen({
                 className="h-9 w-9"
                 title="Search markdown files (Cmd+K)"
               >
-                {showSearch ? (
-                  <XIcon className="h-4 w-4" weight="bold" />
-                ) : (
-                  <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-                )}
+                <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
               </Button>
             </div>
           )}
@@ -242,34 +237,13 @@ export function FileReaderScreen({
 
       <Footer onFolderClick={onBack} folderPath={folderPath} />
 
-      {/* Search Panel Overlay */}
-      {showSearch && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-          <div className="fixed top-0 right-0 bottom-0 w-full max-w-2xl border-stone-800 border-l bg-stone-950 shadow-2xl">
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-stone-800 border-b p-4">
-                <h2 className="font-semibold text-lg text-stone-100">
-                  Search Markdown Files
-                </h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowSearch(false)}
-                  className="h-8 w-8"
-                >
-                  <XIcon className="h-4 w-4" weight="bold" />
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1">
-                <SearchPanel
-                  folderPath={folderPath}
-                  onFileSelect={handleFileSelectFromSearch}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Search Panel */}
+      <SearchPanel
+        open={showSearch}
+        onOpenChange={setShowSearch}
+        folderPath={folderPath}
+        onFileSelect={handleFileSelectFromSearch}
+      />
 
       {focusedFile && (
         <FocusedFileOverlay
