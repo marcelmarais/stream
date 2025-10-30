@@ -21,6 +21,7 @@ export function useSearchMarkdownFiles(
   options?: {
     limit?: number;
     enabled?: boolean;
+    sortByDate?: boolean;
   },
 ) {
   return useQuery({
@@ -33,7 +34,12 @@ export function useSearchMarkdownFiles(
           searchTimeMs: 0,
         } as SearchResults;
       }
-      return await searchMarkdownFiles(folderPath, query, options?.limit);
+      return await searchMarkdownFiles(
+        folderPath,
+        query,
+        options?.limit,
+        options?.sortByDate,
+      );
     },
     enabled: options?.enabled !== false && !!folderPath && !!query.trim(),
     // Keep results for 5 minutes

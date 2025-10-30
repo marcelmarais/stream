@@ -251,6 +251,7 @@ fn search_index(
     index: &Index,
     query_str: &str,
     limit: usize,
+    sort_by_date: bool,
 ) -> Result<SearchResults, Box<dyn std::error::Error>> {
     let start_time = std::time::Instant::now();
 
@@ -352,8 +353,6 @@ fn search_index(
 
         let context_snippet = line_content[context_start_byte..context_end_byte].to_string();
 
-        // Convert character indices to UTF-16 code unit positions for JavaScript
-        // JavaScript uses UTF-16, where some characters (like emojis) take 2 code units
         let snippet_chars: Vec<char> = context_snippet.chars().collect();
         let relative_match_start = match_char_idx_start.saturating_sub(context_start_char_idx);
         let relative_match_end = match_char_idx_end.saturating_sub(context_start_char_idx);
@@ -380,6 +379,32 @@ fn search_index(
         });
     }
 
+    // Sort by date if requested (newest first)
+    if sort_by_date {
+        matches.sort_by(|a, b| {
+            let extract_date = |path: &str| -> Option<String> {
+                let file_name = Path::new(path).file_name()?.to_str()?;
+                if DATE_FILENAME_REGEX.is_match(file_name) {
+                    // Extract YYYY-MM-DD from filename
+                    Some(file_name[0..10].to_string())
+                } else {
+                    None
+                }
+            };
+
+            let date_a = extract_date(&a.file_path);
+            let date_b = extract_date(&b.file_path);
+
+            // Sort in descending order (newest first)
+            match (date_a, date_b) {
+                (Some(a), Some(b)) => b.cmp(&a),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+        });
+    }
+
     let search_time_ms = start_time.elapsed().as_millis() as u64;
 
     Ok(SearchResults {
@@ -394,6 +419,7 @@ pub async fn search_markdown_files(
     folder_path: String,
     query: String,
     limit: Option<usize>,
+    sort_by_date: Option<bool>,
     app_handle: tauri::AppHandle,
 ) -> Result<SearchResults, String> {
     let limit = limit.unwrap_or(100);
@@ -446,7 +472,8 @@ pub async fn search_markdown_files(
     // If we couldn't get the lock, another sync is in progress - skip it and just search
 
     // Search
-    let results = search_index(&index, &query, limit)
+    let sort_by_date = sort_by_date.unwrap_or(false);
+    let results = search_index(&index, &query, limit, sort_by_date)
         .map_err(|e| format!("Search failed: {}", e))?;
 
     Ok(results)

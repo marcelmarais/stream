@@ -58,12 +58,14 @@ interface RustSearchResults {
  * @param folderPath - Path to the folder containing markdown files
  * @param query - Search query string
  * @param limit - Maximum number of results to return (default: 100)
+ * @param sortByDate - Sort results by date in filename (newest first) (default: false)
  * @returns Promise<SearchResults> - Search results with matches and metadata
  */
 export async function searchMarkdownFiles(
   folderPath: string,
   query: string,
   limit?: number,
+  sortByDate?: boolean,
 ): Promise<SearchResults> {
   if (!query.trim()) {
     return {
@@ -80,6 +82,7 @@ export async function searchMarkdownFiles(
         folderPath,
         query: query.trim(),
         limit,
+        sortByDate,
       },
     );
 
