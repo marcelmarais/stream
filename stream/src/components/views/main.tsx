@@ -199,17 +199,17 @@ export function FileReaderScreen({
       <div className="mx-auto w-full max-w-4xl px-6 pt-6">
         <div className="flex items-start justify-between gap-4">
           {!isLoadingMetadata && (
-            <div className="flex flex-shrink-0 items-center gap-2">
+            <div className="flex flex-shrink-0 items-center">
               <CommitFilter />
               <Button
-                variant="outline"
-                size="icon"
+                variant="ghost"
+                size="sm"
+                className="text-xs"
                 onClick={() => setShowSearch(!showSearch)}
-                className="h-9 w-9"
                 title="Search markdown files (Cmd+F)"
               >
                 <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-              </Button>
+              </Button>   
             </div>
           )}
 
