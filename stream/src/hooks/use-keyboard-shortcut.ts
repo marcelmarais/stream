@@ -1,8 +1,27 @@
 import type { Editor } from "@tiptap/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { formatMarkdown } from "@/utils/markdown-formatter";
+
+/**
+ * Hook that debounces a value
+ */
+export function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 /**
  * Hook that handles Cmd/Ctrl+S to save and format markdown
