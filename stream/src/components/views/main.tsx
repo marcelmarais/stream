@@ -6,6 +6,7 @@ import {
   MagnifyingGlassIcon,
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
@@ -45,6 +46,20 @@ export function FileReaderScreen({
   folderPath,
   onBack,
 }: FileReaderScreenProps) {
+  const appWindow = getCurrentWindow();
+  const titlebarClasses = [
+    "backdrop-blur",
+    "bg-background/60",
+    "border-b",
+    "border-border/50",
+    "drag",
+    "fixed",
+    "h-10",
+    "inset-x-0",
+    "supports-[backdrop-filter]:bg-background/40",
+    "top-0",
+    "z-40",
+  ].join(" ");
   useConnectedRepos(folderPath);
   const [showLoading, setShowLoading] = useState(true);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
@@ -188,9 +203,59 @@ export function FileReaderScreen({
   // Render calendar view
   if (viewMode === "calendar") {
     return (
-      <div className="flex h-screen flex-col">
+      <div className="flex h-screen flex-col overflow-hidden rounded-lg bg-background">
+        <div data-tauri-drag-region className={titlebarClasses}>
+          <div className="flex h-full w-full max-w-4xl items-center justify-between gap-2 px-6">
+            {!isLoadingMetadata && (
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <div className="mr-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="Close window"
+                    className="h-3 w-3 rounded-full bg-red-500"
+                    onClick={() => appWindow.close()}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Minimize window"
+                    className="h-3 w-3 rounded-full bg-yellow-500"
+                    onClick={() => appWindow.minimize()}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Maximize window"
+                    className="h-3 w-3 rounded-full bg-green-500"
+                    onClick={() => appWindow.toggleMaximize()}
+                  />
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setShowSearch(!showSearch)}
+                  title="Search markdown files (Cmd+F)"
+                >
+                  <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
+                </Button>
+                <CommitFilter />
+              </div>
+            )}
+
+            {/* Center drag region */}
+            <div data-tauri-drag-region className="drag h-full flex-1" />
+
+            <div className="no-drag flex items-center justify-end">
+              <Header
+                onScrollToDate={handleScrollToDate}
+                folderPath={folderPath}
+              />
+            </div>
+          </div>
+        </div>
+
         <div
-          className={`absolute inset-0 z-50 flex items-center justify-center bg-background transition-opacity duration-500 ${
+          className={`absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm transition-opacity duration-500 ${
             showLoading ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
         >
@@ -200,42 +265,59 @@ export function FileReaderScreen({
           </div>
         </div>
 
-        {!isLoadingMetadata && allFilesMetadata.length === 0 ? (
-          <EmptyState folderPath={folderPath} />
-        ) : (
-          !isLoadingMetadata && (
-            <CalendarView
-              folderPath={folderPath}
-              footerComponent={
-                <Footer onFolderClick={onBack} folderPath={folderPath} />
-              }
-            />
-          )
-        )}
+        <div className="mt-12">
+          {!isLoadingMetadata && allFilesMetadata.length === 0 ? (
+            <EmptyState folderPath={folderPath} />
+          ) : (
+            !isLoadingMetadata && (
+              <CalendarView
+                folderPath={folderPath}
+                footerComponent={
+                  <Footer onFolderClick={onBack} folderPath={folderPath} />
+                }
+              />
+            )
+          )}
 
-        <Footer onFolderClick={onBack} folderPath={folderPath} />
+          <Footer onFolderClick={onBack} folderPath={folderPath} />
+        </div>
       </div>
     );
   }
 
   // Render timeline view (default)
   return (
-    <div className="flex h-screen flex-col">
-      <div
-        className={`absolute inset-0 z-50 flex items-center justify-center bg-background transition-opacity duration-500 ${
-          showLoading ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-      >
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
-          <div className="text-muted-foreground text-sm">Loading...</div>
-        </div>
-      </div>
-
-      <div className="mx-auto w-full max-w-4xl px-6 pt-6">
-        <div className="flex items-start justify-between gap-4">
+    <div className="flex h-screen flex-col overflow-hidden rounded-lg bg-background">
+      {/* Custom draggable titlebar */}
+      <div data-tauri-drag-region className={titlebarClasses}>
+        <div className="flex h-full w-full max-w-4xl items-center justify-between gap-2 px-6">
           {!isLoadingMetadata && (
-            <div className="flex flex-shrink-0 items-center">
+            <div
+              data-tauri-drag-region
+              className="no-drag flex flex-shrink-0 items-center gap-2"
+            >
+              {/* macOS-like window controls */}
+              <div className="mr-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Close window"
+                  className="h-3 w-3 rounded-full bg-red-500"
+                  onClick={() => appWindow.close()}
+                />
+                <button
+                  type="button"
+                  aria-label="Minimize window"
+                  className="h-3 w-3 rounded-full bg-yellow-500"
+                  onClick={() => appWindow.minimize()}
+                />
+                <button
+                  type="button"
+                  aria-label="Maximize window"
+                  className="h-3 w-3 rounded-full bg-green-500"
+                  onClick={() => appWindow.toggleMaximize()}
+                />
+              </div>
+
               <Button
                 variant="ghost"
                 size="sm"
@@ -249,7 +331,9 @@ export function FileReaderScreen({
             </div>
           )}
 
-          <div className="flex flex-1 justify-end">
+          <div data-tauri-drag-region className="drag h-full flex-1" />
+
+          <div className="flex items-center justify-end">
             <Header
               onScrollToDate={handleScrollToDate}
               folderPath={folderPath}
@@ -258,8 +342,19 @@ export function FileReaderScreen({
         </div>
       </div>
 
+      <div
+        className={`absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm transition-opacity duration-500 ${
+          showLoading ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <div className="text-muted-foreground text-sm">Loading...</div>
+        </div>
+      </div>
+
       {!isLoadingMetadata && allFilesMetadata.length > 0 && (
-        <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-4">
+        <div className="mx-auto mt-12 min-h-0 w-full max-w-4xl flex-1 px-6">
           <Virtuoso
             ref={virtuosoRef}
             totalCount={allFilesMetadata.length}
@@ -272,7 +367,9 @@ export function FileReaderScreen({
       )}
 
       {!isLoadingMetadata && allFilesMetadata.length === 0 && (
-        <EmptyState folderPath={folderPath} />
+        <div className="mt-12">
+          <EmptyState folderPath={folderPath} />
+        </div>
       )}
 
       <Footer onFolderClick={onBack} folderPath={folderPath} />

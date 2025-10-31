@@ -10,7 +10,17 @@
     "frontendDist": "../out"
   },
   "app": {
-    "windows": [],
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "fullscreen": false,
+        "height": 800,
+        "resizable": true,
+        "width": 600,
+        "decorations": false,
+        "transparent": true
+      }
+    ],
     "security": {
       "csp": null
     }

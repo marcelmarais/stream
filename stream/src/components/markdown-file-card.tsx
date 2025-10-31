@@ -191,7 +191,7 @@ export function FileCard({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center pt-4 pb-8">
+      <div className="mt-4 flex items-center justify-center pb-8">
         <div className="text-center">
           <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
           <div className="text-muted-foreground text-sm">Loading...</div>
@@ -200,7 +200,7 @@ export function FileCard({
     );
   }
   return (
-    <div className="px-4 pt-8">
+    <div className="mt-8 px-4">
       <DateHeader
         fileMetadata={file}
         isFocused={isFocused}
@@ -251,7 +251,7 @@ export function Header({
   );
 
   return (
-    <div className="!bg-transparent flex-shrink-0">
+    <div className="!bg-transparent w-full">
       <div className="flex items-center justify-end">
         <ButtonGroup>
           {!todayFileExists && (
