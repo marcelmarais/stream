@@ -1,6 +1,4 @@
 import type { Root } from "mdast";
-import markdownParser from "prettier/plugins/markdown";
-import * as prettier from "prettier/standalone";
 import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import { visit } from "unist-util-visit";
@@ -43,32 +41,22 @@ function fixHeadingIncrements() {
 }
 
 /**
- * Formats markdown content using Prettier and automatically fixes structure issues.
+ * Formats markdown content using remark and automatically fixes structure issues.
  *
  * @param markdown - The markdown content to format
  * @returns Promise<FormatResult> - The formatting result
  */
 export async function formatMarkdown(markdown: string): Promise<FormatResult> {
   try {
-    // First, fix heading increments automatically
-    // Use remarkGfm to support GitHub Flavored Markdown (strikethrough, tables, task lists, etc.)
+    // Process markdown: fix heading increments and format with remark-stringify
+    // remarkGfm supports GitHub Flavored Markdown (strikethrough, tables, task lists, etc.)
     const result = await remark()
       .use(remarkGfm)
       .use(fixHeadingIncrements)
       .process(markdown);
 
-    // Convert back to markdown string
-    const fixedMarkdown = String(result);
-
-    // Format with Prettier
-    let formatted = await prettier.format(fixedMarkdown, {
-      parser: "markdown",
-      plugins: [markdownParser],
-      printWidth: 80,
-      proseWrap: "always",
-      tabWidth: 2,
-      useTabs: false,
-    });
+    // Convert to markdown string with remark-stringify
+    let formatted = String(result);
 
     // Ensure exactly one trailing newline (remove excessive blank lines at EOF)
     formatted = `${formatted.replace(/\n{3,}$/, "\n\n").trimEnd()}\n`;

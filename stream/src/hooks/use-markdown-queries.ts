@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { debounce } from "lodash";
+import { debounce } from "lodash-es";
 import { useEffect, useMemo } from "react";
 import {
   deleteMarkdownFile,
