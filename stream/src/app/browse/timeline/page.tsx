@@ -206,7 +206,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
   return (
     <>
       <TitlebarHeader
-        isLoadingMetadata={isLoadingMetadata}
+        isLoading={isLoadingMetadata}
         showSearch={showSearch}
         setShowSearch={setShowSearch}
         handleScrollToDate={handleScrollToDate}

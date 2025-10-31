@@ -1,37 +1,37 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
+import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/markdown-file-card";
 
+interface TitlebarProps {
+  actions?: ReactNode;
+  isLoading: boolean;
+}
+
 interface TitlebarHeaderProps {
-  isLoadingMetadata: boolean;
+  isLoading: boolean;
   showSearch: boolean;
   setShowSearch: (show: boolean) => void;
   handleScrollToDate: (date: Date) => void;
   folderPath: string;
 }
 
-export function TitlebarHeader({
-  isLoadingMetadata,
-  showSearch,
-  setShowSearch,
-  handleScrollToDate,
-  folderPath,
-}: TitlebarHeaderProps) {
-  const appWindow = getCurrentWindow();
+export function Titlebar({ actions, isLoading }: TitlebarProps) {
+  const [appWindow, setAppWindow] = useState<Window | null>(null);
 
-  const { data: isFocused } = useQuery<boolean>({
-    queryKey: ["isFocused"],
-    queryFn: async () => {
-      return await appWindow.isFocused();
-    },
-  });
+  useEffect(() => {
+    // Only initialize the window reference in the browser
+    if (typeof window !== "undefined") {
+      setAppWindow(getCurrentWindow());
+    }
+  }, []);
 
   const titlebarClasses = [
     "backdrop-blur",
     "bg-background/60",
-    "border-b",
+    actions && "border-b",
     "border-border/50",
     "drag",
     "fixed",
@@ -42,46 +42,62 @@ export function TitlebarHeader({
     "z-60",
   ].join(" ");
 
+  const handleClose = () => appWindow?.close();
+  const handleMinimize = () => appWindow?.minimize();
+  const handleMaximize = () => appWindow?.toggleMaximize();
+
   return (
     <div data-tauri-drag-region className={titlebarClasses}>
       <div className="flex h-full w-full items-center justify-between px-4">
-        {!isLoadingMetadata && (
-          <div className="flex flex-shrink-0 items-center gap-2">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                aria-label="Close window"
-                className="h-2.5 w-2.5 rounded-full bg-red-500"
-                onClick={() => appWindow.close()}
-              />
-              <button
-                type="button"
-                aria-label="Minimize window"
-                className="h-2.5 w-2.5 rounded-full bg-yellow-500"
-                onClick={() => appWindow.minimize()}
-              />
-              <button
-                type="button"
-                aria-label="Maximize window"
-                className="h-2.5 w-2.5 rounded-full bg-green-500"
-                onClick={() => appWindow.toggleMaximize()}
-              />
-            </div>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Close window"
+              className="h-2.5 w-2.5 rounded-full bg-red-500"
+              onClick={handleClose}
+            />
+            <button
+              type="button"
+              aria-label="Minimize window"
+              className="h-2.5 w-2.5 rounded-full bg-yellow-500"
+              onClick={handleMinimize}
+            />
+            <button
+              type="button"
+              aria-label="Maximize window"
+              className="h-2.5 w-2.5 rounded-full bg-green-500"
+              onClick={handleMaximize}
+            />
           </div>
-        )}
+        </div>
 
         {/* Center drag region */}
         <div data-tauri-drag-region className="drag h-full flex-1" />
 
-        <div className="flex items-center justify-end">
-          <Header
-            onScrollToDate={handleScrollToDate}
-            folderPath={folderPath}
-            showSearch={showSearch}
-            setShowSearch={setShowSearch}
-          />
-        </div>
+        {actions && !isLoading && (
+          <div className="flex items-center justify-end">{actions}</div>
+        )}
       </div>
     </div>
   );
+}
+
+export function TitlebarHeader({
+  showSearch,
+  setShowSearch,
+  handleScrollToDate,
+  folderPath,
+  isLoading,
+}: TitlebarHeaderProps) {
+  const actions = (
+    <Header
+      onScrollToDate={handleScrollToDate}
+      folderPath={folderPath}
+      showSearch={showSearch}
+      setShowSearch={setShowSearch}
+    />
+  );
+
+  return <Titlebar actions={actions} isLoading={isLoading} />;
 }

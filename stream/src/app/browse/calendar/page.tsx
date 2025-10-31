@@ -59,7 +59,7 @@ function CalendarPageView({ folderPath }: CalendarPageViewProps) {
   return (
     <>
       <TitlebarHeader
-        isLoadingMetadata={false}
+        isLoading={false}
         showSearch={showSearch}
         setShowSearch={setShowSearch}
         handleScrollToDate={handleScrollToDate}

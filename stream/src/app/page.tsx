@@ -3,6 +3,7 @@
 import { FolderIcon } from "@phosphor-icons/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Titlebar } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
 import { useSelectedFolder, useSetSelectedFolder } from "@/hooks/use-user-data";
 import { useUserStore } from "@/stores/user-store";
@@ -52,51 +53,33 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
+      <>
+        <Titlebar isLoading={true} />
+        <div className="flex min-h-screen items-center justify-center pt-10">
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
-      <div className="w-full max-w-md space-y-8 text-center">
-        <div className="space-y-2">
-          <h1 className="font-semibold text-2xl text-foreground tracking-tight">
-            stream.
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Select a folder to get started
-          </p>
-        </div>
+    <>
+      <Titlebar isLoading={false} />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 pt-12">
+        <div className="w-full max-w-md space-y-8 text-center">
+          <div className="space-y-2">
+            <h1 className="font-semibold text-2xl text-foreground tracking-tight">
+              stream.
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              Select a folder to get started
+            </p>
+          </div>
 
-        <div className="space-y-4">
-          {!selectedFolder ? (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const { open } = await import("@tauri-apps/plugin-dialog");
-                  const folderPath = await open({
-                    directory: true,
-                    multiple: false,
-                  });
-
-                  if (folderPath && typeof folderPath === "string") {
-                    handleFolderSelected(folderPath);
-                  }
-                } catch (error) {
-                  console.error("Error opening folder picker:", error);
-                }
-              }}
-              className="w-full rounded-md bg-primary px-4 py-3 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
-            >
-              Open Folder
-            </button>
-          ) : (
-            <div className="space-y-3">
-              <Button
-                variant="ghost"
+          <div className="space-y-4">
+            {!selectedFolder ? (
+              <button
+                type="button"
                 onClick={async () => {
                   try {
                     const { open } = await import("@tauri-apps/plugin-dialog");
@@ -112,30 +95,56 @@ export default function Home() {
                     console.error("Error opening folder picker:", error);
                   }
                 }}
-                className="h-auto w-full cursor-pointer justify-start rounded-md border border-border bg-muted/50 px-3 py-3 text-muted-foreground text-sm transition-colors hover:bg-muted/70"
+                className="w-full rounded-md bg-primary px-4 py-3 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
               >
-                <div className="flex w-full items-center gap-3">
-                  <FolderIcon className="size-5 flex-shrink-0" />
-                  <div className="flex flex-1 flex-col items-center">
-                    <div
-                      className="truncate font-mono text-foreground"
-                      title={selectedFolder}
-                    >
-                      {selectedFolder}
-                    </div>
-                    <div className="mt-1 text-muted-foreground text-xs">
-                      Click to change
+                Open Folder
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      const { open } = await import(
+                        "@tauri-apps/plugin-dialog"
+                      );
+                      const folderPath = await open({
+                        directory: true,
+                        multiple: false,
+                      });
+
+                      if (folderPath && typeof folderPath === "string") {
+                        handleFolderSelected(folderPath);
+                      }
+                    } catch (error) {
+                      console.error("Error opening folder picker:", error);
+                    }
+                  }}
+                  className="h-auto w-full cursor-pointer justify-start rounded-md border border-border bg-muted/50 px-3 py-3 text-muted-foreground text-sm transition-colors hover:bg-muted/70"
+                >
+                  <div className="flex w-full items-center gap-3">
+                    <FolderIcon className="size-5 flex-shrink-0" />
+                    <div className="flex flex-1 flex-col items-center">
+                      <div
+                        className="truncate font-mono text-foreground"
+                        title={selectedFolder}
+                      >
+                        {selectedFolder}
+                      </div>
+                      <div className="mt-1 text-muted-foreground text-xs">
+                        Click to change
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Button>
-              <Button onClick={handleContinue} className="w-full">
-                Open
-              </Button>
-            </div>
-          )}
+                </Button>
+                <Button onClick={handleContinue} className="w-full">
+                  Open
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
