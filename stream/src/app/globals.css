@@ -138,7 +138,20 @@
   }
 
   body {
-    overflow-x: hidden;
+    /* Rounded corners for transparent Tauri window */
+    border-radius: 0.5rem; /* ~8px */
+    overflow: hidden;
+    /* Ensure background is transparent for Tauri */
+    background: transparent;
+  }
+
+  /* Main app container that respects rounded corners */
+  #__next,
+  [data-nextjs-scroll-focus-boundary] {
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: var(--background);
+    min-height: 100vh;
   }
 
   /* Global heading styles */
@@ -273,4 +286,15 @@
 
 .tippy-box[data-theme~="slash-command"] .tippy-content {
   padding: 0;
+}
+
+/* Draggable regions for custom macOS-style titlebar in Tauri */
+.drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }

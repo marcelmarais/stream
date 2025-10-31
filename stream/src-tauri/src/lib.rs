@@ -1,6 +1,6 @@
 mod search;
 
-use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WindowEvent};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -9,6 +9,11 @@ use git2::{Repository, Time};
 use chrono::{DateTime, Utc, NaiveDate};
 use xattr;
 use regex::Regex;
+
+#[cfg(target_os = "macos")]
+use objc::{msg_send, sel, sel_impl};
+#[cfg(target_os = "macos")]
+use cocoa::base::{id, nil};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MarkdownFileMetadata {
@@ -351,6 +356,33 @@ async fn fetch_repos(repo_paths: Vec<String>) -> Result<Vec<FetchResult>, String
     Ok(results)
 }
 
+#[cfg(target_os = "macos")]
+fn setup_macos_window(window: &tauri::Window) -> Result<(), Box<dyn std::error::Error>> {
+    unsafe {
+        let ns_window = window.ns_window()? as id;
+        
+        if ns_window != nil {
+            // Set corner radius using Objective-C messaging
+            let _: () = msg_send![ns_window, setHasShadow: true];
+            
+            // Get the content view
+            let content_view: id = msg_send![ns_window, contentView];
+            if content_view != nil {
+                let _: () = msg_send![content_view, setWantsLayer: true];
+                
+                // Get the layer
+                let layer: id = msg_send![content_view, layer];  
+                if layer != nil {
+                    let _: () = msg_send![layer, setCornerRadius: 8.0f64];
+                    let _: () = msg_send![layer, setMasksToBounds: true];
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
 async fn fetch_repo(repo_path: &str) -> Result<String, Box<dyn std::error::Error>> {
     let repo = Repository::open(repo_path)?;
     
@@ -590,35 +622,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
-        .setup(|app| {
-            let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                .title("")
-                .inner_size(800.0, 600.0);
-
-            // set transparent title bar only when building for macOS
-            #[cfg(target_os = "macos")]
-            let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
-
-            let window = win_builder.build().unwrap();
-
-            // set black background only when building for macOS
-            #[cfg(target_os = "macos")]
-            {
-                use objc2::runtime::AnyObject;
-                use objc2_app_kit::NSColor;
-
-                let ns_window = window.ns_window().unwrap();
-                unsafe {
-                    // Match the dark theme background color: #0c0a09
-                    // RGB(12, 10, 9) normalized to 0-1 range
-                    let bg_color = NSColor::colorWithRed_green_blue_alpha(0.047, 0.039, 0.035, 1.0);
-                    let window_obj: *mut AnyObject = ns_window as *mut AnyObject;
-                    let _: () = objc2::msg_send![window_obj, setBackgroundColor: &*bg_color];
-                }
-            }
-
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             read_markdown_files_metadata, 
             read_markdown_files_content, 
@@ -628,6 +631,29 @@ pub fn run() {
             search::search_markdown_files, 
             search::rebuild_search_index
         ])
+        .on_window_event(|window, event| {
+            match event {
+                WindowEvent::Resized(_) | WindowEvent::Moved(_) => {
+                    #[cfg(target_os = "macos")]
+                    if let Err(e) = setup_macos_window(window) {
+                        eprintln!("Failed to setup macOS window: {}", e);
+                    }
+                }
+                _ => {}
+            }
+        })
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(webview_window) = app.get_webview_window("main") {
+                    let window = webview_window.as_ref().window();
+                    if let Err(e) = setup_macos_window(&window) {
+                        eprintln!("Failed to setup macOS window: {}", e);
+                    }
+                }
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

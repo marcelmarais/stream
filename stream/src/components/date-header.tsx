@@ -114,7 +114,7 @@ export function DateHeader({
   }, [updateMeasuredWidths]);
 
   return (
-    <div className="flex flex-col items-start gap-2.5 pb-2">
+    <div className="mb-2 flex flex-col items-start gap-2.5">
       <button
         type="button"
         className="group flex w-full items-center justify-start gap-3 bg-transparent p-0 hover:bg-transparent"

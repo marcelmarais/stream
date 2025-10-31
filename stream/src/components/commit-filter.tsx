@@ -112,7 +112,9 @@ export function CommitFilter() {
   if (commits.length === 0) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
-        <SlidersHorizontalIcon className="h-4 w-4" />
+        <Button variant="ghost" size="sm" className="p-1 text-xs" disabled>
+          <SlidersHorizontalIcon className="h-4 w-4" />
+        </Button>
       </div>
     );
   }

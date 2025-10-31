@@ -1,20 +1,14 @@
 "use client";
 
-import {
-  CalendarPlusIcon,
-  FileTextIcon,
-  MagnifyingGlassIcon,
-} from "@phosphor-icons/react";
+import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
-import {
-  FileCard,
-  FocusedFileOverlay,
-  Header,
-} from "@/components/markdown-file-card";
+import { FileCard, FocusedFileOverlay } from "@/components/markdown-file-card";
 import { SearchBar } from "@/components/search-bar";
+import { TitlebarHeader } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
 import {
   useConnectedRepos,
@@ -33,17 +27,43 @@ import {
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { useUserStore } from "@/stores/user-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
-import CommitFilter from "../commit-filter";
 
-interface FileReaderScreenProps {
-  folderPath: string;
-  onBack: () => void;
+export default function TimelinePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [folderPath, setFolderPath] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const pathParam = searchParams.get("path");
+
+    if (!pathParam) {
+      router.push("/");
+      return;
+    }
+
+    try {
+      const decodedPath = decodeURIComponent(pathParam);
+      setFolderPath(decodedPath);
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error decoding folder path:", error);
+      router.push("/");
+    }
+  }, [searchParams, router]);
+
+  if (isLoading || !folderPath) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  return <TimelineView folderPath={folderPath} />;
 }
 
-export function FileReaderScreen({
-  folderPath,
-  onBack,
-}: FileReaderScreenProps) {
+function TimelineView({ folderPath }: { folderPath: string }) {
   useConnectedRepos(folderPath);
   const [showLoading, setShowLoading] = useState(true);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
@@ -184,9 +204,17 @@ export function FileReaderScreen({
   }, [isLoadingMetadata]);
 
   return (
-    <div className="flex h-screen flex-col">
+    <>
+      <TitlebarHeader
+        isLoading={isLoadingMetadata}
+        showSearch={showSearch}
+        setShowSearch={setShowSearch}
+        handleScrollToDate={handleScrollToDate}
+        folderPath={folderPath}
+      />
+
       <div
-        className={`absolute inset-0 z-50 flex items-center justify-center bg-background transition-opacity duration-500 ${
+        className={`absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm transition-opacity duration-500 ${
           showLoading ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
@@ -196,34 +224,8 @@ export function FileReaderScreen({
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-4xl px-6 pt-6">
-        <div className="flex items-start justify-between gap-4">
-          {!isLoadingMetadata && (
-            <div className="flex flex-shrink-0 items-center">
-              <CommitFilter />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs"
-                onClick={() => setShowSearch(!showSearch)}
-                title="Search markdown files (Cmd+F)"
-              >
-                <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-              </Button>
-            </div>
-          )}
-
-          <div className="flex flex-1 justify-end">
-            <Header
-              onScrollToDate={handleScrollToDate}
-              folderPath={folderPath}
-            />
-          </div>
-        </div>
-      </div>
-
       {!isLoadingMetadata && allFilesMetadata.length > 0 && (
-        <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 px-6 pt-4">
+        <div className="mx-auto mt-12 min-h-0 w-full max-w-4xl flex-1 px-6">
           <Virtuoso
             ref={virtuosoRef}
             totalCount={allFilesMetadata.length}
@@ -236,10 +238,12 @@ export function FileReaderScreen({
       )}
 
       {!isLoadingMetadata && allFilesMetadata.length === 0 && (
-        <EmptyState folderPath={folderPath} />
+        <div className="mt-12">
+          <EmptyState folderPath={folderPath} />
+        </div>
       )}
 
-      <Footer onFolderClick={onBack} folderPath={folderPath} />
+      <Footer folderPath={folderPath} />
 
       <SearchBar
         open={showSearch}
@@ -254,12 +258,10 @@ export function FileReaderScreen({
           folderPath={folderPath}
           onClose={() => setFocusedFile(null)}
           onEditorFocus={() => setActiveEditingFile(focusedFile)}
-          footerComponent={
-            <Footer onFolderClick={onBack} folderPath={folderPath} />
-          }
+          footerComponent={<Footer folderPath={folderPath} />}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -304,5 +306,3 @@ function EmptyState({ folderPath }: { folderPath: string }) {
     </div>
   );
 }
-
-export default FileReaderScreen;
