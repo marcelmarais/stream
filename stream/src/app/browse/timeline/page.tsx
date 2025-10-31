@@ -60,11 +60,7 @@ export default function TimelinePage() {
     );
   }
 
-  return (
-    <div className="min-h-screen w-screen">
-      <TimelineView folderPath={folderPath} />
-    </div>
-  );
+  return <TimelineView folderPath={folderPath} />;
 }
 
 function TimelineView({ folderPath }: { folderPath: string }) {
@@ -208,7 +204,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
   }, [isLoadingMetadata]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden rounded-lg bg-background">
+    <>
       <TitlebarHeader
         isLoadingMetadata={isLoadingMetadata}
         showSearch={showSearch}
@@ -265,7 +261,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
           footerComponent={<Footer folderPath={folderPath} />}
         />
       )}
-    </div>
+    </>
   );
 }
 

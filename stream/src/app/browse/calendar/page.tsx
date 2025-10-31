@@ -46,11 +46,7 @@ export default function CalendarPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen w-screen">
-      <CalendarPageView folderPath={folderPath} />
-    </div>
-  );
+  return <CalendarPageView folderPath={folderPath} />;
 }
 
 interface CalendarPageViewProps {
@@ -92,7 +88,7 @@ function CalendarPageView({ folderPath }: CalendarPageViewProps) {
   }, [isLoadingMetadata]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden rounded-lg bg-background">
+    <>
       <TitlebarHeader
         isLoadingMetadata={isLoadingMetadata}
         showSearch={showSearch}
@@ -112,7 +108,7 @@ function CalendarPageView({ folderPath }: CalendarPageViewProps) {
         </div>
       </div>
 
-      <div className="mt-12">
+      <div className="flex-1">
         {!isLoadingMetadata && allFilesMetadata.length === 0 ? (
           <EmptyState folderPath={folderPath} />
         ) : (
@@ -164,9 +160,9 @@ function CalendarPageView({ folderPath }: CalendarPageViewProps) {
             </div>
           )
         )}
-
-        <Footer folderPath={folderPath} />
       </div>
+
+      <Footer folderPath={folderPath} />
 
       <SearchBar
         open={showSearch}
@@ -174,7 +170,7 @@ function CalendarPageView({ folderPath }: CalendarPageViewProps) {
         folderPath={folderPath}
         onFileSelect={handleFileSelectFromSearch}
       />
-    </div>
+    </>
   );
 }
 
