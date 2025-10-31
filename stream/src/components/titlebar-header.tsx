@@ -30,7 +30,7 @@ export function TitlebarHeader({
     "inset-x-0",
     "supports-[backdrop-filter]:bg-background/40",
     "top-0",
-    "z-40",
+    "z-60",
   ].join(" ");
 
   return (
