@@ -3,7 +3,7 @@
 import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
 import { FileCard, FocusedFileOverlay } from "@/components/markdown-file-card";
@@ -28,7 +28,7 @@ import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { useUserStore } from "@/stores/user-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
-export default function TimelinePage() {
+function TimelinePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [folderPath, setFolderPath] = useState<string>("");
@@ -61,6 +61,20 @@ export default function TimelinePage() {
   }
 
   return <TimelineView folderPath={folderPath} />;
+}
+
+export default function TimelinePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
+        </div>
+      }
+    >
+      <TimelinePageContent />
+    </Suspense>
+  );
 }
 
 function TimelineView({ folderPath }: { folderPath: string }) {

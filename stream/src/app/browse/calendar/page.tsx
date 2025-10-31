@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Footer } from "@/components/footer";
 import { SearchBar } from "@/components/search-bar";
 import { TitlebarHeader } from "@/components/titlebar-header";
 import { useConnectedRepos } from "@/hooks/use-git-queries";
 import { useSearchShortcut } from "@/hooks/use-keyboard-shortcut";
 
-export default function CalendarPage() {
+function CalendarPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [folderPath, setFolderPath] = useState<string>("");
@@ -36,6 +36,20 @@ export default function CalendarPage() {
   }
 
   return <CalendarPageView folderPath={folderPath} />;
+}
+
+export default function CalendarPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
+        </div>
+      }
+    >
+      <CalendarPageContent />
+    </Suspense>
+  );
 }
 
 interface CalendarPageViewProps {

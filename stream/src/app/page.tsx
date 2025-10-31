@@ -2,13 +2,13 @@
 
 import { FolderIcon } from "@phosphor-icons/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Titlebar } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
 import { useSelectedFolder, useSetSelectedFolder } from "@/hooks/use-user-data";
 import { useUserStore } from "@/stores/user-store";
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   // Disable auto-navigate if coming back from browse page
@@ -146,5 +146,24 @@ export default function Home() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Titlebar isLoading={true} />
+          <div className="flex min-h-screen items-center justify-center pt-10">
+            <div className="animate-pulse text-muted-foreground">
+              Loading...
+            </div>
+          </div>
+        </>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }

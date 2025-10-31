@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useUserStore } from "@/stores/user-store";
 
-export default function BrowsePage() {
+function BrowseRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const viewMode = useUserStore((state) => state.viewMode);
@@ -23,4 +23,12 @@ export default function BrowsePage() {
   }, [searchParams, router, viewMode]);
 
   return null; // This component only redirects
+}
+
+export default function BrowsePage() {
+  return (
+    <Suspense fallback={null}>
+      <BrowseRedirect />
+    </Suspense>
+  );
 }
