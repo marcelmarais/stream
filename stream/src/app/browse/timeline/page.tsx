@@ -1,23 +1,15 @@
 "use client";
 
-import {
-  CalendarPlusIcon,
-  FileTextIcon,
-  MagnifyingGlassIcon,
-} from "@phosphor-icons/react";
+import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
-import {
-  FileCard,
-  FocusedFileOverlay,
-  Header,
-} from "@/components/markdown-file-card";
+import { FileCard, FocusedFileOverlay } from "@/components/markdown-file-card";
 import { SearchBar } from "@/components/search-bar";
+import { TitlebarHeader } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
-import { CalendarView } from "@/components/views/calendar";
 import {
   useConnectedRepos,
   usePrefetchCommitsForDates,
@@ -35,31 +27,47 @@ import {
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { useUserStore } from "@/stores/user-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
-import CommitFilter from "../commit-filter";
 
-interface FileReaderScreenProps {
-  folderPath: string;
-  onBack: () => void;
+export default function TimelinePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [folderPath, setFolderPath] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const pathParam = searchParams.get("path");
+
+    if (!pathParam) {
+      router.push("/");
+      return;
+    }
+
+    try {
+      const decodedPath = decodeURIComponent(pathParam);
+      setFolderPath(decodedPath);
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error decoding folder path:", error);
+      router.push("/");
+    }
+  }, [searchParams, router]);
+
+  if (isLoading || !folderPath) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen w-screen">
+      <TimelineView folderPath={folderPath} />
+    </div>
+  );
 }
 
-export function FileReaderScreen({
-  folderPath,
-  onBack,
-}: FileReaderScreenProps) {
-  const appWindow = getCurrentWindow();
-  const titlebarClasses = [
-    "backdrop-blur",
-    "bg-background/60",
-    "border-b",
-    "border-border/50",
-    "drag",
-    "fixed",
-    "h-10",
-    "inset-x-0",
-    "supports-[backdrop-filter]:bg-background/40",
-    "top-0",
-    "z-40",
-  ].join(" ");
+function TimelineView({ folderPath }: { folderPath: string }) {
   useConnectedRepos(folderPath);
   const [showLoading, setShowLoading] = useState(true);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
@@ -67,7 +75,6 @@ export function FileReaderScreen({
   );
   const [showSearch, setShowSearch] = useState(false);
 
-  const viewMode = useUserStore((state) => state.viewMode);
   const activeEditingFile = useUserStore((state) => state.activeEditingFile);
   const setActiveEditingFile = useUserStore(
     (state) => state.setActiveEditingFile,
@@ -200,147 +207,15 @@ export function FileReaderScreen({
     }
   }, [isLoadingMetadata]);
 
-  // Render calendar view
-  if (viewMode === "calendar") {
-    return (
-      <div className="flex h-screen flex-col overflow-hidden rounded-lg bg-background">
-        <div data-tauri-drag-region className={titlebarClasses}>
-          <div className="flex h-full w-full max-w-4xl items-center justify-between gap-2 px-6">
-            {!isLoadingMetadata && (
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <div className="mr-2 flex items-center gap-2">
-                  <button
-                    type="button"
-                    aria-label="Close window"
-                    className="h-3 w-3 rounded-full bg-red-500"
-                    onClick={() => appWindow.close()}
-                  />
-                  <button
-                    type="button"
-                    aria-label="Minimize window"
-                    className="h-3 w-3 rounded-full bg-yellow-500"
-                    onClick={() => appWindow.minimize()}
-                  />
-                  <button
-                    type="button"
-                    aria-label="Maximize window"
-                    className="h-3 w-3 rounded-full bg-green-500"
-                    onClick={() => appWindow.toggleMaximize()}
-                  />
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => setShowSearch(!showSearch)}
-                  title="Search markdown files (Cmd+F)"
-                >
-                  <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-                </Button>
-                <CommitFilter />
-              </div>
-            )}
-
-            {/* Center drag region */}
-            <div data-tauri-drag-region className="drag h-full flex-1" />
-
-            <div className="no-drag flex items-center justify-end">
-              <Header
-                onScrollToDate={handleScrollToDate}
-                folderPath={folderPath}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div
-          className={`absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm transition-opacity duration-500 ${
-            showLoading ? "opacity-100" : "pointer-events-none opacity-0"
-          }`}
-        >
-          <div className="text-center">
-            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
-            <div className="text-muted-foreground text-sm">Loading...</div>
-          </div>
-        </div>
-
-        <div className="mt-12">
-          {!isLoadingMetadata && allFilesMetadata.length === 0 ? (
-            <EmptyState folderPath={folderPath} />
-          ) : (
-            !isLoadingMetadata && (
-              <CalendarView
-                folderPath={folderPath}
-                footerComponent={
-                  <Footer onFolderClick={onBack} folderPath={folderPath} />
-                }
-              />
-            )
-          )}
-
-          <Footer onFolderClick={onBack} folderPath={folderPath} />
-        </div>
-      </div>
-    );
-  }
-
-  // Render timeline view (default)
   return (
     <div className="flex h-screen flex-col overflow-hidden rounded-lg bg-background">
-      {/* Custom draggable titlebar */}
-      <div data-tauri-drag-region className={titlebarClasses}>
-        <div className="flex h-full w-full max-w-4xl items-center justify-between gap-2 px-6">
-          {!isLoadingMetadata && (
-            <div
-              data-tauri-drag-region
-              className="no-drag flex flex-shrink-0 items-center gap-2"
-            >
-              {/* macOS-like window controls */}
-              <div className="mr-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-label="Close window"
-                  className="h-3 w-3 rounded-full bg-red-500"
-                  onClick={() => appWindow.close()}
-                />
-                <button
-                  type="button"
-                  aria-label="Minimize window"
-                  className="h-3 w-3 rounded-full bg-yellow-500"
-                  onClick={() => appWindow.minimize()}
-                />
-                <button
-                  type="button"
-                  aria-label="Maximize window"
-                  className="h-3 w-3 rounded-full bg-green-500"
-                  onClick={() => appWindow.toggleMaximize()}
-                />
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs"
-                onClick={() => setShowSearch(!showSearch)}
-                title="Search markdown files (Cmd+F)"
-              >
-                <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-              </Button>
-              <CommitFilter />
-            </div>
-          )}
-
-          <div data-tauri-drag-region className="drag h-full flex-1" />
-
-          <div className="flex items-center justify-end">
-            <Header
-              onScrollToDate={handleScrollToDate}
-              folderPath={folderPath}
-            />
-          </div>
-        </div>
-      </div>
+      <TitlebarHeader
+        isLoadingMetadata={isLoadingMetadata}
+        showSearch={showSearch}
+        setShowSearch={setShowSearch}
+        handleScrollToDate={handleScrollToDate}
+        folderPath={folderPath}
+      />
 
       <div
         className={`absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm transition-opacity duration-500 ${
@@ -372,7 +247,7 @@ export function FileReaderScreen({
         </div>
       )}
 
-      <Footer onFolderClick={onBack} folderPath={folderPath} />
+      <Footer folderPath={folderPath} />
 
       <SearchBar
         open={showSearch}
@@ -387,9 +262,7 @@ export function FileReaderScreen({
           folderPath={folderPath}
           onClose={() => setFocusedFile(null)}
           onEditorFocus={() => setActiveEditingFile(focusedFile)}
-          footerComponent={
-            <Footer onFolderClick={onBack} folderPath={folderPath} />
-          }
+          footerComponent={<Footer folderPath={folderPath} />}
         />
       )}
     </div>
@@ -437,5 +310,3 @@ function EmptyState({ folderPath }: { folderPath: string }) {
     </div>
   );
 }
-
-export default FileReaderScreen;

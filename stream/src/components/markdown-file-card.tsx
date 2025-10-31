@@ -1,6 +1,12 @@
-import { CalendarPlusIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react";
+import {
+  CalendarPlusIcon,
+  CopyIcon,
+  MagnifyingGlassIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import CommitFilter from "@/components/commit-filter";
 import CommitOverlay from "@/components/commit-overlay";
 import { DateHeader } from "@/components/date-header";
 import { FileCalendar } from "@/components/file-calendar";
@@ -236,9 +242,13 @@ export function FileCard({
 export function Header({
   onScrollToDate,
   folderPath,
+  showSearch,
+  setShowSearch,
 }: {
   onScrollToDate: (date: Date) => void;
   folderPath: string;
+  showSearch: boolean;
+  setShowSearch: (show: boolean) => void;
 }) {
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
     useMarkdownMetadata(folderPath);
@@ -252,7 +262,20 @@ export function Header({
 
   return (
     <div className="!bg-transparent w-full">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs"
+            onClick={() => setShowSearch(!showSearch)}
+            title="Search markdown files (Cmd+F)"
+          >
+            <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
+          </Button>
+          <CommitFilter />
+        </div>
+
         <ButtonGroup>
           {!todayFileExists && (
             <Button

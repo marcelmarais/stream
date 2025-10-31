@@ -1,42 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import FolderSelectionScreen from "@/components/views/folder-selection";
-import FileReaderScreen from "@/components/views/main";
+import { useSearchParams } from "next/navigation";
+import { FolderSelectionScreen } from "@/components/views/folder-selection";
 
 export default function Home() {
-  const [currentScreen, setCurrentScreen] = useState<
-    "folder-selection" | "file-reader"
-  >("folder-selection");
-  const [selectedFolderPath, setSelectedFolderPath] = useState<string>("");
-  const [allowAutoNavigate, setAllowAutoNavigate] = useState<boolean>(true);
-
-  const handleFolderConfirmed = (folderPath: string) => {
-    setSelectedFolderPath(folderPath);
-    setCurrentScreen("file-reader");
-    setAllowAutoNavigate(true); // Re-enable auto-navigate for next time
-  };
-
-  const handleBackToFolderSelection = () => {
-    setCurrentScreen("folder-selection");
-    setAllowAutoNavigate(false); // Disable auto-navigate when user goes back
-  };
+  const searchParams = useSearchParams();
+  // Disable auto-navigate if coming back from browse page
+  const autoNavigate = searchParams.get("back") !== "true";
 
   return (
     <div className="min-h-screen w-screen">
-      {currentScreen === "folder-selection" && (
-        <FolderSelectionScreen
-          onFolderConfirmed={handleFolderConfirmed}
-          autoNavigate={allowAutoNavigate}
-        />
-      )}
-
-      {currentScreen === "file-reader" && (
-        <FileReaderScreen
-          folderPath={selectedFolderPath}
-          onBack={handleBackToFolderSelection}
-        />
-      )}
+      <FolderSelectionScreen autoNavigate={autoNavigate} />
     </div>
   );
 }

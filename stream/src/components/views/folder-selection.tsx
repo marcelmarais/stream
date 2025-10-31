@@ -1,20 +1,20 @@
 "use client";
 
 import { FolderIcon } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSelectedFolder, useSetSelectedFolder } from "@/hooks/use-user-data";
 import { useUserStore } from "@/stores/user-store";
 
 interface FolderSelectionScreenProps {
-  onFolderConfirmed: (folderPath: string) => void;
   autoNavigate?: boolean;
 }
 
 export function FolderSelectionScreen({
-  onFolderConfirmed,
   autoNavigate = true,
 }: FolderSelectionScreenProps) {
+  const router = useRouter();
   const [localSelectedFolder, setLocalSelectedFolder] = useState<string | null>(
     null,
   );
@@ -28,17 +28,13 @@ export function FolderSelectionScreen({
     if (!isLoading && persistedFolder && autoNavigate) {
       setLocalSelectedFolder(persistedFolder);
       setFolderPath(persistedFolder);
-      onFolderConfirmed(persistedFolder);
+      // Navigate to browse page with encoded folder path
+      const encodedPath = encodeURIComponent(persistedFolder);
+      router.push(`/browse?path=${encodedPath}`);
     } else if (!isLoading && persistedFolder) {
       setLocalSelectedFolder(persistedFolder);
     }
-  }, [
-    persistedFolder,
-    isLoading,
-    autoNavigate,
-    setFolderPath,
-    onFolderConfirmed,
-  ]);
+  }, [persistedFolder, isLoading, autoNavigate, setFolderPath, router]);
 
   const handleFolderSelected = async (folderPath: string) => {
     setLocalSelectedFolder(folderPath);
@@ -48,7 +44,9 @@ export function FolderSelectionScreen({
   const handleContinue = () => {
     if (localSelectedFolder) {
       setFolderPath(localSelectedFolder);
-      onFolderConfirmed(localSelectedFolder);
+      // Navigate to browse page with encoded folder path
+      const encodedPath = encodeURIComponent(localSelectedFolder);
+      router.push(`/browse?path=${encodedPath}`);
     }
   };
 
