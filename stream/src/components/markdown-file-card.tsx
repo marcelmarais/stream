@@ -261,39 +261,32 @@ export function Header({
   );
 
   return (
-    <div className="!bg-transparent w-full">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs"
-            onClick={() => setShowSearch(!showSearch)}
-            title="Search markdown files (Cmd+F)"
-          >
-            <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-          </Button>
-          <CommitFilter />
-        </div>
+    <div className="!bg-transparent flex w-full items-center justify-end">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-xs"
+        onClick={() => setShowSearch(!showSearch)}
+        title="Search markdown files (Cmd+F)"
+      >
+        <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
+      </Button>
+      <CommitFilter />
 
-        <ButtonGroup>
-          {!todayFileExists && (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={async () => await createToday(folderPath)}
-              disabled={isLoadingMetadata || Boolean(creatingToday)}
-            >
-              <CalendarPlusIcon className="size-4" />
-            </Button>
-          )}
-          <FileCalendar
-            folderPath={folderPath}
-            onScrollToDate={onScrollToDate}
-          />
-        </ButtonGroup>
-      </div>
+      <ButtonGroup>
+        {!todayFileExists && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={async () => await createToday(folderPath)}
+            disabled={isLoadingMetadata || Boolean(creatingToday)}
+          >
+            <CalendarPlusIcon className="size-4" />
+          </Button>
+        )}
+        <FileCalendar folderPath={folderPath} onScrollToDate={onScrollToDate} />
+      </ButtonGroup>
     </div>
   );
 }
