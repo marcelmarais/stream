@@ -24,6 +24,51 @@ export interface MarkdownFileMetadata {
 }
 
 /**
+ * Represents structured markdown file metadata without content
+ * (for arbitrary .md files in the structured directory)
+ */
+export interface StructuredMarkdownFileMetadata {
+  /** The full file path */
+  filePath: string;
+  /** The filename without the directory path */
+  fileName: string;
+  /** The file creation date */
+  createdAt: Date;
+  /** The file modification date */
+  modifiedAt: Date;
+  /** The file size in bytes */
+  size: number;
+  /** The country where the file was created (from xattrs) */
+  country?: string;
+  /** The city where the file was created (from xattrs) */
+  city?: string;
+}
+
+/**
+ * Represents a complete structured markdown file with content and metadata
+ */
+export interface StructuredMarkdownFile {
+  /** The full file path */
+  filePath: string;
+  /** The filename without the directory path */
+  fileName: string;
+  /** The file creation date */
+  createdAt: Date;
+  /** The file modification date */
+  modifiedAt: Date;
+  /** The file size in bytes */
+  size: number;
+  /** The country where the file was created (from xattrs) */
+  country?: string;
+  /** The city where the file was created (from xattrs) */
+  city?: string;
+  /** The file description (from xattrs) */
+  description?: string;
+  /** The file content */
+  content: string;
+}
+
+/**
  * Rust-side metadata structure (matches Rust struct)
  */
 interface RustMarkdownFileMetadata {
@@ -35,6 +80,34 @@ interface RustMarkdownFileMetadata {
   country?: string;
   city?: string;
   date_from_filename: number; // Date from filename as Unix timestamp (midnight UTC)
+}
+
+/**
+ * Rust-side structured markdown metadata structure (matches Rust struct)
+ */
+interface RustStructuredMarkdownFileMetadata {
+  file_path: string;
+  file_name: string;
+  created_at: number; // Unix timestamp in milliseconds
+  modified_at: number; // Unix timestamp in milliseconds
+  size: number;
+  country?: string;
+  city?: string;
+}
+
+/**
+ * Rust-side structured markdown file structure with content (matches Rust struct)
+ */
+interface RustStructuredMarkdownFile {
+  file_path: string;
+  file_name: string;
+  created_at: number; // Unix timestamp in milliseconds
+  modified_at: number; // Unix timestamp in milliseconds
+  size: number;
+  country?: string;
+  city?: string;
+  description?: string;
+  content: string;
 }
 
 /**
@@ -287,4 +360,206 @@ export async function setFileLocationMetadata(
  */
 export async function deleteMarkdownFile(filePath: string): Promise<void> {
   await remove(filePath);
+}
+
+/**
+ * Reads metadata for structured markdown files in the structured subdirectory.
+ * Reads all .md files regardless of naming pattern from {directoryPath}/structured/.
+ * Files are sorted by modification time (newest first).
+ * This function only reads file metadata, not content.
+ * Uses a fast Rust-based implementation for optimal performance.
+ *
+ * @param directoryPath - The base path (structured directory will be {directoryPath}/structured)
+ * @param options - Additional options for reading files
+ * @returns Promise<StructuredMarkdownFileMetadata[]> - Array of structured markdown file metadata
+ */
+export async function readStructuredMarkdownFilesMetadata(
+  directoryPath: string,
+  options: ReadMarkdownOptions = {},
+): Promise<StructuredMarkdownFileMetadata[]> {
+  const {
+    maxFileSize = 10 * 1024 * 1024, // 10MB default
+  } = options;
+
+  try {
+    const rustMetadata: RustStructuredMarkdownFileMetadata[] = await invoke(
+      "read_structured_markdown_files_metadata",
+      {
+        directoryPath,
+        maxFileSize,
+      },
+    );
+
+    const files: StructuredMarkdownFileMetadata[] = rustMetadata.map(
+      (rustFile) => ({
+        filePath: rustFile.file_path,
+        fileName: rustFile.file_name,
+        createdAt: new Date(rustFile.created_at),
+        modifiedAt: new Date(rustFile.modified_at),
+        size: rustFile.size,
+        country: rustFile.country,
+        city: rustFile.city,
+      }),
+    );
+
+    return files;
+  } catch (error) {
+    console.error(
+      `Error reading structured directory ${directoryPath}:`,
+      error,
+    );
+    throw new Error(
+      `Failed to read structured markdown files metadata from directory: ${error}`,
+    );
+  }
+}
+
+/**
+ * Reads all structured markdown files (metadata + content) in one go.
+ * Reads all .md files regardless of naming pattern from {directoryPath}/structured/.
+ * Files are sorted by modification time (newest first).
+ * Uses a fast Rust-based implementation for optimal performance.
+ *
+ * @param directoryPath - The base path (structured directory will be {directoryPath}/structured)
+ * @param options - Additional options for reading files
+ * @returns Promise<StructuredMarkdownFile[]> - Array of structured markdown files with content
+ */
+export async function readStructuredMarkdownFiles(
+  directoryPath: string,
+  options: ReadMarkdownOptions = {},
+): Promise<StructuredMarkdownFile[]> {
+  const {
+    maxFileSize = 10 * 1024 * 1024, // 10MB default
+  } = options;
+
+  try {
+    const rustFiles: RustStructuredMarkdownFile[] = await invoke(
+      "read_structured_markdown_files",
+      {
+        directoryPath,
+        maxFileSize,
+      },
+    );
+
+    const files: StructuredMarkdownFile[] = rustFiles.map((rustFile) => ({
+      filePath: rustFile.file_path,
+      fileName: rustFile.file_name,
+      createdAt: new Date(rustFile.created_at),
+      modifiedAt: new Date(rustFile.modified_at),
+      size: rustFile.size,
+      country: rustFile.country,
+      city: rustFile.city,
+      description: rustFile.description,
+      content: rustFile.content,
+    }));
+
+    return files;
+  } catch (error) {
+    console.error(
+      `Error reading structured files from ${directoryPath}:`,
+      error,
+    );
+    throw new Error(
+      `Failed to read structured markdown files from directory: ${error}`,
+    );
+  }
+}
+
+/**
+ * Creates a structured markdown file with the given name in the structured subdirectory.
+ * Creates the structured directory if it doesn't exist.
+ *
+ * @param directoryPath - The base path (file will be created in {directoryPath}/structured/)
+ * @param fileName - The filename (should end with .md)
+ * @param content - Optional initial content for the file (defaults to empty string)
+ * @param description - Optional description for the file
+ * @returns Promise<string> - The absolute path to the created file
+ */
+export async function createStructuredMarkdownFile(
+  directoryPath: string,
+  fileName: string,
+  content = "",
+  description = "",
+): Promise<string> {
+  try {
+    // Build the structured directory path
+    const structuredDir = directoryPath.endsWith("/")
+      ? `${directoryPath}structured`
+      : `${directoryPath}/structured`;
+
+    // Ensure the structured directory exists
+    const { mkdir, exists } = await import("@tauri-apps/plugin-fs");
+
+    const dirExists = await exists(structuredDir);
+    if (!dirExists) {
+      await mkdir(structuredDir, { recursive: true });
+    }
+
+    // Ensure filename ends with .md
+    const sanitizedFileName = fileName.endsWith(".md")
+      ? fileName
+      : `${fileName}.md`;
+
+    const filePath = `${structuredDir}/${sanitizedFileName}`;
+
+    // Check if file already exists
+    try {
+      await stat(filePath);
+      throw new Error(`File already exists: ${sanitizedFileName}`);
+    } catch (error) {
+      // If stat throws an error, file doesn't exist, proceed with creation
+      // But if it's a different error than "not found", we should check
+      if (error && typeof error === "object" && "message" in error) {
+        const message = (error as { message: string }).message;
+        if (
+          !message.includes("not found") &&
+          !message.includes("No such file")
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    // Write the file
+    await writeMarkdownFileContent(filePath, content);
+
+    // Set description if provided
+    if (description) {
+      try {
+        await setFileDescription(filePath, description);
+      } catch (error) {
+        console.warn(`Could not set description for ${filePath}:`, error);
+      }
+    }
+
+    return filePath;
+  } catch (error) {
+    console.error(
+      `Error creating structured markdown file ${fileName}:`,
+      error,
+    );
+    throw new Error(`Failed to create structured markdown file: ${error}`);
+  }
+}
+
+/**
+ * Sets the description for a file using extended attributes.
+ *
+ * @param filePath - The absolute path to the file
+ * @param description - The description text
+ * @returns Promise<void>
+ */
+export async function setFileDescription(
+  filePath: string,
+  description: string,
+): Promise<void> {
+  try {
+    await invoke("set_file_description", {
+      filePath,
+      description,
+    });
+  } catch (error) {
+    console.error(`Error setting description for ${filePath}:`, error);
+    throw new Error(`Failed to set file description: ${error}`);
+  }
 }

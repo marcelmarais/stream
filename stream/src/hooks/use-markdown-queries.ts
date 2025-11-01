@@ -2,11 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { debounce } from "lodash-es";
 import { useEffect, useMemo } from "react";
 import {
+  createStructuredMarkdownFile,
   deleteMarkdownFile,
   ensureMarkdownFileForDate,
   ensureTodayMarkdownFile,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
+  readStructuredMarkdownFiles,
+  setFileDescription,
   setFileLocationMetadata,
   writeMarkdownFileContent,
 } from "@/ipc/markdown-reader";
@@ -16,6 +19,8 @@ export const markdownKeys = {
   all: ["markdown"] as const,
   metadata: (folderPath: string) =>
     [...markdownKeys.all, "metadata", folderPath] as const,
+  structuredFiles: (folderPath: string) =>
+    [...markdownKeys.all, "structured-files", folderPath] as const,
   content: (filePath: string) =>
     [...markdownKeys.all, "content", filePath] as const,
   contents: (filePaths: string[]) =>
@@ -336,6 +341,124 @@ export function useDeleteMarkdownFile(folderPath: string) {
       });
       queryClient.invalidateQueries({
         queryKey: markdownKeys.metadata(folderPath),
+      });
+    },
+  });
+}
+
+/**
+ * Hook to load all structured markdown files (metadata + content) in one go
+ * Always fetches fresh data on mount - no stale time
+ */
+export function useStructuredMarkdownFiles(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: markdownKeys.structuredFiles(folderPath),
+    queryFn: async () => {
+      const files = await readStructuredMarkdownFiles(folderPath, {
+        maxFileSize: 5 * 1024 * 1024, // 5MB limit
+      });
+
+      // Also populate individual content cache for each file
+      for (const file of files) {
+        queryClient.setQueryData(
+          markdownKeys.content(file.filePath),
+          file.content,
+        );
+      }
+
+      return files;
+    },
+    enabled: !!folderPath,
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache after unmount
+  });
+
+  return query;
+}
+
+/**
+ * Hook to create a structured markdown file
+ */
+export function useCreateStructuredFile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      folderPath,
+      fileName,
+      content = "",
+      description = "",
+    }: {
+      folderPath: string;
+      fileName: string;
+      content?: string;
+      description?: string;
+    }) => {
+      const filePath = await createStructuredMarkdownFile(
+        folderPath,
+        fileName,
+        content,
+        description,
+      );
+      return { filePath, fileName };
+    },
+    onSuccess: async ({ filePath }, { folderPath }) => {
+      // Invalidate to refresh the file list
+      await queryClient.invalidateQueries({
+        queryKey: markdownKeys.structuredFiles(folderPath),
+      });
+
+      // Pre-load the content for the new file
+      queryClient.setQueryData(markdownKeys.content(filePath), "");
+    },
+  });
+}
+
+/**
+ * Hook to update structured file metadata
+ */
+export function useUpdateStructuredFileMetadata(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      filePath,
+      description,
+    }: {
+      filePath: string;
+      description: string;
+    }) => {
+      await setFileDescription(filePath, description);
+      return { filePath, description };
+    },
+    onSuccess: () => {
+      // Invalidate to refresh the file list with new metadata
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.structuredFiles(folderPath),
+      });
+    },
+  });
+}
+
+/**
+ * Hook to delete a structured markdown file
+ */
+export function useDeleteStructuredFile(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (filePath: string) => {
+      await deleteMarkdownFile(filePath);
+      return filePath;
+    },
+    onSuccess: (filePath) => {
+      queryClient.removeQueries({
+        queryKey: markdownKeys.content(filePath),
+      });
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.structuredFiles(folderPath),
       });
     },
   });
