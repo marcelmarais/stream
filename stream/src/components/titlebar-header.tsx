@@ -1,13 +1,17 @@
 "use client";
 
+import { ArrowLeft } from "@phosphor-icons/react";
 import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Header } from "@/components/markdown-file-card";
+import { Button } from "@/components/ui/button";
 
 interface TitlebarProps {
   actions?: ReactNode;
   isLoading: boolean;
+  onBack?: () => void;
+  backLabel?: string;
 }
 
 interface TitlebarHeaderProps {
@@ -16,9 +20,16 @@ interface TitlebarHeaderProps {
   setShowSearch: (show: boolean) => void;
   handleScrollToDate: (date: Date) => void;
   folderPath: string;
+  onBack?: () => void;
+  backLabel?: string;
 }
 
-export function Titlebar({ actions, isLoading }: TitlebarProps) {
+export function Titlebar({
+  actions,
+  isLoading,
+  onBack,
+  backLabel,
+}: TitlebarProps) {
   const [appWindow, setAppWindow] = useState<Window | null>(null);
 
   useEffect(() => {
@@ -70,6 +81,17 @@ export function Titlebar({ actions, isLoading }: TitlebarProps) {
               onClick={handleMaximize}
             />
           </div>
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="no-drag text-xs"
+              onClick={onBack}
+              title={backLabel || "Back"}
+            >
+              <ArrowLeft className="h-4 w-4" weight="bold" />
+            </Button>
+          )}
         </div>
 
         {/* Center drag region */}
@@ -89,6 +111,8 @@ export function TitlebarHeader({
   handleScrollToDate,
   folderPath,
   isLoading,
+  onBack,
+  backLabel,
 }: TitlebarHeaderProps) {
   const actions = (
     <Header
@@ -99,5 +123,12 @@ export function TitlebarHeader({
     />
   );
 
-  return <Titlebar actions={actions} isLoading={isLoading} />;
+  return (
+    <Titlebar
+      actions={actions}
+      isLoading={isLoading}
+      onBack={onBack}
+      backLabel={backLabel}
+    />
+  );
 }

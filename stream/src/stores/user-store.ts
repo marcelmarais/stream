@@ -14,7 +14,7 @@ interface UserState {
 
   // UI state
   settingsOpen: boolean;
-  viewMode: "timeline" | "calendar";
+  viewMode: "timeline" | "structured";
 
   // Filters
   commitFilters: CommitFilters;
@@ -23,7 +23,7 @@ interface UserState {
   setFolderPath: (path: string | null) => void;
   setActiveEditingFile: (file: MarkdownFileMetadata | null) => void;
   setSettingsOpen: (open: boolean) => void;
-  setViewMode: (mode: "timeline" | "calendar") => void;
+  setViewMode: (mode: "timeline" | "structured") => void;
   setCommitFilters: (filters: CommitFilters) => void;
   reset: () => void;
 }

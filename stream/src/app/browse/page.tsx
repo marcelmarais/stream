@@ -2,12 +2,10 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
-import { useUserStore } from "@/stores/user-store";
 
 function BrowseRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const viewMode = useUserStore((state) => state.viewMode);
 
   useEffect(() => {
     const pathParam = searchParams.get("path");
@@ -17,12 +15,11 @@ function BrowseRedirect() {
       return;
     }
 
-    // Redirect to the appropriate view based on user preference
-    const encodedPath = pathParam; // Already encoded from URL
-    router.push(`/browse/${viewMode}?path=${encodedPath}`);
-  }, [searchParams, router, viewMode]);
+    const encodedPath = pathParam;
+    router.push(`/browse/timeline?path=${encodedPath}`);
+  }, [searchParams, router]);
 
-  return null; // This component only redirects
+  return null;
 }
 
 export default function BrowsePage() {
