@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 interface CreateFileDialogProps {
   open: boolean;
@@ -138,7 +139,7 @@ export function CreateFileDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor={descriptionId}>Description (optional)</Label>
-            <Input
+            <Textarea
               id={descriptionId}
               placeholder="Brief description of this file"
               value={description}

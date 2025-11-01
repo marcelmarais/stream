@@ -1092,10 +1092,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 loop {
-                    // Sleep for 60 seconds between checks
-                    std::thread::sleep(std::time::Duration::from_secs(2));
-                    
-                    // Emit event to frontend
+                    std::thread::sleep(std::time::Duration::from_secs(10));
                     if let Err(e) = app_handle.emit("check-for-refresh", ()) {
                         eprintln!("Failed to emit check-for-refresh event: {}", e);
                     }

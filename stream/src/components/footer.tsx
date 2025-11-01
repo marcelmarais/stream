@@ -68,7 +68,7 @@ export function Footer({ folderPath }: FooterProps) {
   };
 
   return (
-    <div className="flex-shrink-0 border-border border-t bg-muted/30 px-3 py-1 text-muted-foreground text-xs">
+    <div className="z-50 flex-shrink-0 border-border border-t bg-background px-3 py-1 text-muted-foreground text-xs">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button

@@ -186,7 +186,7 @@ export function StructuredFileCard({
           <Card
             className={cn(
               "group relative transition-all",
-              "flex h-[320px] w-[240px] flex-col",
+              "flex h-[280px] w-[220px] flex-col",
               "shadow-sm hover:shadow-lg",
               isCurrentlyRefreshing
                 ? "cursor-not-allowed opacity-60"

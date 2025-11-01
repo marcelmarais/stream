@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 interface EditFileDialogProps {
   open: boolean;
@@ -49,12 +50,12 @@ export function EditFileDialog({
   );
 
   // Update description and refresh interval when dialog opens with new values
-  useState(() => {
+  useEffect(() => {
     if (open) {
       setDescription(currentDescription);
       setRefreshInterval(currentRefreshInterval);
     }
-  });
+  }, [open, currentDescription, currentRefreshInterval]);
 
   const handleUpdate = async () => {
     try {
@@ -109,7 +110,7 @@ export function EditFileDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor={descriptionId}>Description</Label>
-            <Input
+            <Textarea
               id={descriptionId}
               placeholder="Brief description of this file"
               value={description}

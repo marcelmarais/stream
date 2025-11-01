@@ -48,7 +48,7 @@ export function FileGrid({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="max-h-[calc(100vh-10rem)] flex-1">
         {files.length === 0 ? (
           <div className="flex h-full items-center justify-center p-8">
             <div className="max-w-md text-center">
@@ -65,7 +65,7 @@ export function FileGrid({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 p-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-4 flex flex-wrap gap-4 p-8">
             {files.map((file) => (
               <StructuredFileCard
                 key={file.filePath}
