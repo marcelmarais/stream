@@ -39,14 +39,13 @@ export function Footer({ folderPath }: FooterProps) {
 
   const folderName = folderPath?.split("/").pop() || folderPath || "";
 
-  // Determine current view mode from pathname
   const currentViewMode = pathname.includes("/timeline")
     ? "timeline"
-    : pathname.includes("/calendar")
-      ? "calendar"
+    : pathname.includes("/structured")
+      ? "structured"
       : "timeline";
 
-  const handleViewModeChange = (newViewMode: "timeline" | "calendar") => {
+  const handleViewModeChange = (newViewMode: "timeline" | "structured") => {
     // Update store preference
     setViewMode(newViewMode);
 
@@ -82,10 +81,10 @@ export function Footer({ folderPath }: FooterProps) {
               <ListBulletsIcon className="size-3" weight="bold" />
             </Button>
             <Button
-              variant={currentViewMode === "calendar" ? "secondary" : "ghost"}
+              variant={currentViewMode === "structured" ? "secondary" : "ghost"}
               size="icon"
               className="h-auto w-auto rounded-r-full border px-2 py-0.5"
-              onClick={() => handleViewModeChange("calendar")}
+              onClick={() => handleViewModeChange("structured")}
               title="Calendar view"
             >
               <CalendarBlankIcon className="size-3" weight="bold" />

@@ -29,7 +29,7 @@ function HomeContent() {
       setFolderPath(persistedFolder);
       // Navigate to browse page with encoded folder path
       const encodedPath = encodeURIComponent(persistedFolder);
-      router.push(`/browse?path=${encodedPath}`);
+      router.push(`/browse/timeline?path=${encodedPath}`);
     } else if (!isLoading && persistedFolder) {
       setLocalSelectedFolder(persistedFolder);
     }
@@ -68,10 +68,10 @@ function HomeContent() {
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 pt-12">
         <div className="w-full max-w-md space-y-8 text-center">
           <div className="space-y-2">
-            <h1 className="font-semibold text-2xl text-foreground tracking-tight">
+            <h1 className="cursor-default select-none font-semibold text-2xl text-foreground tracking-tight">
               stream.
             </h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="cursor-default select-none text-muted-foreground text-sm">
               Select a folder to get started
             </p>
           </div>

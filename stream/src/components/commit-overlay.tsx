@@ -129,7 +129,7 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
                           {formatCommitAuthor(commit)}
                         </span>
                       </div>
-                      <div className="text-foreground text-sm">
+                      <div className="text-foreground text-xs">
                         {commit.message}
                       </div>
                       {commit.files_changed.length > 0 && (

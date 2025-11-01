@@ -8,7 +8,7 @@ import { TitlebarHeader } from "@/components/titlebar-header";
 import { useConnectedRepos } from "@/hooks/use-git-queries";
 import { useSearchShortcut } from "@/hooks/use-keyboard-shortcut";
 
-function CalendarPageContent() {
+function StructuredPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [folderPath, setFolderPath] = useState<string>("");
@@ -35,10 +35,10 @@ function CalendarPageContent() {
     );
   }
 
-  return <CalendarPageView folderPath={folderPath} />;
+  return <StructuredPageView folderPath={folderPath} />;
 }
 
-export default function CalendarPage() {
+export default function StructuredPage() {
   return (
     <Suspense
       fallback={
@@ -47,16 +47,16 @@ export default function CalendarPage() {
         </div>
       }
     >
-      <CalendarPageContent />
+      <StructuredPageContent />
     </Suspense>
   );
 }
 
-interface CalendarPageViewProps {
+interface StructuredPageViewProps {
   folderPath: string;
 }
 
-function CalendarPageView({ folderPath }: CalendarPageViewProps) {
+function StructuredPageView({ folderPath }: StructuredPageViewProps) {
   useConnectedRepos(folderPath);
   const [showSearch, setShowSearch] = useState(false);
 
