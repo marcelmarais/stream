@@ -65,7 +65,7 @@ export function FileGrid({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 p-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {files.map((file) => (
               <StructuredFileCard
                 key={file.filePath}

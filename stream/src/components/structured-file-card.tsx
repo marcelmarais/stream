@@ -5,6 +5,7 @@ import {
   DotsThreeVertical,
   FileText,
   PencilSimple,
+  Trash,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -17,6 +18,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -27,6 +29,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   useRefreshFile,
   useUpdateStructuredFileMetadata,
@@ -90,7 +99,6 @@ export function StructuredFileCard({
   };
 
   const handleRefreshNow = async () => {
-    // Prevent refresh if already refreshing
     if (isCurrentlyRefreshing) return;
 
     try {
@@ -124,6 +132,53 @@ export function StructuredFileCard({
 
   const displayName = file.fileName.replace(/\.md$/, "");
 
+  // Menu items configuration (used by both context menu and dropdown menu)
+  const menuItems: Array<
+    | {
+        id: string;
+        label: string;
+        icon: React.ComponentType<{ className?: string }>;
+        onClick: () => void;
+        disabled: boolean;
+        className?: string;
+      }
+    | { id: "separator" }
+  > = [
+    {
+      id: "open",
+      label: "Open",
+      icon: FileText,
+      onClick: handleCardClick,
+      disabled: isCurrentlyRefreshing,
+    },
+    {
+      id: "edit",
+      label: "Edit",
+      icon: PencilSimple,
+      onClick: () => setEditDialogOpen(true),
+      disabled: isCurrentlyRefreshing,
+    },
+    {
+      id: "refresh",
+      label:
+        isCurrentlyRefreshing || isRefreshing ? "Refreshing..." : "Refresh Now",
+      icon: ArrowClockwise,
+      onClick: handleRefreshNow,
+      disabled: isCurrentlyRefreshing || isRefreshing,
+    },
+    {
+      id: "separator",
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: () => setDeleteDialogOpen(true),
+      disabled: isCurrentlyRefreshing,
+      className: "text-destructive focus:text-destructive",
+    },
+  ];
+
   return (
     <>
       <ContextMenu>
@@ -131,106 +186,147 @@ export function StructuredFileCard({
           <Card
             className={cn(
               "group relative transition-all",
-              "flex h-[200px] flex-col",
+              "flex h-[320px] w-[240px] flex-col",
+              "shadow-sm hover:shadow-lg",
               isCurrentlyRefreshing
                 ? "cursor-not-allowed opacity-60"
-                : "cursor-pointer hover:border-primary/50 hover:shadow-md",
+                : "hover:-translate-y-1 cursor-pointer hover:border-primary/50 hover:shadow-xl",
             )}
             onClick={handleCardClick}
           >
-            <CardHeader className="flex-shrink-0">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  {isCurrentlyRefreshing ? (
-                    <ArrowClockwise className="size-5 flex-shrink-0 animate-spin text-muted-foreground" />
-                  ) : (
-                    <FileText className="size-5 flex-shrink-0 text-muted-foreground" />
-                  )}
-                  <CardTitle className="truncate text-base">
-                    {displayName}
-                  </CardTitle>
-                  {isCurrentlyRefreshing ? (
-                    <Badge
-                      variant="secondary"
-                      className="flex-shrink-0 text-xs"
-                    >
-                      Refreshing...
-                    </Badge>
-                  ) : (
-                    file.refreshInterval &&
-                    file.refreshInterval !== "none" && (
-                      <Badge
-                        variant="secondary"
-                        className="flex-shrink-0 text-xs"
-                      >
-                        <ArrowClockwise className="mr-1 size-3" />
-                        {file.refreshInterval.charAt(0).toUpperCase() +
-                          file.refreshInterval.slice(1)}
-                      </Badge>
-                    )
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteDialogOpen(true);
-                  }}
+            <div className="absolute top-3 right-3 z-10">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="flex-shrink-0 bg-background/80 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <DotsThreeVertical className="size-4" weight="bold" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <DotsThreeVertical className="size-4" weight="bold" />
-                </Button>
-              </div>
+                  {menuItems.map((item) => {
+                    if (item.id === "separator") {
+                      return <DropdownMenuSeparator key={item.id} />;
+                    }
+                    if ("icon" in item) {
+                      const Icon = item.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={item.id}
+                          onClick={item.onClick}
+                          disabled={item.disabled}
+                          className={item.className}
+                        >
+                          <Icon className="mr-2 size-4" />
+                          {item.label}
+                        </DropdownMenuItem>
+                      );
+                    }
+                    return null;
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <CardHeader>
+              <CardTitle className="line-clamp-2 pb-0 text-lg leading-tight">
+                {displayName}
+              </CardTitle>
             </CardHeader>
-            <CardContent className="min-h-0 flex-1 overflow-hidden">
-              {file.description && (
-                <p className="mb-2 text-muted-foreground text-sm italic">
+
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden text-left">
+              {file.description ? (
+                <p className="line-clamp-3 text-muted-foreground text-xs">
                   {file.description}
                 </p>
+              ) : (
+                <p className="text-muted-foreground/50 text-xs italic">
+                  No description
+                </p>
               )}
-              <div className="mt-2 flex items-center justify-between text-muted-foreground text-xs">
-                <span>Modified: {file.modifiedAt.toLocaleDateString()}</span>
-                {file.lastRefreshedAt && (
-                  <span title={file.lastRefreshedAt.toLocaleString()}>
-                    Refreshed: {formatLastRefreshed(file.lastRefreshedAt)}
-                  </span>
+
+              <div className="flex-1" />
+
+              <div className="flex flex-col gap-2">
+                {isCurrentlyRefreshing ? (
+                  <Badge
+                    variant="secondary"
+                    className="justify-center font-medium text-xs"
+                  >
+                    <ArrowClockwise className="mr-1.5 size-3 animate-spin" />
+                    Refreshing...
+                  </Badge>
+                ) : (
+                  file.refreshInterval &&
+                  file.refreshInterval !== "none" && (
+                    <Badge
+                      variant="secondary"
+                      className="justify-center font-medium text-xs"
+                    >
+                      <ArrowClockwise className="mr-1.5 size-3" />
+                      Auto-refresh: {file.refreshInterval}
+                    </Badge>
+                  )
                 )}
+
+                {/* Metadata section */}
+                <div className="flex flex-col gap-1.5 border-t pt-2 text-muted-foreground text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground/70">Modified</span>
+                    <span className="font-medium">
+                      {file.modifiedAt.toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </div>
+                  {file.lastRefreshedAt && (
+                    <div
+                      className="flex items-center justify-between"
+                      title={file.lastRefreshedAt.toLocaleString()}
+                    >
+                      <span className="text-muted-foreground/70">
+                        Refreshed
+                      </span>
+                      <span className="font-medium">
+                        {formatLastRefreshed(file.lastRefreshedAt)}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem
-            onClick={handleCardClick}
-            disabled={isCurrentlyRefreshing}
-          >
-            <FileText className="mr-2 size-4" />
-            Open
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => setEditDialogOpen(true)}
-            disabled={isCurrentlyRefreshing}
-          >
-            <PencilSimple className="mr-2 size-4" />
-            Edit
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={handleRefreshNow}
-            disabled={isCurrentlyRefreshing || isRefreshing}
-          >
-            <ArrowClockwise className="mr-2 size-4" />
-            {isCurrentlyRefreshing || isRefreshing
-              ? "Refreshing..."
-              : "Refresh Now"}
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => setDeleteDialogOpen(true)}
-            disabled={isCurrentlyRefreshing}
-            className="text-destructive focus:text-destructive"
-          >
-            Delete
-          </ContextMenuItem>
+          {menuItems.map((item) => {
+            if (item.id === "separator") {
+              return <ContextMenuSeparator key={item.id} />;
+            }
+            if ("icon" in item) {
+              const Icon = item.icon;
+              return (
+                <ContextMenuItem
+                  key={item.id}
+                  onClick={item.onClick}
+                  disabled={item.disabled}
+                  className={item.className}
+                >
+                  <Icon className="mr-2 size-4" />
+                  {item.label}
+                </ContextMenuItem>
+              );
+            }
+            return null;
+          })}
         </ContextMenuContent>
       </ContextMenu>
 

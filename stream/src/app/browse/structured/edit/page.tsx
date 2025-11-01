@@ -1,13 +1,12 @@
 "use client";
 
-import { ArrowLeft } from "@phosphor-icons/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Footer } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { TitlebarHeader } from "@/components/titlebar-header";
-import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { useConnectedRepos } from "@/hooks/use-git-queries";
 import { useSearchShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFileContentManager } from "@/hooks/use-markdown-queries";
@@ -136,23 +135,16 @@ function EditPageView({ folderPath, fileName }: EditPageViewProps) {
         setShowSearch={setShowSearch}
         handleScrollToDate={handleScrollToDate}
         folderPath={folderPath}
+        onBack={handleBack}
+        backLabel="Back to files"
       />
 
       <div className="mx-auto mt-12 flex min-h-0 w-full max-w-4xl flex-1 flex-col px-6">
-        <div className="mb-6 flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={handleBack}
-            title="Back to files"
-          >
-            <ArrowLeft className="size-5" weight="bold" />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate font-semibold text-lg text-muted-foreground">
-              {fileName}
-            </h1>
-          </div>
+        <div className="my-4">
+          <h1 className="mb-3 truncate font-bold text-3xl tracking-tigh">
+            {fileName}
+          </h1>
+          <Separator />
         </div>
 
         {/* Editor */}

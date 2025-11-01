@@ -1,6 +1,5 @@
 import {
   ArrowsClockwiseIcon,
-  CalendarBlankIcon,
   CheckCircleIcon,
   CircleNotchIcon,
   FileTextIcon,
@@ -8,6 +7,7 @@ import {
   GearIcon,
   GitBranchIcon,
   ListBulletsIcon,
+  SquaresFourIcon,
 } from "@phosphor-icons/react";
 import { formatDistanceToNow } from "date-fns";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -96,9 +96,9 @@ export function Footer({ folderPath }: FooterProps) {
               size="icon"
               className="h-auto w-auto rounded-r-full border px-2 py-0.5"
               onClick={() => handleViewModeChange("structured")}
-              title="Calendar view"
+              title="Grid view"
             >
-              <CalendarBlankIcon className="size-3" weight="bold" />
+              <SquaresFourIcon className="size-3" weight="bold" />
             </Button>
           </ButtonGroup>
         </div>
