@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,13 +13,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface EditFileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpdateFile: (description: string) => Promise<void>;
+  onUpdateFile: (description: string, refreshInterval: string) => Promise<void>;
   currentFileName: string;
   currentDescription?: string;
+  currentRefreshInterval?: string;
   isUpdating?: boolean;
 }
 
@@ -29,20 +37,28 @@ export function EditFileDialog({
   onUpdateFile,
   currentFileName,
   currentDescription = "",
+  currentRefreshInterval = "none",
   isUpdating = false,
 }: EditFileDialogProps) {
+  const fileNameId = useId();
+  const descriptionId = useId();
+  const refreshIntervalId = useId();
   const [description, setDescription] = useState(currentDescription);
+  const [refreshInterval, setRefreshInterval] = useState(
+    currentRefreshInterval,
+  );
 
-  // Update description when dialog opens with new values
+  // Update description and refresh interval when dialog opens with new values
   useState(() => {
     if (open) {
       setDescription(currentDescription);
+      setRefreshInterval(currentRefreshInterval);
     }
   });
 
   const handleUpdate = async () => {
     try {
-      await onUpdateFile(description);
+      await onUpdateFile(description, refreshInterval);
       onOpenChange(false);
       toast.success("File updated successfully");
     } catch (err) {
@@ -61,6 +77,7 @@ export function EditFileDialog({
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       setDescription(currentDescription);
+      setRefreshInterval(currentRefreshInterval);
     }
     onOpenChange(newOpen);
   };
@@ -79,9 +96,9 @@ export function EditFileDialog({
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="fileName">File Name</Label>
+            <Label htmlFor={fileNameId}>File Name</Label>
             <Input
-              id="fileName"
+              id={fileNameId}
               value={displayName}
               disabled
               className="bg-muted"
@@ -91,9 +108,9 @@ export function EditFileDialog({
             </p>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor={descriptionId}>Description</Label>
             <Input
-              id="description"
+              id={descriptionId}
               placeholder="Brief description of this file"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -101,6 +118,25 @@ export function EditFileDialog({
               disabled={isUpdating}
               autoFocus
             />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={refreshIntervalId}>Auto-refresh</Label>
+            <Select
+              value={refreshInterval}
+              onValueChange={setRefreshInterval}
+              disabled={isUpdating}
+            >
+              <SelectTrigger id={refreshIntervalId}>
+                <SelectValue placeholder="Select refresh interval" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="minutely">Every Minute</SelectItem>
+                <SelectItem value="hourly">Hourly</SelectItem>
+                <SelectItem value="daily">Daily</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

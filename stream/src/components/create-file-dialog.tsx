@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,11 +13,22 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CreateFileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateFile: (fileName: string, description: string) => Promise<void>;
+  onCreateFile: (
+    fileName: string,
+    description: string,
+    refreshInterval: string,
+  ) => Promise<void>;
   isCreating?: boolean;
 }
 
@@ -27,8 +38,12 @@ export function CreateFileDialog({
   onCreateFile,
   isCreating = false,
 }: CreateFileDialogProps) {
+  const fileNameId = useId();
+  const descriptionId = useId();
+  const refreshIntervalId = useId();
   const [fileName, setFileName] = useState("");
   const [description, setDescription] = useState("");
+  const [refreshInterval, setRefreshInterval] = useState("none");
   const [error, setError] = useState("");
 
   const validateFileName = (name: string): boolean => {
@@ -62,9 +77,10 @@ export function CreateFileDialog({
     }
 
     try {
-      await onCreateFile(fileName, description);
+      await onCreateFile(fileName, description, refreshInterval);
       setFileName("");
       setDescription("");
+      setRefreshInterval("none");
       setError("");
       onOpenChange(false);
       toast.success("File created successfully");
@@ -86,6 +102,7 @@ export function CreateFileDialog({
     if (!newOpen) {
       setFileName("");
       setDescription("");
+      setRefreshInterval("none");
       setError("");
     }
     onOpenChange(newOpen);
@@ -103,9 +120,9 @@ export function CreateFileDialog({
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="fileName">File Name</Label>
+            <Label htmlFor={fileNameId}>File Name</Label>
             <Input
-              id="fileName"
+              id={fileNameId}
               placeholder="my-notes"
               value={fileName}
               onChange={(e) => {
@@ -120,15 +137,34 @@ export function CreateFileDialog({
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="description">Description (optional)</Label>
+            <Label htmlFor={descriptionId}>Description (optional)</Label>
             <Input
-              id="description"
+              id={descriptionId}
               placeholder="Brief description of this file"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
             />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={refreshIntervalId}>Auto-refresh</Label>
+            <Select
+              value={refreshInterval}
+              onValueChange={setRefreshInterval}
+              disabled={isCreating}
+            >
+              <SelectTrigger id={refreshIntervalId}>
+                <SelectValue placeholder="Select refresh interval" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="minutely">Every Minute</SelectItem>
+                <SelectItem value="hourly">Hourly</SelectItem>
+                <SelectItem value="daily">Daily</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

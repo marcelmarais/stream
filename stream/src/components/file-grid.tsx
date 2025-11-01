@@ -11,7 +11,11 @@ import type { StructuredMarkdownFile } from "@/ipc/markdown-reader";
 interface FileGridProps {
   files: StructuredMarkdownFile[];
   folderPath: string;
-  onCreateFile: (fileName: string, description: string) => Promise<void>;
+  onCreateFile: (
+    fileName: string,
+    description: string,
+    refreshInterval: string,
+  ) => Promise<void>;
   onDeleteFile: (filePath: string) => void;
   isCreating?: boolean;
 }

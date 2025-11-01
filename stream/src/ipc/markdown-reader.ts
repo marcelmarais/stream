@@ -66,6 +66,10 @@ export interface StructuredMarkdownFile {
   description?: string;
   /** The file content */
   content: string;
+  /** The refresh interval (from xattrs) */
+  refreshInterval?: string;
+  /** The last refreshed timestamp */
+  lastRefreshedAt?: Date;
 }
 
 /**
@@ -108,6 +112,8 @@ interface RustStructuredMarkdownFile {
   city?: string;
   description?: string;
   content: string;
+  refresh_interval?: string;
+  last_refreshed_at?: number;
 }
 
 /**
@@ -451,6 +457,10 @@ export async function readStructuredMarkdownFiles(
       city: rustFile.city,
       description: rustFile.description,
       content: rustFile.content,
+      refreshInterval: rustFile.refresh_interval,
+      lastRefreshedAt: rustFile.last_refreshed_at
+        ? new Date(rustFile.last_refreshed_at)
+        : undefined,
     }));
 
     return files;
@@ -561,5 +571,101 @@ export async function setFileDescription(
   } catch (error) {
     console.error(`Error setting description for ${filePath}:`, error);
     throw new Error(`Failed to set file description: ${error}`);
+  }
+}
+
+/**
+ * Sets the refresh interval for a file using extended attributes.
+ *
+ * @param filePath - The absolute path to the file
+ * @param interval - The refresh interval ("none", "hourly", "daily", "weekly")
+ * @returns Promise<void>
+ */
+export async function setFileRefreshInterval(
+  filePath: string,
+  interval: string,
+): Promise<void> {
+  try {
+    await invoke("set_file_refresh_interval", {
+      filePath,
+      interval,
+    });
+  } catch (error) {
+    console.error(`Error setting refresh interval for ${filePath}:`, error);
+    throw new Error(`Failed to set refresh interval: ${error}`);
+  }
+}
+
+/**
+ * Marks a file as refreshed by updating the last refreshed timestamp.
+ * This should be called after the TypeScript-side refresh logic completes.
+ *
+ * @param filePath - The absolute path to the file
+ * @returns Promise<void>
+ */
+export async function markFileAsRefreshed(filePath: string): Promise<void> {
+  try {
+    await invoke("mark_file_as_refreshed", {
+      filePath,
+    });
+  } catch (error) {
+    console.error(`Error marking file as refreshed ${filePath}:`, error);
+    throw new Error(`Failed to mark file as refreshed: ${error}`);
+  }
+}
+
+/**
+ * Gets a list of file paths that need to be refreshed based on their
+ * refresh interval and last refresh time.
+ *
+ * @param directoryPath - The base directory path (will check {directoryPath}/structured)
+ * @returns Promise<string[]> - Array of file paths that need refresh
+ */
+export async function getFilesNeedingRefresh(
+  directoryPath: string,
+): Promise<string[]> {
+  try {
+    return await invoke("get_files_needing_refresh", {
+      directoryPath,
+    });
+  } catch (error) {
+    console.error(`Error getting files needing refresh:`, error);
+    throw new Error(`Failed to get files needing refresh: ${error}`);
+  }
+}
+
+/**
+ * Mock refresh function that implements the refresh logic on TypeScript side.
+ * Reads the file, sleeps for 5 seconds, appends "\n\nThis is a test",
+ * writes it back, and marks the file as refreshed.
+ *
+ * @param filePath - The absolute path to the file
+ * @returns Promise<void>
+ */
+export async function mockRefreshFile(filePath: string): Promise<void> {
+  try {
+    // Read current file content
+    const content = await readMarkdownFilesContentByPaths([filePath]);
+    const currentContent = content.get(filePath) || "";
+
+    // Sleep for 5 seconds to simulate processing
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Append test text
+    const date = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const newContent = `${currentContent}\n\nThis is a test (${date})`;
+
+    // Write updated content back
+    await writeMarkdownFileContent(filePath, newContent);
+
+    // Mark file as refreshed (updates last_refreshed_at timestamp)
+    await markFileAsRefreshed(filePath);
+  } catch (error) {
+    console.error(`Error refreshing file ${filePath}:`, error);
+    throw new Error(`Failed to refresh file: ${error}`);
   }
 }

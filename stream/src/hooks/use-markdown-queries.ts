@@ -6,11 +6,13 @@ import {
   deleteMarkdownFile,
   ensureMarkdownFileForDate,
   ensureTodayMarkdownFile,
+  mockRefreshFile,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
   readStructuredMarkdownFiles,
   setFileDescription,
   setFileLocationMetadata,
+  setFileRefreshInterval,
   writeMarkdownFileContent,
 } from "@/ipc/markdown-reader";
 
@@ -455,6 +457,55 @@ export function useDeleteStructuredFile(folderPath: string) {
     },
     onSuccess: (filePath) => {
       queryClient.removeQueries({
+        queryKey: markdownKeys.content(filePath),
+      });
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.structuredFiles(folderPath),
+      });
+    },
+  });
+}
+
+/**
+ * Hook to update structured file refresh interval
+ */
+export function useUpdateStructuredFileRefreshInterval(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      filePath,
+      interval,
+    }: {
+      filePath: string;
+      interval: string;
+    }) => {
+      await setFileRefreshInterval(filePath, interval);
+      return { filePath, interval };
+    },
+    onSuccess: () => {
+      // Invalidate to refresh the file list with new metadata
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.structuredFiles(folderPath),
+      });
+    },
+  });
+}
+
+/**
+ * Hook to manually trigger a mock refresh for a file
+ */
+export function useMockRefreshFile(folderPath: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (filePath: string) => {
+      await mockRefreshFile(filePath);
+      return filePath;
+    },
+    onSuccess: (filePath) => {
+      // Invalidate to refresh the file list and content with updated data
+      queryClient.invalidateQueries({
         queryKey: markdownKeys.content(filePath),
       });
       queryClient.invalidateQueries({

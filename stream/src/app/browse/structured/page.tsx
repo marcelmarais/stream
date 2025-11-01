@@ -14,6 +14,7 @@ import {
   useDeleteStructuredFile,
   useStructuredMarkdownFiles,
 } from "@/hooks/use-markdown-queries";
+import { setFileRefreshInterval } from "@/ipc/markdown-reader";
 
 function StructuredPageContent() {
   const router = useRouter();
@@ -89,9 +90,24 @@ function StructuredPageView({ folderPath }: StructuredPageViewProps) {
     setShowSearch(false);
   };
 
-  const handleCreateFile = async (fileName: string, description: string) => {
+  const handleCreateFile = async (
+    fileName: string,
+    description: string,
+    refreshInterval: string,
+  ) => {
     try {
-      await createFile({ folderPath, fileName, description });
+      const result = await createFile({ folderPath, fileName, description });
+
+      // Set refresh interval if not "none"
+      if (refreshInterval !== "none" && result.filePath) {
+        try {
+          await setFileRefreshInterval(result.filePath, refreshInterval);
+        } catch (error) {
+          console.warn("Failed to set refresh interval:", error);
+          toast.error("File created but failed to set refresh interval");
+        }
+      }
+
       // Navigate to edit page for the new file
       const encodedPath = encodeURIComponent(folderPath);
       const encodedFile = encodeURIComponent(fileName);

@@ -1,6 +1,6 @@
 mod search;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -49,6 +49,8 @@ pub struct StructuredMarkdownFile {
     pub city: Option<String>,    // Location city from xattrs
     pub description: Option<String>, // File description from xattrs
     pub content: String,          // File content
+    pub refresh_interval: Option<String>, // Refresh interval from xattrs
+    pub last_refreshed_at: Option<u64>, // Last refresh timestamp from xattrs
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -81,6 +83,51 @@ static DATE_FILENAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 const XATTR_COUNTRY_KEY: &str = "user.location.country";
 const XATTR_CITY_KEY: &str = "user.location.city";
 const XATTR_DESCRIPTION_KEY: &str = "user.file.description";
+const XATTR_REFRESH_INTERVAL_KEY: &str = "user.refresh.interval";
+const XATTR_LAST_REFRESHED_KEY: &str = "user.refresh.last_refreshed";
+
+// Refresh interval enum
+#[derive(Debug, Clone, PartialEq)]
+enum RefreshInterval {
+    Minutely,
+    Hourly,
+    Daily,
+    Weekly,
+    None,
+}
+
+impl RefreshInterval {
+    fn from_string(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "minutely" => Some(RefreshInterval::Minutely),
+            "hourly" => Some(RefreshInterval::Hourly),
+            "daily" => Some(RefreshInterval::Daily),
+            "weekly" => Some(RefreshInterval::Weekly),
+            "none" => Some(RefreshInterval::None),
+            _ => None,
+        }
+    }
+    
+    fn to_string(&self) -> String {
+        match self {
+            RefreshInterval::Minutely => "minutely".to_string(),
+            RefreshInterval::Hourly => "hourly".to_string(),
+            RefreshInterval::Daily => "daily".to_string(),
+            RefreshInterval::Weekly => "weekly".to_string(),
+            RefreshInterval::None => "none".to_string(),
+        }
+    }
+    
+    fn duration_ms(&self) -> Option<u64> {
+        match self {
+            RefreshInterval::Minutely => Some(60 * 1000),
+            RefreshInterval::Hourly => Some(60 * 60 * 1000),
+            RefreshInterval::Daily => Some(24 * 60 * 60 * 1000),
+            RefreshInterval::Weekly => Some(7 * 24 * 60 * 60 * 1000),
+            RefreshInterval::None => None,
+        }
+    }
+}
 
 fn read_location_xattrs(file_path: &Path) -> (Option<String>, Option<String>) {
     let country = xattr::get(file_path, XATTR_COUNTRY_KEY)
@@ -117,6 +164,34 @@ fn write_description_xattr(file_path: &Path, description: &str) -> Result<(), Bo
 fn write_location_xattrs(file_path: &Path, country: &str, city: &str) -> Result<(), Box<dyn std::error::Error>> {
     xattr::set(file_path, XATTR_COUNTRY_KEY, country.as_bytes())?;
     xattr::set(file_path, XATTR_CITY_KEY, city.as_bytes())?;
+    Ok(())
+}
+
+fn read_refresh_interval(file_path: &Path) -> Option<RefreshInterval> {
+    xattr::get(file_path, XATTR_REFRESH_INTERVAL_KEY)
+        .ok()
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .and_then(|s| RefreshInterval::from_string(&s))
+}
+
+fn write_refresh_interval(file_path: &Path, interval: &RefreshInterval) -> Result<(), Box<dyn std::error::Error>> {
+    let interval_str = interval.to_string();
+    xattr::set(file_path, XATTR_REFRESH_INTERVAL_KEY, interval_str.as_bytes())?;
+    Ok(())
+}
+
+fn read_last_refreshed(file_path: &Path) -> Option<u64> {
+    xattr::get(file_path, XATTR_LAST_REFRESHED_KEY)
+        .ok()
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .and_then(|s| s.parse::<u64>().ok())
+}
+
+fn write_last_refreshed(file_path: &Path, timestamp_ms: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let timestamp_str = timestamp_ms.to_string();
+    xattr::set(file_path, XATTR_LAST_REFRESHED_KEY, timestamp_str.as_bytes())?;
     Ok(())
 }
 
@@ -158,6 +233,104 @@ async fn set_file_description(file_path: String, description: String) -> Result<
         .map_err(|e| format!("Failed to set file description: {}", e))?;
     
     Ok(())
+}
+
+#[tauri::command]
+async fn set_file_refresh_interval(file_path: String, interval: String) -> Result<(), String> {
+    let path = Path::new(&file_path);
+    
+    let refresh_interval = RefreshInterval::from_string(&interval)
+        .ok_or_else(|| format!("Invalid refresh interval: {}", interval))?;
+    
+    write_refresh_interval(path, &refresh_interval)
+        .map_err(|e| format!("Failed to set refresh interval: {}", e))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_last_refreshed(file_path: String, timestamp_ms: u64) -> Result<(), String> {
+    let path = Path::new(&file_path);
+    
+    write_last_refreshed(path, timestamp_ms)
+        .map_err(|e| format!("Failed to update last refreshed timestamp: {}", e))?;
+    
+    Ok(())
+}
+
+// Note: Actual refresh logic (reading, processing, writing content) 
+// should be implemented on the TypeScript side. This command just updates
+// the last refreshed timestamp after TypeScript completes the refresh.
+#[tauri::command]
+async fn mark_file_as_refreshed(file_path: String) -> Result<(), String> {
+    let path = Path::new(&file_path);
+    
+    // Update last refreshed timestamp to now
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    
+    write_last_refreshed(path, now)
+        .map_err(|e| format!("Failed to update last refreshed: {}", e))?;
+    
+    Ok(())
+}
+
+
+#[tauri::command]
+async fn get_files_needing_refresh(directory_path: String) -> Result<Vec<String>, String> {
+    let structured_dir_path = Path::new(&directory_path).join("structured");
+    
+    // Check if structured directory exists
+    if !structured_dir_path.exists() {
+        return Ok(Vec::new());
+    }
+    
+    let mut files_needing_refresh = Vec::new();
+    
+    let entries = match fs::read_dir(&structured_dir_path) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(Vec::new()),
+    };
+    
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
+        
+        let path = entry.path();
+        
+        if path.is_file() {
+            if let Some(extension) = path.extension() {
+                if extension.to_string_lossy().to_lowercase() == "md" {
+                    // Check if file has refresh interval set
+                    if let Some(interval) = read_refresh_interval(&path) {
+                        if interval != RefreshInterval::None {
+                            // Check if file needs refresh based on interval and last refresh time
+                            let last_refreshed = read_last_refreshed(&path).unwrap_or(0);
+                            
+                            if let Some(duration_ms) = interval.duration_ms() {
+                                let time_since_refresh = now.saturating_sub(last_refreshed);
+                                
+                                if time_since_refresh >= duration_ms {
+                                    files_needing_refresh.push(path.to_string_lossy().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(files_needing_refresh)
 }
 
 #[tauri::command]
@@ -440,6 +613,10 @@ async fn read_structured_markdown_files(directory_path: String, max_file_size: O
                             // Read description from xattrs
                             let description = read_description_xattr(&path);
                             
+                            // Read refresh metadata from xattrs
+                            let refresh_interval = read_refresh_interval(&path).map(|i| i.to_string());
+                            let last_refreshed_at = read_last_refreshed(&path);
+                            
                             files.push(StructuredMarkdownFile {
                                 file_path,
                                 file_name,
@@ -450,6 +627,8 @@ async fn read_structured_markdown_files(directory_path: String, max_file_size: O
                                 city,
                                 description,
                                 content,
+                                refresh_interval,
+                                last_refreshed_at,
                             });
                         }
                     }
@@ -880,6 +1059,10 @@ pub fn run() {
             fetch_repos, 
             set_file_location_metadata,
             set_file_description,
+            set_file_refresh_interval,
+            update_last_refreshed,
+            mark_file_as_refreshed,
+            get_files_needing_refresh,
             search::search_markdown_files, 
             search::rebuild_search_index
         ])
@@ -904,6 +1087,21 @@ pub fn run() {
                     }
                 }
             }
+            
+            // Start background thread to check for files needing refresh
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                loop {
+                    // Sleep for 60 seconds between checks
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    
+                    // Emit event to frontend
+                    if let Err(e) = app_handle.emit("check-for-refresh", ()) {
+                        eprintln!("Failed to emit check-for-refresh event: {}", e);
+                    }
+                }
+            });
+            
             Ok(())
         })
         .run(tauri::generate_context!())

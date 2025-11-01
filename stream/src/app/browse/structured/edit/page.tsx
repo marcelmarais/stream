@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useConnectedRepos } from "@/hooks/use-git-queries";
 import { useSearchShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFileContentManager } from "@/hooks/use-markdown-queries";
+import { useRefreshStore } from "@/stores/refresh-store";
 
 function EditPageContent() {
   const router = useRouter();
@@ -79,6 +80,10 @@ function EditPageView({ folderPath, fileName }: EditPageViewProps) {
     : `${folderPath}/structured`;
   const filePath = `${structuredDir}/${fileName}`;
 
+  // Check if file is being refreshed
+  const getRefreshingFile = useRefreshStore((state) => state.getRefreshingFile);
+  const isRefreshing = !!getRefreshingFile(filePath);
+
   // Use file content manager
   const {
     content,
@@ -112,9 +117,6 @@ function EditPageView({ folderPath, fileName }: EditPageViewProps) {
     // Not applicable for edit view
   };
 
-  // Get display name without extension
-  const displayName = fileName.replace(/\.md$/, "");
-
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -137,7 +139,6 @@ function EditPageView({ folderPath, fileName }: EditPageViewProps) {
       />
 
       <div className="mx-auto mt-12 flex min-h-0 w-full max-w-4xl flex-1 flex-col px-6">
-        {/* Custom header bar for edit page */}
         <div className="mb-6 flex items-center gap-4">
           <Button
             variant="ghost"
@@ -148,22 +149,20 @@ function EditPageView({ folderPath, fileName }: EditPageViewProps) {
             <ArrowLeft className="size-5" weight="bold" />
           </Button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-semibold text-lg">{displayName}</h1>
-            <p className="truncate text-muted-foreground text-sm">{filePath}</p>
+            <h1 className="truncate font-semibold text-lg text-muted-foreground">
+              {fileName}
+            </h1>
           </div>
-          <Button onClick={handleSave} size="sm">
-            Save
-          </Button>
         </div>
 
         {/* Editor */}
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="mb-8 min-h-0 flex-1 overflow-auto">
           <MarkdownEditor
             value={content}
             onChange={handleContentChange}
             onSave={handleSave}
             autoFocus={true}
-            isEditable={true}
+            isEditable={!isRefreshing}
           />
         </div>
       </div>
