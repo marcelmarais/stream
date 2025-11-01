@@ -225,7 +225,9 @@ export async function getCurrentLocation(): Promise<
   { country: string; city: string } | undefined
 > {
   try {
-    const response = await fetch("https://ipapi.co/json/");
+    const response = await fetch("https://ipapi.co/json/", {
+      signal: AbortSignal.timeout(5000),
+    });
     if (!response.ok) {
       console.warn("Failed to fetch location:", response.statusText);
       return undefined;
