@@ -2,7 +2,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
 import { markdownKeys } from "@/hooks/use-markdown-queries";
-import { getFilesNeedingRefresh, mockRefreshFile } from "@/ipc/markdown-reader";
+import {
+  getFilesNeedingRefresh,
+  refreshFileWithAI,
+} from "@/ipc/markdown-reader";
 import { useRefreshStore } from "@/stores/refresh-store";
 
 /**
@@ -39,15 +42,12 @@ export function useAutoRefresh(folderPath: string, enabled = true) {
         try {
           isProcessing = true;
 
-          // Update last check timestamp
           setLastRefreshCheck(Date.now());
 
-          // Get files that need refresh
           const filesToRefresh = await getFilesNeedingRefresh(folderPath);
 
           if (filesToRefresh.length === 0) return;
 
-          // Filter out files already being refreshed (from manual refresh)
           const filesToProcess = filesToRefresh.filter(
             (filePath) => !getRefreshingFile(filePath),
           );
@@ -59,15 +59,13 @@ export function useAutoRefresh(folderPath: string, enabled = true) {
             return;
           }
 
-          // Refresh all files in parallel
           await Promise.all(
             filesToProcess.map(async (filePath) => {
               try {
                 startRefreshing(filePath);
-                await mockRefreshFile(filePath);
+                await refreshFileWithAI(filePath);
                 finishRefreshing(filePath);
 
-                // Invalidate queries to update UI with new content
                 queryClient.invalidateQueries({
                   queryKey: markdownKeys.content(filePath),
                 });
@@ -78,7 +76,6 @@ export function useAutoRefresh(folderPath: string, enabled = true) {
             }),
           );
 
-          // Invalidate structured files list once after all refreshes complete
           queryClient.invalidateQueries({
             queryKey: markdownKeys.structuredFiles(folderPath),
           });

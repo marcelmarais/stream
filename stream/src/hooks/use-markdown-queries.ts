@@ -6,10 +6,10 @@ import {
   deleteMarkdownFile,
   ensureMarkdownFileForDate,
   ensureTodayMarkdownFile,
-  mockRefreshFile,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
   readStructuredMarkdownFiles,
+  refreshFileWithAI,
   setFileDescription,
   setFileLocationMetadata,
   setFileRefreshInterval,
@@ -493,14 +493,14 @@ export function useUpdateStructuredFileRefreshInterval(folderPath: string) {
 }
 
 /**
- * Hook to manually trigger a mock refresh for a file
+ * Hook to manually trigger an AI-powered refresh for a file
  */
-export function useMockRefreshFile(folderPath: string) {
+export function useRefreshFile(folderPath: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (filePath: string) => {
-      await mockRefreshFile(filePath);
+      await refreshFileWithAI(filePath);
       return filePath;
     },
     onSuccess: (filePath) => {

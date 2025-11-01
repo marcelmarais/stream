@@ -65,6 +65,7 @@
     "tippy.js": "^6.3.7",
     "tiptap-markdown": "^0.9.0",
     "unist-util-visit": "^5.0.0",
+    "zod": "^4.1.12",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

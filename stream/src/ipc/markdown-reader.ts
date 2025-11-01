@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { remove, stat } from "@tauri-apps/plugin-fs";
+import { classifyRelevantDailyFiles, mergeRelevantContent } from "@/utils/ai";
 
 /**
  * Represents markdown file metadata without content
@@ -635,35 +636,74 @@ export async function getFilesNeedingRefresh(
 }
 
 /**
- * Mock refresh function that implements the refresh logic on TypeScript side.
- * Reads the file, sleeps for 5 seconds, appends "\n\nThis is a test",
- * writes it back, and marks the file as refreshed.
+ * AI-powered refresh function that analyzes recent daily markdown files
+ * and intelligently merges relevant content into the structured file.
  *
- * @param filePath - The absolute path to the file
+ * @param filePath - The absolute path to the structured file to refresh
  * @returns Promise<void>
  */
-export async function mockRefreshFile(filePath: string): Promise<void> {
+export async function refreshFileWithAI(filePath: string): Promise<void> {
   try {
-    // Read current file content
-    const content = await readMarkdownFilesContentByPaths([filePath]);
-    const currentContent = content.get(filePath) || "";
+    // Read the structured file being refreshed
+    const files = await readStructuredMarkdownFiles(
+      filePath.split("/structured/")[0],
+    );
+    const structuredFile = files.find((f) => f.filePath === filePath);
 
-    // Sleep for 5 seconds to simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    if (!structuredFile) {
+      throw new Error(`Could not find structured file: ${filePath}`);
+    }
 
-    // Append test text
-    const date = new Date().toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-    const newContent = `${currentContent}\n\nThis is a test (${date})`;
+    const baseFolderPath = filePath.split("/structured/")[0];
 
-    // Write updated content back
-    await writeMarkdownFileContent(filePath, newContent);
+    const dailyFilesMetadata =
+      await readAllMarkdownFilesMetadata(baseFolderPath);
+    const recentDailyFiles = dailyFilesMetadata.slice(0, 7);
 
-    // Mark file as refreshed (updates last_refreshed_at timestamp)
+    if (recentDailyFiles.length === 0) {
+      console.log("No daily files found, skipping refresh");
+      await markFileAsRefreshed(filePath);
+      return;
+    }
+
+    // Read content for those files
+    const dailyFilePaths = recentDailyFiles.map((f) => f.filePath);
+    const dailyFilesContent =
+      await readMarkdownFilesContentByPaths(dailyFilePaths);
+
+    // Build array of daily files with content
+    const dailyFilesWithContent = recentDailyFiles.map((metadata) => ({
+      metadata,
+      content: dailyFilesContent.get(metadata.filePath) || "",
+    }));
+
+    // Classify which files contain relevant information
+    const relevantDailyFiles = await classifyRelevantDailyFiles(
+      structuredFile.fileName,
+      structuredFile.description || "",
+      structuredFile.content,
+      dailyFilesWithContent,
+    );
+
+    if (relevantDailyFiles.length === 0) {
+      console.log("No relevant content found in daily files, skipping update");
+      await markFileAsRefreshed(filePath);
+      return;
+    }
+
+    const updatedContent = await mergeRelevantContent(
+      structuredFile.fileName,
+      structuredFile.description || "",
+      structuredFile.content,
+      relevantDailyFiles,
+    );
+
+    await writeMarkdownFileContent(filePath, updatedContent);
     await markFileAsRefreshed(filePath);
+
+    console.log(
+      `Successfully refreshed ${structuredFile.fileName} with content from ${relevantDailyFiles.length} daily file(s)`,
+    );
   } catch (error) {
     console.error(`Error refreshing file ${filePath}:`, error);
     throw new Error(`Failed to refresh file: ${error}`);

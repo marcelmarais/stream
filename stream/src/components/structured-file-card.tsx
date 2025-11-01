@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  useMockRefreshFile,
+  useRefreshFile,
   useUpdateStructuredFileMetadata,
   useUpdateStructuredFileRefreshInterval,
 } from "@/hooks/use-markdown-queries";
@@ -54,8 +54,8 @@ export function StructuredFileCard({
     useUpdateStructuredFileMetadata(folderPath);
   const { mutateAsync: updateRefreshInterval } =
     useUpdateStructuredFileRefreshInterval(folderPath);
-  const { mutateAsync: mockRefresh, isPending: isRefreshing } =
-    useMockRefreshFile(folderPath);
+  const { mutateAsync: refreshFile, isPending: isRefreshing } =
+    useRefreshFile(folderPath);
 
   const { startRefreshing, finishRefreshing, getRefreshingFile } =
     useRefreshStore();
@@ -95,7 +95,7 @@ export function StructuredFileCard({
 
     try {
       startRefreshing(file.filePath);
-      await mockRefresh(file.filePath);
+      await refreshFile(file.filePath);
       finishRefreshing(file.filePath);
       toast.success("File refreshed successfully");
     } catch (error) {
