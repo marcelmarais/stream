@@ -17,5 +17,3 @@ export function AutoRefreshProvider() {
   return null;
 }
 
-
-
