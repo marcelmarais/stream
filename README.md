@@ -2,7 +2,7 @@
   stream
 </h1>
 <p align="center">
-  Minimal notetaking for engineers.
+  Minimal note taking for engineers.
 </p>
 
 
