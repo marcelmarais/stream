@@ -129,7 +129,7 @@ export function CommitFilter() {
             />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-96 space-y-4" align="start">
+        <PopoverContent className="mt-2 w-96 space-y-4" align="end">
           {/* Header */}
           <div>
             <h3 className="font-medium text-sm">Filter Commits</h3>

@@ -658,7 +658,7 @@ export async function refreshFileWithAI(filePath: string): Promise<void> {
 
     const dailyFilesMetadata =
       await readAllMarkdownFilesMetadata(baseFolderPath);
-    const recentDailyFiles = dailyFilesMetadata.slice(0, 7);
+    const recentDailyFiles = dailyFilesMetadata.slice(0, 30);
 
     if (recentDailyFiles.length === 0) {
       console.log("No daily files found, skipping refresh");

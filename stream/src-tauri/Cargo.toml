@@ -5,6 +5,11 @@ description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
 
+# Define known feature values (needed for macros referencing `cargo-clippy`).
+[features]
+default = []
+cargo-clippy = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
@@ -35,6 +40,5 @@ rayon = "1.10"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 objc = "0.2"
-cocoa = "0.26"
 
 

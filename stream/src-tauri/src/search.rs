@@ -1,9 +1,9 @@
+use rayon::prelude::*;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
-use regex::Regex;
-use rayon::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SearchMatch {
@@ -29,7 +29,7 @@ static DATE_FILENAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 // Find all markdown files matching YYYY-MM-DD.md pattern
 fn find_markdown_files(folder_path: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut files = Vec::new();
-    
+
     fn visit_dir(
         dir: &Path,
         files: &mut Vec<String>,
@@ -112,10 +112,10 @@ fn match_and_find_positions(
 
         while i < line_lower_chars.len() {
             // Check if we're at a word boundary (start of line or after whitespace/punctuation)
-            let at_word_boundary = i == 0 
-                || line_lower_chars[i - 1].is_whitespace() 
+            let at_word_boundary = i == 0
+                || line_lower_chars[i - 1].is_whitespace()
                 || line_lower_chars[i - 1].is_ascii_punctuation();
-            
+
             // Only attempt match if we're at a word boundary
             let match_len = if !at_word_boundary {
                 None
@@ -146,7 +146,7 @@ fn match_and_find_positions(
                     let at_end_boundary = end >= line_lower_chars.len()
                         || line_lower_chars[end].is_whitespace()
                         || line_lower_chars[end].is_ascii_punctuation();
-                    
+
                     if at_end_boundary {
                         Some(term_chars.len())
                     } else {
@@ -159,7 +159,10 @@ fn match_and_find_positions(
 
             if let Some(len) = match_len {
                 terms_found[term_idx] = true;
-                let byte_start = char_indices.get(i).map(|(byte_idx, _)| *byte_idx).unwrap_or(0);
+                let byte_start = char_indices
+                    .get(i)
+                    .map(|(byte_idx, _)| *byte_idx)
+                    .unwrap_or(0);
                 let byte_end = char_indices
                     .get(i + len)
                     .map(|(byte_idx, _)| *byte_idx)
@@ -238,7 +241,8 @@ fn search_file(file_path: &str, query_terms: &[String]) -> Vec<SearchMatch> {
         utf16_map.push(utf16_pos); // Final position
 
         for &(match_char_start, match_char_end, _, _) in &match_positions {
-            if match_char_start >= context_start_char_idx && match_char_start < context_end_char_idx {
+            if match_char_start >= context_start_char_idx && match_char_start < context_end_char_idx
+            {
                 let relative_start = match_char_start.saturating_sub(context_start_char_idx);
                 let relative_end = match_char_end
                     .saturating_sub(context_start_char_idx)
@@ -274,7 +278,7 @@ fn search_files(
 ) -> Result<SearchResults, Box<dyn std::error::Error>> {
     let start_time = std::time::Instant::now();
     let query_terms = tokenize(query_str);
-    
+
     if query_terms.is_empty() {
         return Ok(SearchResults {
             matches: vec![],
@@ -318,7 +322,9 @@ fn search_files(
     } else {
         // Sort by score (highest first)
         matches.sort_unstable_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
     }
 
@@ -357,9 +363,7 @@ pub async fn search_markdown_files(
 }
 
 #[tauri::command]
-pub async fn rebuild_search_index(
-    _folder_path: String,
-) -> Result<(), String> {
+pub async fn rebuild_search_index(_folder_path: String) -> Result<(), String> {
     // No-op: grep-based search doesn't use an index
     // Keeping this command for API compatibility
     Ok(())
