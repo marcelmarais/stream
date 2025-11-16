@@ -2,7 +2,7 @@
   stream
 </h1>
 <p align="center">
-  Minimal, unstructured notetaking for engineers.
+  Minimal notetaking for engineers.
 </p>
 
 
@@ -12,7 +12,7 @@
 </div>
 
 <p align="middle">
-<img width="696" height="560" alt="stream-readme-ss" src="https://github.com/user-attachments/assets/4f42f314-d3bc-4b90-9b64-8b044fdc510a" />
+<img width="723" height="727" alt="Screenshot 2025-11-16 at 13 06 02" src="https://github.com/user-attachments/assets/0b9c11e4-f172-4ab5-8324-89aa0708ba20" />
 </p>
 
 ## Features
@@ -33,3 +33,4 @@
 
 ### AI-Powered Features (WIP)
 - **Smart Todos**: Type `/todos` in any note to extract open tasks from yesterday's notes and commits.
+- **Smart files** (WIP): create files with a description of content you want automatically extracted from you daily notes.
