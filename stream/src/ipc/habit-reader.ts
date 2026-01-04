@@ -325,4 +325,3 @@ export function getPeriodLabel(period: HabitPeriod): string {
       return "this month";
   }
 }
-

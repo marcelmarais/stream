@@ -57,10 +57,7 @@ function HabitRow({ habit, date }: HabitRowProps) {
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           {isTargetMet ? (
-            <CheckCircleIcon
-              className="h-4 w-4 text-green-500"
-              weight="fill"
-            />
+            <CheckCircleIcon className="h-4 w-4 text-green-500" weight="fill" />
           ) : (
             <TargetIcon className="h-4 w-4 text-muted-foreground" />
           )}
@@ -75,9 +72,7 @@ function HabitRow({ habit, date }: HabitRowProps) {
           </span>{" "}
           {periodLabel}
           {todayCount > 0 && (
-            <span className="ml-2 text-foreground">
-              ({todayCount} today)
-            </span>
+            <span className="ml-2 text-foreground">({todayCount} today)</span>
           )}
         </div>
       </div>
@@ -92,7 +87,9 @@ function HabitRow({ habit, date }: HabitRowProps) {
         >
           <MinusIcon className="h-4 w-4" />
         </Button>
-        <span className="w-6 text-center font-medium text-sm">{todayCount}</span>
+        <span className="w-6 text-center font-medium text-sm">
+          {todayCount}
+        </span>
         <Button
           variant="ghost"
           size="icon"
@@ -188,4 +185,3 @@ export function HabitOverlay({
 }
 
 export default HabitOverlay;
-

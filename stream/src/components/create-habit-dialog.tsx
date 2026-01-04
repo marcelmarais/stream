@@ -112,7 +112,9 @@ export function CreateHabitDialog({
                   max={100}
                   value={targetCount}
                   onChange={(e) =>
-                    setTargetCount(Math.max(1, Number.parseInt(e.target.value) || 1))
+                    setTargetCount(
+                      Math.max(1, Number.parseInt(e.target.value) || 1),
+                    )
                   }
                   disabled={isPending}
                 />
@@ -138,9 +140,12 @@ export function CreateHabitDialog({
             </div>
 
             <p className="text-muted-foreground text-sm">
-              {period === "daily" && `Complete ${targetCount} time${targetCount > 1 ? "s" : ""} per day`}
-              {period === "weekly" && `Complete ${targetCount} time${targetCount > 1 ? "s" : ""} per week`}
-              {period === "monthly" && `Complete ${targetCount} time${targetCount > 1 ? "s" : ""} per month`}
+              {period === "daily" &&
+                `Complete ${targetCount} time${targetCount > 1 ? "s" : ""} per day`}
+              {period === "weekly" &&
+                `Complete ${targetCount} time${targetCount > 1 ? "s" : ""} per week`}
+              {period === "monthly" &&
+                `Complete ${targetCount} time${targetCount > 1 ? "s" : ""} per month`}
             </p>
           </div>
 
@@ -164,4 +169,3 @@ export function CreateHabitDialog({
 }
 
 export default CreateHabitDialog;
-

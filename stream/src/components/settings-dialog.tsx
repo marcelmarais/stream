@@ -249,7 +249,9 @@ function HabitsCard() {
             <TargetIcon className="size-5" />
             Habits
           </CardTitle>
-          <CardDescription>Track your daily, weekly, or monthly habits</CardDescription>
+          <CardDescription>
+            Track your daily, weekly, or monthly habits
+          </CardDescription>
           <CardAction>
             <Button
               onClick={() => setCreateHabitOpen(true)}
@@ -282,7 +284,10 @@ function HabitsCard() {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{habit.name}</span>
-                      <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                      <Badge
+                        variant="outline"
+                        className="px-1.5 py-0 text-[10px]"
+                      >
                         {habit.period}
                       </Badge>
                     </div>
@@ -306,16 +311,25 @@ function HabitsCard() {
         </CardContent>
       </Card>
 
-      <CreateHabitDialog open={createHabitOpen} onOpenChange={setCreateHabitOpen} />
+      <CreateHabitDialog
+        open={createHabitOpen}
+        onOpenChange={setCreateHabitOpen}
+      />
 
-      <Dialog open={!!habitToDelete} onOpenChange={() => setHabitToDelete(null)}>
+      <Dialog
+        open={!!habitToDelete}
+        onOpenChange={() => setHabitToDelete(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete habit?</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete{" "}
-              <span className="font-medium text-primary">{habitToDelete?.name}</span>?
-              All completion history will be lost. This action cannot be undone.
+              <span className="font-medium text-primary">
+                {habitToDelete?.name}
+              </span>
+              ? All completion history will be lost. This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

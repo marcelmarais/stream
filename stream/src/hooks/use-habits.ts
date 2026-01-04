@@ -71,7 +71,9 @@ export function useDeleteHabit() {
       await queryClient.cancelQueries({ queryKey: habitKeys.list() });
 
       // Snapshot the previous value
-      const previousHabits = queryClient.getQueryData<Habit[]>(habitKeys.list());
+      const previousHabits = queryClient.getQueryData<Habit[]>(
+        habitKeys.list(),
+      );
 
       // Optimistically remove the habit
       queryClient.setQueryData<Habit[]>(habitKeys.list(), (old) => {
@@ -119,7 +121,9 @@ export function useUpdateCompletion() {
       await queryClient.cancelQueries({ queryKey: habitKeys.list() });
 
       // Snapshot the previous value
-      const previousHabits = queryClient.getQueryData<Habit[]>(habitKeys.list());
+      const previousHabits = queryClient.getQueryData<Habit[]>(
+        habitKeys.list(),
+      );
 
       // Optimistically update the completion count
       queryClient.setQueryData<Habit[]>(habitKeys.list(), (old) => {
@@ -172,4 +176,3 @@ function formatDateKeyLocal(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
-
