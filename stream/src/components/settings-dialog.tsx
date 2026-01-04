@@ -7,12 +7,18 @@ import {
   EyeSlashIcon,
   FolderOpenIcon,
   GitBranchIcon,
+  PlusIcon,
   SparkleIcon,
+  TargetIcon,
+  TrashIcon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
+import { toast } from "sonner";
+import { CreateHabitDialog } from "@/components/create-habit-dialog";
 import RepoConnector from "@/components/repo-connector";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,18 +31,22 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
+import { useDeleteHabit, useHabits } from "@/hooks/use-habits";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import {
   useApiKey,
   useRemoveApiKey,
   useSetApiKey,
 } from "@/hooks/use-user-data";
+import type { Habit } from "@/ipc/habit-reader";
 import { useUserStore } from "@/stores/user-store";
 
 interface SettingsDialogProps {
@@ -198,6 +208,140 @@ function AISettingsCard() {
   );
 }
 
+function HabitsCard() {
+  const [createHabitOpen, setCreateHabitOpen] = useState(false);
+  const [habitToDelete, setHabitToDelete] = useState<Habit | null>(null);
+
+  const { data: habits = [], isLoading } = useHabits();
+  const { mutate: deleteHabit, isPending: isDeleting } = useDeleteHabit();
+
+  const handleConfirmDelete = () => {
+    if (!habitToDelete) return;
+
+    deleteHabit(habitToDelete.id, {
+      onSuccess: () => {
+        toast.success(`Deleted habit: ${habitToDelete.name}`);
+        setHabitToDelete(null);
+      },
+      onError: (error) => {
+        toast.error(`Failed to delete habit: ${error.message}`);
+      },
+    });
+  };
+
+  const getPeriodText = (habit: Habit) => {
+    const count = habit.targetCount;
+    switch (habit.period) {
+      case "daily":
+        return `${count}x per day`;
+      case "weekly":
+        return `${count}x per week`;
+      case "monthly":
+        return `${count}x per month`;
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TargetIcon className="size-5" />
+            Habits
+          </CardTitle>
+          <CardDescription>Track your daily, weekly, or monthly habits</CardDescription>
+          <CardAction>
+            <Button
+              onClick={() => setCreateHabitOpen(true)}
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              title="Add new habit"
+            >
+              <PlusIcon className="size-4" />
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+              <span>Loading habits...</span>
+            </div>
+          ) : habits.length === 0 ? (
+            <div className="py-4 text-center text-muted-foreground text-sm">
+              No habits yet. Click the + button to add one.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {habits.map((habit) => (
+                <div
+                  key={habit.id}
+                  className="flex items-center justify-between rounded-md border bg-card/50 p-3"
+                >
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{habit.name}</span>
+                      <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                        {habit.period}
+                      </Badge>
+                    </div>
+                    <span className="text-muted-foreground text-xs">
+                      {getPeriodText(habit)}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => setHabitToDelete(habit)}
+                    title="Delete habit"
+                  >
+                    <TrashIcon className="size-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <CreateHabitDialog open={createHabitOpen} onOpenChange={setCreateHabitOpen} />
+
+      <Dialog open={!!habitToDelete} onOpenChange={() => setHabitToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete habit?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-primary">{habitToDelete?.name}</span>?
+              All completion history will be lost. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setHabitToDelete(null)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const folderPath = useUserStore((state) => state.folderPath);
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
@@ -268,6 +412,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               )}
             </CardContent>
           </Card>
+
+          <HabitsCard />
+
           <AISettingsCard />
 
           {appVersion && (
