@@ -8,9 +8,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import CommitFilter from "@/components/commit-filter";
 import CommitOverlay from "@/components/commit-overlay";
+import { CreateHabitDialog } from "@/components/create-habit-dialog";
 import { DateHeader } from "@/components/date-header";
 import { FileCalendar } from "@/components/file-calendar";
 import type { Footer as FooterComponent } from "@/components/footer";
+import { HabitOverlay } from "@/components/habit-overlay";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -40,6 +42,7 @@ import {
 import { filterCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
+import { useUserStore } from "@/stores/user-store";
 
 export function FileName({
   content,
@@ -171,6 +174,10 @@ export function FileCard({
   onEditorFocus,
   showSeparator = true,
 }: FileCardProps) {
+  const [createHabitOpen, setCreateHabitOpen] = useState(false);
+  const activeEditingFile = useUserStore((state) => state.activeEditingFile);
+  const isEditorFocused = activeEditingFile?.filePath === file.filePath;
+
   const {
     content,
     isLoading,
@@ -223,8 +230,17 @@ export function FileCard({
       />
 
       <FileName content={content} metadata={file} folderPath={folderPath} />
+
+      <div className="mt-2 mb-4">
+        <HabitOverlay
+          date={file.dateFromFilename}
+          onCreateHabit={() => setCreateHabitOpen(true)}
+          isFocused={isEditorFocused}
+        />
+      </div>
+
       {hasCommits && (
-        <div className="mt-2 mb-6">
+        <div className="mb-6">
           <CommitOverlay
             commits={commits}
             date={file.createdAt}
@@ -235,6 +251,11 @@ export function FileCard({
       {showSeparator && <Separator className="mt-2" />}
       {/* makes the last file look less awkward / squished */}
       {!showSeparator && <div className="pb-10" />}
+
+      <CreateHabitDialog
+        open={createHabitOpen}
+        onOpenChange={setCreateHabitOpen}
+      />
     </div>
   );
 }
@@ -306,6 +327,8 @@ export function FocusedFileOverlay({
   onEditorFocus,
   folderPath,
 }: FocusedFileOverlayProps) {
+  const [createHabitOpen, setCreateHabitOpen] = useState(false);
+
   const {
     content,
     updateContentOptimistically,
@@ -356,6 +379,15 @@ export function FocusedFileOverlay({
             folderPath={folderPath}
             onDelete={onClose}
           />
+
+          <div className="mt-4">
+            <HabitOverlay
+              date={file.dateFromFilename}
+              onCreateHabit={() => setCreateHabitOpen(true)}
+              isFocused={true}
+            />
+          </div>
+
           {commits.length > 0 && (
             <div className="mt-4">
               <CommitOverlay
@@ -368,6 +400,11 @@ export function FocusedFileOverlay({
         </div>
       </div>
       {footerComponent}
+
+      <CreateHabitDialog
+        open={createHabitOpen}
+        onOpenChange={setCreateHabitOpen}
+      />
     </div>
   );
 }
