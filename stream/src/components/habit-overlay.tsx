@@ -7,6 +7,7 @@ import {
   TargetIcon,
 } from "@phosphor-icons/react";
 import { useState } from "react";
+import { getHabitIconComponent } from "@/components/habit-icon-picker";
 import {
   Accordion,
   AccordionContent,
@@ -18,10 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useHabits, useUpdateCompletion } from "@/hooks/use-habits";
 import {
-  type Habit,
   getCompletionForDate,
   getCompletionsForPeriod,
   getPeriodLabel,
+  type Habit,
 } from "@/ipc/habit-reader";
 
 interface HabitOverlayProps {
@@ -44,6 +45,8 @@ function HabitRow({ habit, date }: HabitRowProps) {
   const isTargetMet = completed >= target;
   const periodLabel = getPeriodLabel(habit.period);
 
+  const HabitIcon = getHabitIconComponent(habit.icon);
+
   const handleIncrement = () => {
     updateCompletion({ habitId: habit.id, date, action: "increment" });
   };
@@ -59,12 +62,9 @@ function HabitRow({ habit, date }: HabitRowProps) {
           {isTargetMet ? (
             <CheckCircleIcon className="h-4 w-4 text-green-500" weight="fill" />
           ) : (
-            <TargetIcon className="h-4 w-4 text-muted-foreground" />
+            <HabitIcon className="h-4 w-4 text-muted-foreground" />
           )}
           <span className="font-medium text-sm">{habit.name}</span>
-          <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-            {habit.period}
-          </Badge>
         </div>
         <div className="ml-6 text-muted-foreground text-xs">
           <span className={isTargetMet ? "text-green-500" : ""}>

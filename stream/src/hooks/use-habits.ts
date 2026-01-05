@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  type Habit,
-  type HabitPeriod,
   createHabit,
   decrementCompletion,
   deleteHabit,
   getAllHabits,
+  type Habit,
+  type HabitIcon,
+  type HabitPeriod,
   incrementCompletion,
+  updateHabit,
 } from "@/ipc/habit-reader";
 
 /**
@@ -39,11 +41,13 @@ export function useCreateHabit() {
       name,
       targetCount,
       period,
+      icon,
     }: {
       name: string;
       targetCount: number;
       period: HabitPeriod;
-    }) => createHabit(name, targetCount, period),
+      icon?: HabitIcon;
+    }) => createHabit(name, targetCount, period, icon),
     onSuccess: (newHabit) => {
       // Optimistically add the new habit to the cache
       queryClient.setQueryData<Habit[]>(habitKeys.list(), (old) => {
@@ -84,6 +88,65 @@ export function useDeleteHabit() {
       return { previousHabits };
     },
     onError: (_err, _habitId, context) => {
+      // Roll back on error
+      if (context?.previousHabits) {
+        queryClient.setQueryData(habitKeys.list(), context.previousHabits);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: habitKeys.list() });
+    },
+  });
+}
+
+/**
+ * Hook to update an existing habit
+ */
+export function useUpdateHabit() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      updates,
+    }: {
+      id: string;
+      updates: {
+        name?: string;
+        targetCount?: number;
+        period?: HabitPeriod;
+        icon?: HabitIcon;
+      };
+    }) => updateHabit(id, updates),
+    onMutate: async ({ id, updates }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: habitKeys.list() });
+
+      // Snapshot the previous value
+      const previousHabits = queryClient.getQueryData<Habit[]>(
+        habitKeys.list(),
+      );
+
+      // Optimistically update the habit
+      queryClient.setQueryData<Habit[]>(habitKeys.list(), (old) => {
+        if (!old) return [];
+        return old.map((habit) => {
+          if (habit.id !== id) return habit;
+          return {
+            ...habit,
+            ...(updates.name !== undefined && { name: updates.name.trim() }),
+            ...(updates.targetCount !== undefined && {
+              targetCount: updates.targetCount,
+            }),
+            ...(updates.period !== undefined && { period: updates.period }),
+            ...(updates.icon !== undefined && { icon: updates.icon }),
+          };
+        });
+      });
+
+      return { previousHabits };
+    },
+    onError: (_err, _vars, context) => {
       // Roll back on error
       if (context?.previousHabits) {
         queryClient.setQueryData(habitKeys.list(), context.previousHabits);
