@@ -7,6 +7,7 @@ import {
   EyeSlashIcon,
   FolderOpenIcon,
   GitBranchIcon,
+  PencilIcon,
   PlusIcon,
   SparkleIcon,
   TargetIcon,
@@ -17,6 +18,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { CreateHabitDialog } from "@/components/create-habit-dialog";
+import { EditHabitDialog } from "@/components/edit-habit-dialog";
+import { getHabitIconComponent } from "@/components/habit-icon-picker";
 import RepoConnector from "@/components/repo-connector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -210,6 +213,7 @@ function AISettingsCard() {
 
 function HabitsCard() {
   const [createHabitOpen, setCreateHabitOpen] = useState(false);
+  const [habitToEdit, setHabitToEdit] = useState<Habit | null>(null);
   const [habitToDelete, setHabitToDelete] = useState<Habit | null>(null);
 
   const { data: habits = [], isLoading } = useHabits();
@@ -276,36 +280,55 @@ function HabitsCard() {
             </div>
           ) : (
             <div className="space-y-2">
-              {habits.map((habit) => (
-                <div
-                  key={habit.id}
-                  className="flex items-center justify-between rounded-md border bg-card/50 p-3"
-                >
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{habit.name}</span>
-                      <Badge
-                        variant="outline"
-                        className="px-1.5 py-0 text-[10px]"
-                      >
-                        {habit.period}
-                      </Badge>
-                    </div>
-                    <span className="text-muted-foreground text-xs">
-                      {getPeriodText(habit)}
-                    </span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => setHabitToDelete(habit)}
-                    title="Delete habit"
+              {habits.map((habit) => {
+                const HabitIcon = getHabitIconComponent(habit.icon);
+                return (
+                  <div
+                    key={habit.id}
+                    className="flex items-center justify-between rounded-md border bg-card/50 p-3"
                   >
-                    <TrashIcon className="size-4" />
-                  </Button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3">
+                      <HabitIcon className="size-5 text-muted-foreground" />
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">
+                            {habit.name}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="px-1.5 py-0 text-[10px]"
+                          >
+                            {habit.period}
+                          </Badge>
+                        </div>
+                        <span className="text-muted-foreground text-xs">
+                          {getPeriodText(habit)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => setHabitToEdit(habit)}
+                        title="Edit habit"
+                      >
+                        <PencilIcon className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setHabitToDelete(habit)}
+                        title="Delete habit"
+                      >
+                        <TrashIcon className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -314,6 +337,12 @@ function HabitsCard() {
       <CreateHabitDialog
         open={createHabitOpen}
         onOpenChange={setCreateHabitOpen}
+      />
+
+      <EditHabitDialog
+        habit={habitToEdit}
+        open={!!habitToEdit}
+        onOpenChange={(open) => !open && setHabitToEdit(null)}
       />
 
       <Dialog

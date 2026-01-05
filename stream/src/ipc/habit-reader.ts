@@ -6,6 +6,62 @@ import { Store } from "@tauri-apps/plugin-store";
 export type HabitPeriod = "daily" | "weekly" | "monthly";
 
 /**
+ * Available icons for habits
+ */
+export type HabitIcon =
+  | "Barbell"
+  | "Bicycle"
+  | "Heart"
+  | "Lightning"
+  | "Fire"
+  | "Timer"
+  | "BookOpen"
+  | "Pencil"
+  | "Target"
+  | "Star"
+  | "CheckSquare"
+  | "Clock"
+  | "Coffee"
+  | "Drop"
+  | "Moon"
+  | "Sun"
+  | "Tree"
+  | "Brain"
+  | "MusicNote"
+  | "Camera";
+
+/**
+ * Default icon for habits when none is specified
+ */
+export const DEFAULT_HABIT_ICON: HabitIcon = "Target";
+
+/**
+ * List of all available habit icons
+ */
+export const HABIT_ICONS: HabitIcon[] = [
+  "Target",
+  "Barbell",
+  "Bicycle",
+  "Heart",
+  "Lightning",
+  "Fire",
+  "Timer",
+  "BookOpen",
+  "Pencil",
+  "Star",
+  "CheckSquare",
+  "Clock",
+  "Coffee",
+  "Drop",
+  "Moon",
+  "Sun",
+  "Tree",
+  "Brain",
+  "MusicNote",
+  "Camera",
+];
+
+/**
  * Represents a habit with its configuration and completion history
  */
 export interface Habit {
@@ -17,17 +73,12 @@ export interface Habit {
   targetCount: number;
   /** The tracking period */
   period: HabitPeriod;
+  /** Icon for the habit (defaults to Target if not set) */
+  icon?: HabitIcon;
   /** Creation timestamp in milliseconds */
   createdAt: number;
   /** Completion counts by date (YYYY-MM-DD -> count) */
   completions: Record<string, number>;
-}
-
-/**
- * Structure of the habits.json store
- */
-interface HabitData {
-  habits: Habit[];
 }
 
 // Store instance for habits
@@ -187,6 +238,7 @@ export async function createHabit(
   name: string,
   targetCount: number,
   period: HabitPeriod,
+  icon?: HabitIcon,
 ): Promise<Habit> {
   try {
     const s = await getStore();
@@ -197,6 +249,7 @@ export async function createHabit(
       name: name.trim(),
       targetCount,
       period,
+      icon,
       createdAt: Date.now(),
       completions: {},
     };
@@ -231,6 +284,53 @@ export async function deleteHabit(id: string): Promise<void> {
   } catch (error) {
     console.error("Error deleting habit:", error);
     throw new Error("Failed to delete habit");
+  }
+}
+
+/**
+ * Update an existing habit
+ */
+export async function updateHabit(
+  id: string,
+  updates: {
+    name?: string;
+    targetCount?: number;
+    period?: HabitPeriod;
+    icon?: HabitIcon;
+  },
+): Promise<Habit> {
+  try {
+    const s = await getStore();
+    const habits = (await s.get<Habit[]>(HABITS_KEY)) || [];
+
+    const habitIndex = habits.findIndex((h) => h.id === id);
+    if (habitIndex === -1) {
+      throw new Error("Habit not found");
+    }
+
+    const habit = habits[habitIndex];
+
+    // Apply updates
+    if (updates.name !== undefined) {
+      habit.name = updates.name.trim();
+    }
+    if (updates.targetCount !== undefined) {
+      habit.targetCount = updates.targetCount;
+    }
+    if (updates.period !== undefined) {
+      habit.period = updates.period;
+    }
+    if (updates.icon !== undefined) {
+      habit.icon = updates.icon;
+    }
+
+    await s.set(HABITS_KEY, habits);
+    await s.save();
+
+    return habit;
+  } catch (error) {
+    console.error("Error updating habit:", error);
+    throw new Error("Failed to update habit");
   }
 }
 

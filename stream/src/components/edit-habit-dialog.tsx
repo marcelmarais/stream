@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { HabitIconPicker } from "@/components/habit-icon-picker";
 import { Button } from "@/components/ui/button";
@@ -21,22 +21,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateHabit } from "@/hooks/use-habits";
+import { useUpdateHabit } from "@/hooks/use-habits";
 import {
   DEFAULT_HABIT_ICON,
+  type Habit,
   type HabitIcon,
   type HabitPeriod,
 } from "@/ipc/habit-reader";
 
-interface CreateHabitDialogProps {
+interface EditHabitDialogProps {
+  habit: Habit | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateHabitDialog({
+export function EditHabitDialog({
+  habit,
   open,
   onOpenChange,
-}: CreateHabitDialogProps) {
+}: EditHabitDialogProps) {
   const [name, setName] = useState("");
   const [targetCount, setTargetCount] = useState(1);
   const [period, setPeriod] = useState<HabitPeriod>("weekly");
@@ -46,10 +49,22 @@ export function CreateHabitDialog({
   const targetId = useId();
   const periodId = useId();
 
-  const { mutate: createHabit, isPending } = useCreateHabit();
+  const { mutate: updateHabit, isPending } = useUpdateHabit();
+
+  // Reset form when habit changes
+  useEffect(() => {
+    if (habit) {
+      setName(habit.name);
+      setTargetCount(habit.targetCount);
+      setPeriod(habit.period);
+      setIcon(habit.icon || DEFAULT_HABIT_ICON);
+    }
+  }, [habit]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!habit) return;
 
     if (!name.trim()) {
       toast.error("Please enter a habit name");
@@ -61,19 +76,23 @@ export function CreateHabitDialog({
       return;
     }
 
-    createHabit(
-      { name: name.trim(), targetCount, period, icon },
+    updateHabit(
+      {
+        id: habit.id,
+        updates: {
+          name: name.trim(),
+          targetCount,
+          period,
+          icon,
+        },
+      },
       {
         onSuccess: () => {
-          toast.success(`Created habit: ${name.trim()}`);
-          setName("");
-          setTargetCount(1);
-          setPeriod("weekly");
-          setIcon(DEFAULT_HABIT_ICON);
+          toast.success(`Updated habit: ${name.trim()}`);
           onOpenChange(false);
         },
         onError: (error) => {
-          toast.error(`Failed to create habit: ${error.message}`);
+          toast.error(`Failed to update habit: ${error.message}`);
         },
       },
     );
@@ -81,10 +100,6 @@ export function CreateHabitDialog({
 
   const handleClose = () => {
     if (!isPending) {
-      setName("");
-      setTargetCount(1);
-      setPeriod("weekly");
-      setIcon(DEFAULT_HABIT_ICON);
       onOpenChange(false);
     }
   };
@@ -94,10 +109,9 @@ export function CreateHabitDialog({
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Habit</DialogTitle>
+            <DialogTitle>Edit Habit</DialogTitle>
             <DialogDescription>
-              Add a new habit to track. Set a target and how often you want to
-              complete it.
+              Update your habit settings. Changes are saved immediately.
             </DialogDescription>
           </DialogHeader>
 
@@ -179,7 +193,7 @@ export function CreateHabitDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || !name.trim()}>
-              {isPending ? "Creating..." : "Create Habit"}
+              {isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>
@@ -188,4 +202,4 @@ export function CreateHabitDialog({
   );
 }
 
-export default CreateHabitDialog;
+export default EditHabitDialog;
