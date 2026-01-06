@@ -185,6 +185,19 @@ export function getShortCommitId(commitId: string): string {
   return commitId.substring(0, 7);
 }
 
+const MAIN_BRANCH_NAMES = [
+  "main",
+  "master",
+  "origin/main",
+  "origin/master",
+  "develop",
+  "origin/develop",
+];
+
+export function isMainBranch(branchName: string): boolean {
+  return MAIN_BRANCH_NAMES.includes(branchName);
+}
+
 /**
  * Filter commits based on author, repository, and search criteria
  */
