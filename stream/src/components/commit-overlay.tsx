@@ -2,9 +2,8 @@
 
 import {
   ArrowSquareOutIcon,
+  CaretDownIcon,
   GitBranchIcon,
-  MinusIcon,
-  PlusIcon,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
@@ -15,7 +14,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { GitCommit } from "@/ipc/git-reader";
@@ -78,7 +76,7 @@ function truncateFilePath(filePath: string): string {
 }
 
 function BranchGroup({ branchName, commits }: BranchGroupProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState<string | undefined>(undefined);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   const toggleFileExpansion = (commitId: string) => {
@@ -96,55 +94,67 @@ function BranchGroup({ branchName, commits }: BranchGroupProps) {
   const sortedCommits = [...commits].sort((a, b) => b.timestamp - a.timestamp);
   const firstCommit = sortedCommits[0];
   const remainingCommits = sortedCommits.slice(1);
+  const isExpanded = expanded === "branch";
 
   return (
-    <div className="rounded-md border bg-card/30">
-      <Button
-        variant="ghost"
-        onClick={() => setExpanded(!expanded)}
-        className="flex h-auto w-full items-center justify-between px-3 py-2 text-left"
-      >
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{branchName}</span>
-          <Badge
-            variant={isMainBranch(branchName) ? "default" : "secondary"}
-            className="px-1.5 py-0 text-[10px]"
-          >
-            {commits.length}
-          </Badge>
-        </div>
-        {remainingCommits.length > 0 &&
-          (expanded ? (
-            <MinusIcon className="h-2 w-2 text-muted-foreground" />
-          ) : (
-            <PlusIcon className="h-2 w-2 text-muted-foreground" />
-          ))}
-      </Button>
-
-      <div className="px-3 py-2">
-        <CommitItem
-          commit={firstCommit}
-          expandedFiles={expandedFiles}
-          toggleFileExpansion={toggleFileExpansion}
-          compact={!expanded}
-        />
-      </div>
-
-      {expanded && remainingCommits.length > 0 && (
-        <div className="border-t">
-          {remainingCommits.map((commit) => (
-            <div key={commit.id} className="border-b px-3 py-2 last:border-b-0">
-              <CommitItem
-                commit={commit}
-                expandedFiles={expandedFiles}
-                toggleFileExpansion={toggleFileExpansion}
-                compact={false}
+    <Accordion
+      type="single"
+      collapsible
+      value={expanded}
+      onValueChange={setExpanded}
+      className="rounded-md border bg-card/30"
+    >
+      <AccordionItem value="branch" className="border-0">
+        <AccordionTrigger className="flex h-auto w-full items-center justify-between px-3 py-2 hover:bg-muted/50 hover:no-underline [&>svg]:hidden">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">{branchName}</span>
+            <Badge
+              variant={isMainBranch(branchName) ? "default" : "secondary"}
+              className="px-1.5 py-0 text-[10px]"
+            >
+              {commits.length}
+            </Badge>
+          </div>
+          {remainingCommits.length > 0 && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="text-xs">
+                {isExpanded ? "less" : `${remainingCommits.length} more`}
+              </span>
+              <CaretDownIcon
+                className={`h-3 w-3 ${isExpanded ? "rotate-180" : ""}`}
+                weight="bold"
               />
             </div>
-          ))}
+          )}
+        </AccordionTrigger>
+
+        <div className="px-3 py-2">
+          <CommitItem
+            commit={firstCommit}
+            expandedFiles={expandedFiles}
+            toggleFileExpansion={toggleFileExpansion}
+            compact={!isExpanded}
+          />
         </div>
-      )}
-    </div>
+
+        {remainingCommits.length > 0 && (
+          <AccordionContent className="pb-0">
+            <div className="border-t">
+              {remainingCommits.map((commit) => (
+                <div key={commit.id} className="border-b px-3 py-2 last:border-b-0">
+                  <CommitItem
+                    commit={commit}
+                    expandedFiles={expandedFiles}
+                    toggleFileExpansion={toggleFileExpansion}
+                    compact={false}
+                  />
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        )}
+      </AccordionItem>
+    </Accordion>
   );
 }
 
