@@ -3,6 +3,7 @@
 import {
   ArrowSquareOutIcon,
   CaretDownIcon,
+  DotOutlineIcon,
   GitBranchIcon,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -96,6 +97,8 @@ function BranchGroup({ branchName, commits }: BranchGroupProps) {
   const remainingCommits = sortedCommits.slice(1);
   const isExpanded = expanded === "branch";
 
+  const allCommitsForTimeline = isExpanded ? sortedCommits : [firstCommit];
+
   return (
     <Accordion
       type="single"
@@ -105,15 +108,9 @@ function BranchGroup({ branchName, commits }: BranchGroupProps) {
       className="rounded-md border bg-card/30"
     >
       <AccordionItem value="branch" className="border-0">
-        <AccordionTrigger className="flex h-auto w-full items-center justify-between px-3 py-2 hover:bg-muted/50 hover:no-underline [&>svg]:hidden">
+        <AccordionTrigger className="flex h-auto w-full items-center justify-between px-3 py-2.5 hover:bg-muted/50 hover:no-underline [&>svg]:hidden">
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm">{branchName}</span>
-            <Badge
-              variant={isMainBranch(branchName) ? "default" : "secondary"}
-              className="px-1.5 py-0 text-[10px]"
-            >
-              {commits.length}
-            </Badge>
           </div>
           {remainingCommits.length > 0 && (
             <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -121,38 +118,27 @@ function BranchGroup({ branchName, commits }: BranchGroupProps) {
                 {isExpanded ? "less" : `${remainingCommits.length} more`}
               </span>
               <CaretDownIcon
-                className={`h-3 w-3 ${isExpanded ? "rotate-180" : ""}`}
+                className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`}
                 weight="bold"
               />
             </div>
           )}
         </AccordionTrigger>
 
-        <div className="px-3 py-2">
-          <CommitItem
-            commit={firstCommit}
-            expandedFiles={expandedFiles}
-            toggleFileExpansion={toggleFileExpansion}
-            compact={!isExpanded}
-          />
+        <div className="px-3 pt-1 pb-2">
+          {allCommitsForTimeline.map((commit, index) => (
+            <CommitItem
+              key={commit.id}
+              commit={commit}
+              expandedFiles={expandedFiles}
+              toggleFileExpansion={toggleFileExpansion}
+              compact={!isExpanded}
+              isLast={index === allCommitsForTimeline.length - 1}
+            />
+          ))}
         </div>
 
-        {remainingCommits.length > 0 && (
-          <AccordionContent className="pb-0">
-            <div className="border-t">
-              {remainingCommits.map((commit) => (
-                <div key={commit.id} className="border-b px-3 py-2 last:border-b-0">
-                  <CommitItem
-                    commit={commit}
-                    expandedFiles={expandedFiles}
-                    toggleFileExpansion={toggleFileExpansion}
-                    compact={false}
-                  />
-                </div>
-              ))}
-            </div>
-          </AccordionContent>
-        )}
+        {remainingCommits.length > 0 && <AccordionContent className="hidden" />}
       </AccordionItem>
     </Accordion>
   );
@@ -163,6 +149,7 @@ interface CommitItemProps {
   expandedFiles: Set<string>;
   toggleFileExpansion: (commitId: string) => void;
   compact?: boolean;
+  isLast?: boolean;
 }
 
 function CommitItem({
@@ -170,6 +157,7 @@ function CommitItem({
   expandedFiles,
   toggleFileExpansion,
   compact = false,
+  isLast = false,
 }: CommitItemProps) {
   const time = new Date(commit.timestamp).toLocaleTimeString([], {
     hour: "2-digit",
@@ -178,16 +166,32 @@ function CommitItem({
   const url = commit.url;
 
   return (
-    <div className="group">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="shrink-0 text-muted-foreground text-xs leading-none">{time}</span>
+    <div className="group relative flex gap-3 pl-5">
+      {/* Timeline dot */}
+      <div className="absolute top-1 left-0 h-2.5 w-2.5 rounded-full border-2 border-muted-foreground/40 bg-background" />
+      {/* Timeline line */}
+      {!isLast && (
+        <div className="absolute top-4 bottom-0 left-[4.5px] w-px bg-muted-foreground/20" />
+      )}
 
+      <div className="flex-1 space-y-1.5 pb-4">
+        {/* Row 1: Time + Message */}
+        <div className="flex items-baseline gap-2">
+          <span className="shrink-0 text-muted-foreground text-xs">{time}</span>
           <span
-            className={`min-w-0 text-foreground text-xs leading-none ${compact ? "truncate" : ""}`}
+            className={`min-w-0 text-foreground text-xs leading-snug ${compact ? "truncate" : ""}`}
           >
             {commit.message}
           </span>
+        </div>
+
+        {/* Row 2: Author + Commit ID */}
+        <div className="flex items-center gap-0.5 text-muted-foreground text-xs">
+          <span>{formatCommitAuthor(commit)}</span>
+          <DotOutlineIcon
+            className="h-3 w-3 text-muted-foreground/40"
+            weight="fill"
+          />
           {url ? (
             <button
               type="button"
@@ -195,26 +199,20 @@ function CommitItem({
                 e.stopPropagation();
                 openUrl(url);
               }}
-              className="inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-mono text-muted-foreground text-xs leading-none transition-colors hover:text-foreground"
+              className="inline-flex cursor-pointer items-center gap-0.5 font-mono transition-colors hover:text-foreground"
               title="View commit on remote"
             >
-              <span className="leading-none">{getShortCommitId(commit.id)}</span>
+              <span>{getShortCommitId(commit.id)}</span>
               <ArrowSquareOutIcon className="h-3 w-3" weight="regular" />
             </button>
           ) : (
-            <span className="shrink-0 font-mono text-muted-foreground text-xs leading-none">
-              {getShortCommitId(commit.id)}
-            </span>
+            <span className="font-mono">{getShortCommitId(commit.id)}</span>
           )}
         </div>
-        <span className="shrink-0 text-muted-foreground text-xs leading-none">
-          {formatCommitAuthor(commit)}
-        </span>
-      </div>
 
-      {!compact && commit.files_changed.length > 0 && (
-        <div className="mt-2.5">
-          <div className="flex flex-wrap gap-1">
+        {/* Row 3: File badges */}
+        {!compact && commit.files_changed.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
             {(() => {
               const isExpanded = expandedFiles.has(commit.id);
               const filesToShow = isExpanded
@@ -228,7 +226,7 @@ function CommitItem({
                     <Badge
                       key={file}
                       variant="outline"
-                      className="px-1.5 py-0 font-normal text-[10px] text-muted-foreground"
+                      className="px-1.5 py-0.5 font-normal text-[10px] text-muted-foreground"
                     >
                       {truncateFilePath(file)}
                     </Badge>
@@ -236,7 +234,7 @@ function CommitItem({
                   {!isExpanded && remainingCount > 0 && (
                     <Badge
                       variant="secondary"
-                      className="cursor-pointer px-1.5 py-0 text-[10px] hover:bg-secondary/80"
+                      className="cursor-pointer px-1.5 py-0.5 text-[10px] hover:bg-secondary/80"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleFileExpansion(commit.id);
@@ -248,7 +246,7 @@ function CommitItem({
                   {isExpanded && commit.files_changed.length > 3 && (
                     <Badge
                       variant="secondary"
-                      className="cursor-pointer px-1.5 py-0 text-[10px] hover:bg-secondary/80"
+                      className="cursor-pointer px-1.5 py-0.5 text-[10px] hover:bg-secondary/80"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleFileExpansion(commit.id);
@@ -261,8 +259,8 @@ function CommitItem({
               );
             })()}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
