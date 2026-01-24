@@ -190,7 +190,8 @@ export function useFetchRepos(folderPath: string) {
 
 /**
  * Hook to get commits for a specific date
- * Set autoRefresh to true to refetch every 5 seconds
+ * Uses longer staleTime to avoid refetching during scroll
+ * Set autoRefresh for focused/expanded cards only
  */
 export function useCommitsForDate(
   folderPath: string,
@@ -207,9 +208,9 @@ export function useCommitsForDate(
         return {} as CommitsByDate;
       }
 
-      const startOfDay = date;
+      const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = date;
+      const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
       const range = createDateRange.custom(startOfDay, endOfDay);
@@ -217,14 +218,15 @@ export function useCommitsForDate(
       return groupCommitsByDate(repoCommits);
     },
     enabled: enabled && repos.length > 0,
-    refetchInterval: autoRefresh ? 5000 : false,
-    staleTime: 5000,
+    refetchInterval: autoRefresh ? 10000 : false, // Only refresh focused cards, every 10s
+    staleTime: 60000, // Consider fresh for 1 minute to avoid refetch storms during scroll
+    gcTime: 300000, // Keep in cache for 5 minutes
   });
 }
 
 /**
  * Hook to get commits for multiple dates (based on visible files)
- * Automatically refetches every 5 seconds
+ * Uses staleTime to prevent refetch storms during rapid scroll
  */
 export function useCommitsForVisibleFiles(
   folderPath: string,
@@ -262,8 +264,8 @@ export function useCommitsForVisibleFiles(
         return groupCommitsByDate(repoCommits);
       },
       enabled: dateKeys.length > 0 && repos.length > 0,
-      refetchInterval: 5000, // Auto-refresh every 5 seconds
-      staleTime: 0, // Always consider stale so refetchInterval works
+      staleTime: 60000, // Consider fresh for 1 minute
+      gcTime: 300000, // Keep in cache for 5 minutes
     })),
   });
 

@@ -1,8 +1,15 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
-use git2::{self, Repository, Time};
+use git2::{self, DiffOptions, Repository, Time};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+
+/// Maximum number of commits to return per repository to prevent memory issues
+const MAX_COMMITS_PER_REPO: usize = 200;
+
+/// Maximum number of files changed to return per commit
+const MAX_FILES_PER_COMMIT: usize = 50;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitCommit {
@@ -61,26 +68,27 @@ pub(crate) async fn get_git_commits_for_repos(
     start_timestamp: u64,
     end_timestamp: u64,
 ) -> Result<Vec<RepoCommits>, String> {
-    let mut results = Vec::new();
-
     let start_seconds = (start_timestamp / 1000) as i64;
     let end_seconds = (end_timestamp / 1000) as i64;
 
-    for repo_path in repo_paths {
-        let repo_commits = match get_repo_commits(&repo_path, start_seconds, end_seconds) {
-            Ok(commits) => RepoCommits {
-                repo_path: repo_path.clone(),
-                commits,
-                error: None,
-            },
-            Err(e) => RepoCommits {
-                repo_path: repo_path.clone(),
-                commits: Vec::new(),
-                error: Some(format!("Error reading repository: {}", e)),
-            },
-        };
-        results.push(repo_commits);
-    }
+    // Process all repos in parallel using rayon
+    let results: Vec<RepoCommits> = repo_paths
+        .par_iter()
+        .map(|repo_path| {
+            match get_repo_commits(repo_path, start_seconds, end_seconds) {
+                Ok(commits) => RepoCommits {
+                    repo_path: repo_path.clone(),
+                    commits,
+                    error: None,
+                },
+                Err(e) => RepoCommits {
+                    repo_path: repo_path.clone(),
+                    commits: Vec::new(),
+                    error: Some(format!("Error reading repository: {}", e)),
+                },
+            }
+        })
+        .collect();
 
     Ok(results)
 }
@@ -95,91 +103,86 @@ fn time_to_iso_date(time: Time) -> String {
     dt.format("%Y-%m-%d").to_string()
 }
 
-fn get_branches_for_commit(
+/// Build a map of commit OID -> (branches, is_on_remote) for all branch tips
+/// This is much more efficient than walking history for each commit
+fn build_branch_tip_map(
     repo: &Repository,
-    commit_oid: git2::Oid,
-) -> Result<(Vec<String>, bool), Box<dyn std::error::Error>> {
-    let mut all_branches = HashSet::new();
-    let mut main_branches = HashSet::new();
-    let mut feature_branches = HashSet::new();
-    let mut found_on_remote = false;
+) -> Result<HashMap<git2::Oid, (Vec<String>, bool)>, Box<dyn std::error::Error>> {
+    let mut tip_map: HashMap<git2::Oid, (Vec<String>, bool)> = HashMap::new();
 
+    // Process local branches - just get the tip commits
     let local_branches = repo.branches(Some(git2::BranchType::Local))?;
     for branch in local_branches {
         let (branch, _) = branch?;
         if let Some(name) = branch.name()? {
             let reference = branch.get();
             if let Some(target) = reference.target() {
-                let mut revwalk = repo.revwalk()?;
-                revwalk.push(target)?;
-
-                for oid in revwalk {
-                    let oid = oid?;
-                    if oid == commit_oid {
-                        all_branches.insert(name.to_string());
-                        if is_main_branch(name) {
-                            main_branches.insert(normalize_branch_name(name));
-                        } else {
-                            feature_branches.insert(name.to_string());
-                        }
-                        break;
-                    }
-                }
+                let entry = tip_map.entry(target).or_insert_with(|| (Vec::new(), false));
+                entry.0.push(name.to_string());
             }
         }
     }
 
+    // Process remote branches - just get the tip commits
     let remote_branches = repo.branches(Some(git2::BranchType::Remote))?;
     for branch in remote_branches {
         let (branch, _) = branch?;
         if let Some(name) = branch.name()? {
             let reference = branch.get();
             if let Some(target) = reference.target() {
-                let mut revwalk = repo.revwalk()?;
-                revwalk.push(target)?;
-
-                for oid in revwalk {
-                    let oid = oid?;
-                    if oid == commit_oid {
-                        found_on_remote = true;
-
-                        let normalized = normalize_branch_name(name);
-                        if !all_branches.contains(&normalized) {
-                            all_branches.insert(name.to_string());
-                            if is_main_branch(name) {
-                                main_branches.insert(normalized);
-                            } else if feature_branches.len() < 3 {
-                                feature_branches.insert(name.to_string());
-                            }
-                        }
-                        break;
-                    }
+                let entry = tip_map.entry(target).or_insert_with(|| (Vec::new(), false));
+                entry.1 = true; // Mark as on remote
+                let normalized = normalize_branch_name(name);
+                if !entry.0.contains(&normalized) {
+                    entry.0.push(normalized);
                 }
             }
         }
     }
 
-    let mut result = Vec::new();
+    Ok(tip_map)
+}
 
-    if !main_branches.is_empty() {
-        if main_branches.contains("main") {
-            result.push("main".to_string());
-        } else if main_branches.contains("master") {
-            result.push("master".to_string());
-        } else if main_branches.contains("develop") {
-            result.push("develop".to_string());
-        } else if let Some(branch) = main_branches.iter().next() {
-            result.push(branch.clone());
+/// Get the primary branch for a commit using a simplified approach
+/// Instead of walking all branch histories, we check if commit is reachable from main branches
+fn get_branch_for_commit_fast(
+    repo: &Repository,
+    commit_oid: git2::Oid,
+    branch_tip_map: &HashMap<git2::Oid, (Vec<String>, bool)>,
+) -> (Vec<String>, bool) {
+    // First check if this commit is a branch tip (fast path)
+    if let Some((branches, is_remote)) = branch_tip_map.get(&commit_oid) {
+        let mut result = branches.clone();
+        // Prioritize main branches
+        result.sort_by(|a, b| {
+            let a_main = is_main_branch(a);
+            let b_main = is_main_branch(b);
+            b_main.cmp(&a_main)
+        });
+        result.truncate(2);
+        return (result, *is_remote);
+    }
+
+    // For non-tip commits, check if reachable from main/master only (for performance)
+    // This is a simplified check - we don't try to find ALL branches
+    let main_branch_names = ["main", "master", "origin/main", "origin/master"];
+    
+    for branch_name in &main_branch_names {
+        if let Ok(reference) = repo.find_reference(&format!("refs/heads/{}", branch_name))
+            .or_else(|_| repo.find_reference(&format!("refs/remotes/{}", branch_name)))
+        {
+            if let Some(target) = reference.target() {
+                // Check if commit is an ancestor of the branch tip (limited depth)
+                if let Ok(true) = repo.graph_descendant_of(target, commit_oid) {
+                    let is_remote = branch_name.starts_with("origin/");
+                    return (vec![normalize_branch_name(branch_name)], is_remote);
+                }
+            }
         }
-    } else {
-        result.extend(feature_branches.into_iter().take(2));
     }
 
-    if result.is_empty() {
-        result.push("unknown".to_string());
-    }
-
-    Ok((result, found_on_remote))
+    // Default: assume it's on some branch and likely pushed
+    (vec!["main".to_string()], true)
 }
 
 fn normalize_branch_name(branch_name: &str) -> String {
@@ -299,6 +302,51 @@ fn build_commit_url(remote_url: &str, commit_id: &str) -> Option<String> {
     }
 }
 
+/// Get files changed for a commit using optimized diff options (no content, just file names)
+fn get_files_changed_fast(
+    repo: &Repository,
+    commit: &git2::Commit,
+) -> Vec<String> {
+    let mut files_changed = Vec::new();
+
+    let parent = match commit.parent(0) {
+        Ok(p) => p,
+        Err(_) => return files_changed, // Initial commit or error
+    };
+
+    let tree = match commit.tree() {
+        Ok(t) => t,
+        Err(_) => return files_changed,
+    };
+
+    let parent_tree = match parent.tree() {
+        Ok(t) => t,
+        Err(_) => return files_changed,
+    };
+
+    // Configure diff to skip content computation entirely
+    let mut diff_opts = DiffOptions::new();
+    diff_opts.skip_binary_check(true); // Don't check if files are binary
+    diff_opts.ignore_submodules(true); // Skip submodule processing
+    diff_opts.context_lines(0); // No context lines needed
+
+    let diff = match repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut diff_opts)) {
+        Ok(d) => d,
+        Err(_) => return files_changed,
+    };
+
+    // Use deltas() iterator - much faster than foreach, no callbacks
+    for delta in diff.deltas().take(MAX_FILES_PER_COMMIT) {
+        if let Some(path) = delta.new_file().path() {
+            if let Some(path_str) = path.to_str() {
+                files_changed.push(path_str.to_string());
+            }
+        }
+    }
+
+    files_changed
+}
+
 fn get_repo_commits(
     repo_path: &str,
     start_seconds: i64,
@@ -312,72 +360,78 @@ fn get_repo_commits(
     revwalk.set_sorting(git2::Sort::TIME)?;
 
     let remote_url = get_remote_url(&repo);
+    
+    // Build branch tip map once upfront (much faster than per-commit checks)
+    let branch_tip_map = build_branch_tip_map(&repo).unwrap_or_default();
 
     let mut commits = Vec::new();
     let mut seen_commits = HashSet::new();
 
     for oid in revwalk {
-        let oid = oid?;
-        let commit = repo.find_commit(oid)?;
-        let commit_time = commit.time();
-        let commit_timestamp = commit_time.seconds();
+        // Stop early if we've reached the limit
+        if commits.len() >= MAX_COMMITS_PER_REPO {
+            break;
+        }
+
+        let oid = match oid {
+            Ok(oid) => oid,
+            Err(_) => continue,
+        };
 
         if seen_commits.contains(&oid) {
             continue;
         }
         seen_commits.insert(oid);
 
-        if commit_timestamp >= start_seconds && commit_timestamp <= end_seconds {
-            let author = commit.author();
-            let message = commit.message().unwrap_or("").to_string();
+        let commit = match repo.find_commit(oid) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
 
-            let mut files_changed = Vec::new();
-            if let Some(parent) = commit.parent(0).ok() {
-                let tree = commit.tree()?;
-                let parent_tree = parent.tree()?;
-                let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), None)?;
+        let commit_time = commit.time();
+        let commit_timestamp = commit_time.seconds();
 
-                diff.foreach(
-                    &mut |delta, _| {
-                        if let Some(file) = delta.new_file().path() {
-                            if let Some(path_str) = file.to_str() {
-                                files_changed.push(path_str.to_string());
-                            }
-                        }
-                        true
-                    },
-                    None,
-                    None,
-                    None,
-                )?;
-            }
-
-            let (branches, is_on_remote) = get_branches_for_commit(&repo, oid)?;
-
-            let commit_id = format!("{}", oid);
-            let url = if is_on_remote {
-                remote_url
-                    .as_ref()
-                    .and_then(|remote| build_commit_url(remote, &commit_id))
-            } else {
-                None
-            };
-
-            let git_commit = GitCommit {
-                id: commit_id,
-                message: message.lines().next().unwrap_or("").to_string(),
-                author_name: author.name().unwrap_or("Unknown").to_string(),
-                author_email: author.email().unwrap_or("").to_string(),
-                timestamp: time_to_timestamp_ms(commit_time),
-                date: time_to_iso_date(commit_time),
-                repo_path: repo_path.to_string(),
-                files_changed,
-                branches,
-                url,
-            };
-
-            commits.push(git_commit);
+        // Skip commits outside the date range
+        // Since we're sorted by time, we can break early if we're past the range
+        if commit_timestamp < start_seconds {
+            break;
         }
+        if commit_timestamp > end_seconds {
+            continue;
+        }
+
+        let author = commit.author();
+        let message = commit.message().unwrap_or("").to_string();
+
+        // Get files changed using optimized method (no diff content)
+        let files_changed = get_files_changed_fast(&repo, &commit);
+
+        // Use the fast branch detection
+        let (branches, is_on_remote) = get_branch_for_commit_fast(&repo, oid, &branch_tip_map);
+
+        let commit_id = format!("{}", oid);
+        let url = if is_on_remote {
+            remote_url
+                .as_ref()
+                .and_then(|remote| build_commit_url(remote, &commit_id))
+        } else {
+            None
+        };
+
+        let git_commit = GitCommit {
+            id: commit_id,
+            message: message.lines().next().unwrap_or("").to_string(),
+            author_name: author.name().unwrap_or("Unknown").to_string(),
+            author_email: author.email().unwrap_or("").to_string(),
+            timestamp: time_to_timestamp_ms(commit_time),
+            date: time_to_iso_date(commit_time),
+            repo_path: repo_path.to_string(),
+            files_changed,
+            branches,
+            url,
+        };
+
+        commits.push(git_commit);
     }
 
     commits.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
