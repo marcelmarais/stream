@@ -1,5 +1,5 @@
+import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { load } from "@tauri-apps/plugin-store";
-import { readTextFile, writeTextFile, exists } from "@tauri-apps/plugin-fs";
 
 // Constants for getting the selected folder from settings
 const FOLDER_STORAGE_KEY = "stream-last-selected-folder";
