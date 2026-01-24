@@ -1,4 +1,10 @@
-import { Store } from "@tauri-apps/plugin-store";
+import { load } from "@tauri-apps/plugin-store";
+import { readTextFile, writeTextFile, exists } from "@tauri-apps/plugin-fs";
+
+// Constants for getting the selected folder from settings
+const FOLDER_STORAGE_KEY = "stream-last-selected-folder";
+const FOLDER_STORE_FILE = "settings.json";
+const HABITS_FILENAME = "habits.json";
 
 /**
  * Habit tracking period options
@@ -81,20 +87,63 @@ export interface Habit {
   completions: Record<string, number>;
 }
 
-// Store instance for habits
-let store: Store | null = null;
-
 /**
- * Initialize the habits store
+ * Get the selected folder from settings store
  */
-async function getStore(): Promise<Store> {
-  if (!store) {
-    store = await Store.load("habits.json");
+async function getSelectedFolder(): Promise<string | null> {
+  try {
+    const store = await load(FOLDER_STORE_FILE, {
+      autoSave: true,
+      defaults: {},
+    });
+    const savedFolder = await store.get<string>(FOLDER_STORAGE_KEY);
+    return savedFolder || null;
+  } catch (error) {
+    console.warn("Failed to get selected folder:", error);
+    return null;
   }
-  return store;
 }
 
-const HABITS_KEY = "habits";
+/**
+ * Get the full path to the habits file in the markdown directory
+ */
+async function getHabitsFilePath(): Promise<string> {
+  const folder = await getSelectedFolder();
+  if (!folder) {
+    throw new Error("No folder selected. Please select a folder first.");
+  }
+  return folder.endsWith("/")
+    ? `${folder}${HABITS_FILENAME}`
+    : `${folder}/${HABITS_FILENAME}`;
+}
+
+/**
+ * Read habits from the JSON file in the markdown directory
+ */
+async function readHabitsFromFile(): Promise<Habit[]> {
+  try {
+    const filePath = await getHabitsFilePath();
+    const fileExists = await exists(filePath);
+    if (!fileExists) {
+      return [];
+    }
+    const content = await readTextFile(filePath);
+    const data = JSON.parse(content);
+    return data.habits || [];
+  } catch (error) {
+    console.error("Error reading habits file:", error);
+    return [];
+  }
+}
+
+/**
+ * Write habits to the JSON file in the markdown directory
+ */
+async function writeHabitsToFile(habits: Habit[]): Promise<void> {
+  const filePath = await getHabitsFilePath();
+  const content = JSON.stringify({ habits }, null, 2);
+  await writeTextFile(filePath, content);
+}
 
 /**
  * Generate a unique ID for a new habit
@@ -218,13 +267,11 @@ export function getCompletionsForPeriod(
 }
 
 /**
- * Get all habits from the store
+ * Get all habits from the file
  */
 export async function getAllHabits(): Promise<Habit[]> {
   try {
-    const s = await getStore();
-    const habits = await s.get<Habit[]>(HABITS_KEY);
-    return habits || [];
+    return await readHabitsFromFile();
   } catch (error) {
     console.error("Error getting habits:", error);
     return [];
@@ -241,8 +288,7 @@ export async function createHabit(
   icon?: HabitIcon,
 ): Promise<Habit> {
   try {
-    const s = await getStore();
-    const habits = (await s.get<Habit[]>(HABITS_KEY)) || [];
+    const habits = await readHabitsFromFile();
 
     const newHabit: Habit = {
       id: generateId(),
@@ -255,8 +301,7 @@ export async function createHabit(
     };
 
     habits.push(newHabit);
-    await s.set(HABITS_KEY, habits);
-    await s.save();
+    await writeHabitsToFile(habits);
 
     return newHabit;
   } catch (error) {
@@ -270,8 +315,7 @@ export async function createHabit(
  */
 export async function deleteHabit(id: string): Promise<void> {
   try {
-    const s = await getStore();
-    const habits = (await s.get<Habit[]>(HABITS_KEY)) || [];
+    const habits = await readHabitsFromFile();
 
     const filteredHabits = habits.filter((h) => h.id !== id);
 
@@ -279,8 +323,7 @@ export async function deleteHabit(id: string): Promise<void> {
       throw new Error("Habit not found");
     }
 
-    await s.set(HABITS_KEY, filteredHabits);
-    await s.save();
+    await writeHabitsToFile(filteredHabits);
   } catch (error) {
     console.error("Error deleting habit:", error);
     throw new Error("Failed to delete habit");
@@ -300,8 +343,7 @@ export async function updateHabit(
   },
 ): Promise<Habit> {
   try {
-    const s = await getStore();
-    const habits = (await s.get<Habit[]>(HABITS_KEY)) || [];
+    const habits = await readHabitsFromFile();
 
     const habitIndex = habits.findIndex((h) => h.id === id);
     if (habitIndex === -1) {
@@ -324,8 +366,7 @@ export async function updateHabit(
       habit.icon = updates.icon;
     }
 
-    await s.set(HABITS_KEY, habits);
-    await s.save();
+    await writeHabitsToFile(habits);
 
     return habit;
   } catch (error) {
@@ -342,8 +383,7 @@ export async function incrementCompletion(
   date: Date,
 ): Promise<Habit> {
   try {
-    const s = await getStore();
-    const habits = (await s.get<Habit[]>(HABITS_KEY)) || [];
+    const habits = await readHabitsFromFile();
 
     const habitIndex = habits.findIndex((h) => h.id === habitId);
     if (habitIndex === -1) {
@@ -354,8 +394,7 @@ export async function incrementCompletion(
     const habit = habits[habitIndex];
     habit.completions[dateKey] = (habit.completions[dateKey] || 0) + 1;
 
-    await s.set(HABITS_KEY, habits);
-    await s.save();
+    await writeHabitsToFile(habits);
 
     return habit;
   } catch (error) {
@@ -373,8 +412,7 @@ export async function decrementCompletion(
   date: Date,
 ): Promise<Habit> {
   try {
-    const s = await getStore();
-    const habits = (await s.get<Habit[]>(HABITS_KEY)) || [];
+    const habits = await readHabitsFromFile();
 
     const habitIndex = habits.findIndex((h) => h.id === habitId);
     if (habitIndex === -1) {
@@ -393,8 +431,7 @@ export async function decrementCompletion(
         delete habit.completions[dateKey];
       }
 
-      await s.set(HABITS_KEY, habits);
-      await s.save();
+      await writeHabitsToFile(habits);
     }
 
     return habit;

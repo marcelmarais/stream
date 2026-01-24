@@ -42,6 +42,7 @@ export function useMarkdownMetadata(folderPath: string) {
       return metadata;
     },
     enabled: !!folderPath,
+    staleTime: 30000, // Consider fresh for 30 seconds
   });
 }
 
@@ -57,6 +58,8 @@ export function useMarkdownFileContent(filePath: string | null) {
       return contentMap.get(filePath) ?? "";
     },
     enabled: !!filePath,
+    staleTime: 60000, // Consider fresh for 1 minute
+    gcTime: 300000, // Keep in cache for 5 minutes
   });
 }
 

@@ -2,8 +2,16 @@
 
 import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { throttle } from "lodash-es";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
 import { FileCard, FocusedFileOverlay } from "@/components/markdown-file-card";
@@ -153,30 +161,37 @@ function TimelineView({ folderPath }: { folderPath: string }) {
     [folderPath, queryClient],
   );
 
+  // Throttle prefetching to avoid hammering during fast scroll
+  const throttledPrefetch = useMemo(
+    () =>
+      throttle(
+        async (visibleFiles: MarkdownFileMetadata[]) => {
+          const filePaths = visibleFiles.map((file) => file.filePath);
+          await prefetchFileContents(filePaths);
+
+          if (visibleFiles.length > 0) {
+            const dateKeys = visibleFiles.map((file) => {
+              const dateFromFilename = getDateFromFilename(file.fileName);
+              return dateFromFilename || getDateKey(file.createdAt);
+            });
+            await prefetchCommitsForDates(folderPath, dateKeys);
+          }
+        },
+        300, // Only prefetch at most once every 300ms
+        { leading: true, trailing: true },
+      ),
+    [prefetchFileContents, prefetchCommitsForDates, folderPath],
+  );
+
   const handleRangeChanged = useCallback(
-    async (range: { startIndex: number; endIndex: number }) => {
+    (range: { startIndex: number; endIndex: number }) => {
       const visibleFiles = allFilesMetadata.slice(
         range.startIndex,
         range.endIndex + 1,
       );
-
-      const filePaths = visibleFiles.map((file) => file.filePath);
-      await prefetchFileContents(filePaths);
-
-      if (visibleFiles.length > 0) {
-        const dateKeys = visibleFiles.map((file) => {
-          const dateFromFilename = getDateFromFilename(file.fileName);
-          return dateFromFilename || getDateKey(file.createdAt);
-        });
-        await prefetchCommitsForDates(folderPath, dateKeys);
-      }
+      throttledPrefetch(visibleFiles);
     },
-    [
-      allFilesMetadata,
-      prefetchFileContents,
-      prefetchCommitsForDates,
-      folderPath,
-    ],
+    [allFilesMetadata, throttledPrefetch],
   );
 
   const renderItem = useCallback(
@@ -245,7 +260,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
             totalCount={allFilesMetadata.length}
             itemContent={renderItem}
             rangeChanged={handleRangeChanged}
-            overscan={25}
+            overscan={5}
             className="h-full"
           />
         </div>
