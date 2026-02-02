@@ -65,8 +65,12 @@ export function FileName({
       toast.error("No content to copy");
       return;
     }
+    const locationLine =
+      metadata.country && metadata.city
+        ? `${metadata.country}, ${metadata.city}\n\n`
+        : "";
     await navigator.clipboard.writeText(
-      `# ${fileName}\n\n${metadata.country}, ${metadata.city}\n\n${content}`,
+      `# ${fileName}\n\n${locationLine}${content}`,
     );
     toast.success("File content copied to clipboard");
   };

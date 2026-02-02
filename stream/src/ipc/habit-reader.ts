@@ -1,10 +1,5 @@
-import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { load } from "@tauri-apps/plugin-store";
-
-// Constants for getting the selected folder from settings
-const FOLDER_STORAGE_KEY = "stream-last-selected-folder";
-const FOLDER_STORE_FILE = "settings.json";
-const HABITS_FILENAME = "habits.json";
+import { readMeta, updateMeta } from "@/ipc/meta";
+import { getSelectedFolder } from "@/ipc/selected-folder";
 
 /**
  * Habit tracking period options
@@ -87,62 +82,30 @@ export interface Habit {
   completions: Record<string, number>;
 }
 
-/**
- * Get the selected folder from settings store
- */
-async function getSelectedFolder(): Promise<string | null> {
-  try {
-    const store = await load(FOLDER_STORE_FILE, {
-      autoSave: true,
-      defaults: {},
-    });
-    const savedFolder = await store.get<string>(FOLDER_STORAGE_KEY);
-    return savedFolder || null;
-  } catch (error) {
-    console.warn("Failed to get selected folder:", error);
-    return null;
-  }
-}
-
-/**
- * Get the full path to the habits file in the markdown directory
- */
-async function getHabitsFilePath(): Promise<string> {
-  const folder = await getSelectedFolder();
-  if (!folder) {
-    throw new Error("No folder selected. Please select a folder first.");
-  }
-  return folder.endsWith("/")
-    ? `${folder}${HABITS_FILENAME}`
-    : `${folder}/${HABITS_FILENAME}`;
-}
-
-/**
- * Read habits from the JSON file in the markdown directory
- */
 async function readHabitsFromFile(): Promise<Habit[]> {
   try {
-    const filePath = await getHabitsFilePath();
-    const fileExists = await exists(filePath);
-    if (!fileExists) {
-      return [];
-    }
-    const content = await readTextFile(filePath);
-    const data = JSON.parse(content);
-    return data.habits || [];
+    const folder = await getSelectedFolder();
+    if (!folder) return [];
+    const meta = await readMeta(folder);
+    return meta.habits.items || [];
   } catch (error) {
-    console.error("Error reading habits file:", error);
+    console.error("Error reading habits from meta.json:", error);
     return [];
   }
 }
 
-/**
- * Write habits to the JSON file in the markdown directory
- */
 async function writeHabitsToFile(habits: Habit[]): Promise<void> {
-  const filePath = await getHabitsFilePath();
-  const content = JSON.stringify({ habits }, null, 2);
-  await writeTextFile(filePath, content);
+  const folder = await getSelectedFolder();
+  if (!folder) {
+    throw new Error("No folder selected. Please select a folder first.");
+  }
+  await updateMeta(folder, (current) => ({
+    ...current,
+    habits: {
+      ...current.habits,
+      items: habits,
+    },
+  }));
 }
 
 /**

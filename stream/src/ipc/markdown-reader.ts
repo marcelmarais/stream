@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { remove, stat } from "@tauri-apps/plugin-fs";
+import {
+  markFileRefreshedMeta,
+  type RefreshInterval,
+  readMeta,
+  setFileDescriptionMeta,
+  setFileLocation,
+  setFileRefreshIntervalMeta,
+} from "@/ipc/meta";
 import { classifyRelevantDailyFiles, mergeRelevantContent } from "@/utils/ai";
 
 /**
@@ -16,9 +24,9 @@ export interface MarkdownFileMetadata {
   modifiedAt: Date;
   /** The file size in bytes */
   size: number;
-  /** The country where the file was created (from xattrs) */
+  /** The country associated with this file (from meta.json) */
   country?: string;
-  /** The city where the file was created (from xattrs) */
+  /** The city associated with this file (from meta.json) */
   city?: string;
   /** The date parsed from the filename (YYYY-MM-DD format) */
   dateFromFilename: Date;
@@ -39,9 +47,9 @@ export interface StructuredMarkdownFileMetadata {
   modifiedAt: Date;
   /** The file size in bytes */
   size: number;
-  /** The country where the file was created (from xattrs) */
+  /** The country associated with this file (from meta.json) */
   country?: string;
-  /** The city where the file was created (from xattrs) */
+  /** The city associated with this file (from meta.json) */
   city?: string;
 }
 
@@ -59,15 +67,15 @@ export interface StructuredMarkdownFile {
   modifiedAt: Date;
   /** The file size in bytes */
   size: number;
-  /** The country where the file was created (from xattrs) */
+  /** The country associated with this file (from meta.json) */
   country?: string;
-  /** The city where the file was created (from xattrs) */
+  /** The city associated with this file (from meta.json) */
   city?: string;
-  /** The file description (from xattrs) */
+  /** The file description (from meta.json) */
   description?: string;
   /** The file content */
   content: string;
-  /** The refresh interval (from xattrs) */
+  /** The refresh interval (from meta.json) */
   refreshInterval?: string;
   /** The last refreshed timestamp */
   lastRefreshedAt?: Date;
@@ -153,18 +161,32 @@ export async function readAllMarkdownFilesMetadata(
       },
     );
 
-    const files: MarkdownFileMetadata[] = rustMetadata.map((rustFile) => ({
-      filePath: rustFile.file_path,
-      fileName: rustFile.file_name,
-      createdAt: new Date(rustFile.created_at),
-      modifiedAt: new Date(rustFile.modified_at),
-      size: rustFile.size,
-      country: rustFile.country,
-      city: rustFile.city,
-      dateFromFilename: new Date(rustFile.date_from_filename),
-    }));
+    const filesFromRust: MarkdownFileMetadata[] = rustMetadata.map(
+      (rustFile) => ({
+        filePath: rustFile.file_path,
+        fileName: rustFile.file_name,
+        createdAt: new Date(rustFile.created_at),
+        modifiedAt: new Date(rustFile.modified_at),
+        size: rustFile.size,
+        country: rustFile.country,
+        city: rustFile.city,
+        dateFromFilename: new Date(rustFile.date_from_filename),
+      }),
+    );
 
-    return files;
+    const meta = await readMeta(directoryPath);
+    const base = directoryPath.endsWith("/")
+      ? directoryPath
+      : `${directoryPath}/`;
+
+    return filesFromRust.map((file) => {
+      const key = file.filePath.startsWith(base)
+        ? file.filePath.slice(base.length)
+        : file.filePath;
+      const location = meta.files[key]?.location;
+      if (!location) return file;
+      return { ...file, country: location.country, city: location.city };
+    });
   } catch (error) {
     console.error(`Error reading directory ${directoryPath}:`, error);
     throw new Error(
@@ -200,7 +222,7 @@ export async function readMarkdownFilesContentByPaths(
 /**
  * Writes content to a markdown file at the specified path.
  * If the file is newly created, it will automatically store the user's current location
- * (country and city) in extended attributes.
+ * (country and city) in meta.json (best effort).
  *
  * @param filePath - The absolute path to the file to write
  * @param content - The content to write to the file
@@ -209,6 +231,7 @@ export async function readMarkdownFilesContentByPaths(
 export async function writeMarkdownFileContent(
   filePath: string,
   content: string,
+  options: { baseFolderPath?: string } = {},
 ): Promise<void> {
   try {
     let fileExists = true;
@@ -222,13 +245,32 @@ export async function writeMarkdownFileContent(
     await writeTextFile(filePath, content);
 
     if (!fileExists) {
-      const location = await getCurrentLocation();
+      const baseFolderPath =
+        options.baseFolderPath ||
+        (filePath.includes("/structured/")
+          ? filePath.split("/structured/")[0]
+          : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/"))));
+
+      const detected = await getCurrentLocation();
+      const fallback = (await readMeta(baseFolderPath)).globals?.lastLocation;
+      const location = detected
+        ? { ...detected, source: "auto:ip" }
+        : fallback
+          ? {
+              country: fallback.country,
+              city: fallback.city,
+              source: "auto:lastLocation",
+            }
+          : undefined;
+
       if (location) {
         try {
           await setFileLocationMetadata(
+            baseFolderPath,
             filePath,
             location.country,
             location.city,
+            location.source,
           );
         } catch (error) {
           console.warn(
@@ -280,7 +322,9 @@ export async function ensureMarkdownFileForDate(
     return { filePath, created: false };
   } catch {
     // File doesn't exist, create it
-    await writeMarkdownFileContent(filePath, "");
+    await writeMarkdownFileContent(filePath, "", {
+      baseFolderPath: directoryPath,
+    });
     return { filePath, created: true };
   }
 }
@@ -298,36 +342,75 @@ export async function ensureTodayMarkdownFile(
 
 /**
  * Gets the current user's location (country and city) via IP geolocation.
- * Uses ipapi.co for geolocation (free, no API key required).
+ * Uses public IP geolocation providers (no API key required).
  * Returns undefined if location cannot be determined.
  */
 export async function getCurrentLocation(): Promise<
   { country: string; city: string } | undefined
 > {
   try {
-    const response = await fetch("https://ipapi.co/json/", {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) {
-      console.warn("Failed to fetch location:", response.statusText);
-      return undefined;
+    const fetchWithTimeout = async (url: string, timeoutMs: number) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
+    const providers: Array<{
+      name: string;
+      url: string;
+      parse: (data: unknown) => { country?: string; city?: string };
+    }> = [
+      {
+        name: "ipapi.co",
+        url: "https://ipapi.co/json/",
+        parse: (data) => {
+          const d = data as { country_name?: string; city?: string };
+          return { country: d.country_name, city: d.city };
+        },
+      },
+      {
+        name: "ipwho.is",
+        url: "https://ipwho.is/",
+        parse: (data) => {
+          const d = data as { country?: string; city?: string };
+          return { country: d.country, city: d.city };
+        },
+      },
+    ];
+
+    for (const provider of providers) {
+      try {
+        const response = await fetchWithTimeout(provider.url, 5000);
+        if (!response.ok) {
+          console.warn(
+            `Failed to fetch location from ${provider.name}:`,
+            response.statusText,
+          );
+          continue;
+        }
+
+        const data = await response.json();
+        const { country, city } = provider.parse(data);
+
+        if (
+          country &&
+          city &&
+          country !== "Unknown" &&
+          city !== "Unknown" &&
+          country.trim() !== "" &&
+          city.trim() !== ""
+        ) {
+          return { country, city };
+        }
+      } catch (error) {
+        console.warn(`Error getting location from ${provider.name}:`, error);
+      }
     }
 
-    const data = await response.json();
-    const country = data.country_name;
-    const city = data.city;
-
-    if (
-      country &&
-      city &&
-      country !== "Unknown" &&
-      city !== "Unknown" &&
-      country.trim() !== "" &&
-      city.trim() !== ""
-    ) {
-      return { country, city };
-    }
-    console.warn("Location data unavailable or invalid:", { country, city });
     return undefined;
   } catch (error) {
     console.error("Error getting current location:", error);
@@ -336,23 +419,22 @@ export async function getCurrentLocation(): Promise<
 }
 
 /**
- * Sets location metadata (country and city) on a file using extended attributes.
+ * Sets location metadata (country and city) for a file in meta.json.
  *
+ * @param folderPath - The base folder path containing meta.json
  * @param filePath - The absolute path to the file
  * @param country - The country name
  * @param city - The city name
  */
 export async function setFileLocationMetadata(
+  folderPath: string,
   filePath: string,
   country: string,
   city: string,
+  source: string = "manual",
 ): Promise<void> {
   try {
-    await invoke("set_file_location_metadata", {
-      filePath,
-      country,
-      city,
-    });
+    await setFileLocation(folderPath, filePath, { country, city, source });
   } catch (error) {
     console.error(`Error setting location metadata for ${filePath}:`, error);
     throw new Error(`Failed to set location metadata: ${error}`);
@@ -409,7 +491,19 @@ export async function readStructuredMarkdownFilesMetadata(
       }),
     );
 
-    return files;
+    const meta = await readMeta(directoryPath);
+    const base = directoryPath.endsWith("/")
+      ? directoryPath
+      : `${directoryPath}/`;
+
+    return files.map((file) => {
+      const key = file.filePath.startsWith(base)
+        ? file.filePath.slice(base.length)
+        : file.filePath;
+      const location = meta.files[key]?.location;
+      if (!location) return file;
+      return { ...file, country: location.country, city: location.city };
+    });
   } catch (error) {
     console.error(
       `Error reading structured directory ${directoryPath}:`,
@@ -464,7 +558,32 @@ export async function readStructuredMarkdownFiles(
         : undefined,
     }));
 
-    return files;
+    const meta = await readMeta(directoryPath);
+    const base = directoryPath.endsWith("/")
+      ? directoryPath
+      : `${directoryPath}/`;
+
+    return files.map((file) => {
+      const key = file.filePath.startsWith(base)
+        ? file.filePath.slice(base.length)
+        : file.filePath;
+      const entry = meta.files[key];
+      if (!entry) return file;
+
+      const location = entry.location;
+      const refresh = entry.refresh;
+
+      return {
+        ...file,
+        country: location?.country ?? file.country,
+        city: location?.city ?? file.city,
+        description: entry.description ?? file.description,
+        refreshInterval: refresh?.interval ?? file.refreshInterval,
+        lastRefreshedAt: refresh?.lastRefreshedAt
+          ? new Date(refresh.lastRefreshedAt)
+          : file.lastRefreshedAt,
+      };
+    });
   } catch (error) {
     console.error(
       `Error reading structured files from ${directoryPath}:`,
@@ -532,7 +651,9 @@ export async function createStructuredMarkdownFile(
     }
 
     // Write the file
-    await writeMarkdownFileContent(filePath, content);
+    await writeMarkdownFileContent(filePath, content, {
+      baseFolderPath: directoryPath,
+    });
 
     // Set description if provided
     if (description) {
@@ -554,7 +675,7 @@ export async function createStructuredMarkdownFile(
 }
 
 /**
- * Sets the description for a file using extended attributes.
+ * Sets the description for a file in meta.json.
  *
  * @param filePath - The absolute path to the file
  * @param description - The description text
@@ -565,10 +686,10 @@ export async function setFileDescription(
   description: string,
 ): Promise<void> {
   try {
-    await invoke("set_file_description", {
-      filePath,
-      description,
-    });
+    const baseFolderPath = filePath.includes("/structured/")
+      ? filePath.split("/structured/")[0]
+      : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
+    await setFileDescriptionMeta(baseFolderPath, filePath, description);
   } catch (error) {
     console.error(`Error setting description for ${filePath}:`, error);
     throw new Error(`Failed to set file description: ${error}`);
@@ -576,7 +697,7 @@ export async function setFileDescription(
 }
 
 /**
- * Sets the refresh interval for a file using extended attributes.
+ * Sets the refresh interval for a file in meta.json.
  *
  * @param filePath - The absolute path to the file
  * @param interval - The refresh interval ("none", "hourly", "daily", "weekly")
@@ -587,10 +708,11 @@ export async function setFileRefreshInterval(
   interval: string,
 ): Promise<void> {
   try {
-    await invoke("set_file_refresh_interval", {
-      filePath,
-      interval,
-    });
+    const normalized = interval.toLowerCase() as RefreshInterval;
+    const baseFolderPath = filePath.includes("/structured/")
+      ? filePath.split("/structured/")[0]
+      : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
+    await setFileRefreshIntervalMeta(baseFolderPath, filePath, normalized);
   } catch (error) {
     console.error(`Error setting refresh interval for ${filePath}:`, error);
     throw new Error(`Failed to set refresh interval: ${error}`);
@@ -606,9 +728,10 @@ export async function setFileRefreshInterval(
  */
 export async function markFileAsRefreshed(filePath: string): Promise<void> {
   try {
-    await invoke("mark_file_as_refreshed", {
-      filePath,
-    });
+    const baseFolderPath = filePath.includes("/structured/")
+      ? filePath.split("/structured/")[0]
+      : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
+    await markFileRefreshedMeta(baseFolderPath, filePath);
   } catch (error) {
     console.error(`Error marking file as refreshed ${filePath}:`, error);
     throw new Error(`Failed to mark file as refreshed: ${error}`);
@@ -626,9 +749,36 @@ export async function getFilesNeedingRefresh(
   directoryPath: string,
 ): Promise<string[]> {
   try {
-    return await invoke("get_files_needing_refresh", {
-      directoryPath,
-    });
+    const meta = await readMeta(directoryPath);
+    const structuredFiles =
+      await readStructuredMarkdownFilesMetadata(directoryPath);
+    const now = Date.now();
+
+    const intervalMs: Record<RefreshInterval, number | null> = {
+      minutely: 60 * 1000,
+      hourly: 60 * 60 * 1000,
+      daily: 24 * 60 * 60 * 1000,
+      weekly: 7 * 24 * 60 * 60 * 1000,
+      none: null,
+    };
+
+    const base = directoryPath.endsWith("/")
+      ? directoryPath
+      : `${directoryPath}/`;
+
+    return structuredFiles
+      .map((f) => f.filePath)
+      .filter((filePath) => {
+        const key = filePath.startsWith(base)
+          ? filePath.slice(base.length)
+          : filePath;
+        const refresh = meta.files[key]?.refresh;
+        const interval = refresh?.interval || "none";
+        const duration = intervalMs[interval];
+        if (!duration) return false;
+        const last = refresh?.lastRefreshedAt || 0;
+        return now - last >= duration;
+      });
   } catch (error) {
     console.error(`Error getting files needing refresh:`, error);
     throw new Error(`Failed to get files needing refresh: ${error}`);

@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { load } from "@tauri-apps/plugin-store";
 import { toast } from "sonner";
+import {
+  clearSelectedFolder,
+  getSelectedFolder,
+  setSelectedFolder,
+} from "@/ipc/selected-folder";
 import {
   getApiKey as getApiKeyIPC,
   removeApiKey as removeApiKeyIPC,
   setApiKey as setApiKeyIPC,
 } from "@/ipc/settings";
-
-const FOLDER_STORAGE_KEY = "stream-last-selected-folder";
-const FOLDER_STORE_FILE = "settings.json";
 
 export const userDataKeys = {
   all: ["userData"] as const,
@@ -77,55 +78,6 @@ export function useRemoveApiKey() {
 }
 
 /**
- * Helper function to get selected folder from store
- */
-async function getSelectedFolder(): Promise<string | null> {
-  try {
-    const store = await load(FOLDER_STORE_FILE, {
-      autoSave: true,
-      defaults: {},
-    });
-    const savedFolder = await store.get<string>(FOLDER_STORAGE_KEY);
-    return savedFolder || null;
-  } catch (error) {
-    console.warn("Failed to get selected folder:", error);
-    return null;
-  }
-}
-
-/**
- * Helper function to save selected folder to store
- */
-async function saveSelectedFolder(folderPath: string): Promise<void> {
-  try {
-    const store = await load(FOLDER_STORE_FILE, {
-      autoSave: true,
-      defaults: {},
-    });
-    await store.set(FOLDER_STORAGE_KEY, folderPath);
-  } catch (error) {
-    console.error("Failed to save selected folder:", error);
-    throw error;
-  }
-}
-
-/**
- * Helper function to remove selected folder from store
- */
-async function removeSelectedFolder(): Promise<void> {
-  try {
-    const store = await load(FOLDER_STORE_FILE, {
-      autoSave: true,
-      defaults: {},
-    });
-    await store.delete(FOLDER_STORAGE_KEY);
-  } catch (error) {
-    console.error("Failed to remove selected folder:", error);
-    throw error;
-  }
-}
-
-/**
  * Hook to get the selected folder
  */
 export function useSelectedFolder() {
@@ -144,7 +96,7 @@ export function useSetSelectedFolder() {
 
   return useMutation({
     mutationFn: async (folderPath: string) => {
-      await saveSelectedFolder(folderPath);
+      await setSelectedFolder(folderPath);
       return folderPath;
     },
     onSuccess: (folderPath) => {
@@ -164,7 +116,7 @@ export function useClearSelectedFolder() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: removeSelectedFolder,
+    mutationFn: clearSelectedFolder,
     onSuccess: () => {
       queryClient.setQueryData(userDataKeys.selectedFolder(), null);
     },

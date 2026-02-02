@@ -285,7 +285,7 @@ export function useUpdateFileLocation(folderPath: string) {
       country: string;
       city: string;
     }) => {
-      await setFileLocationMetadata(filePath, country, city);
+      await setFileLocationMetadata(folderPath, filePath, country, city);
       return { filePath, country, city };
     },
     onMutate: async ({ filePath, country, city }) => {
