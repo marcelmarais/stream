@@ -11,6 +11,9 @@ const MAX_COMMITS_PER_REPO: usize = 200;
 /// Maximum number of files changed to return per commit
 const MAX_FILES_PER_COMMIT: usize = 50;
 
+/// Limit the number of branch tips used for non-tip commit matching (performance guard)
+const MAX_BRANCH_TIPS_FOR_MATCH: usize = 50;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitCommit {
     pub id: String,
@@ -143,12 +146,70 @@ fn build_branch_tip_map(
     Ok(tip_map)
 }
 
+#[derive(Clone)]
+struct BranchTip {
+    name: String,
+    oid: git2::Oid,
+    is_remote: bool,
+    time_seconds: i64,
+}
+
+/// Build a list of all branch tips (local + remote) with normalized names.
+fn build_branch_tip_list(
+    repo: &Repository,
+) -> Result<Vec<BranchTip>, Box<dyn std::error::Error>> {
+    let mut tips = Vec::new();
+
+    let local_branches = repo.branches(Some(git2::BranchType::Local))?;
+    for branch in local_branches {
+        let (branch, _) = branch?;
+        if let Some(name) = branch.name()? {
+            let reference = branch.get();
+            if let Some(target) = reference.target() {
+                let time_seconds = repo
+                    .find_commit(target)
+                    .map(|commit| commit.time().seconds())
+                    .unwrap_or(0);
+                tips.push(BranchTip {
+                    name: normalize_branch_name(name),
+                    oid: target,
+                    is_remote: false,
+                    time_seconds,
+                });
+            }
+        }
+    }
+
+    let remote_branches = repo.branches(Some(git2::BranchType::Remote))?;
+    for branch in remote_branches {
+        let (branch, _) = branch?;
+        if let Some(name) = branch.name()? {
+            let reference = branch.get();
+            if let Some(target) = reference.target() {
+                let time_seconds = repo
+                    .find_commit(target)
+                    .map(|commit| commit.time().seconds())
+                    .unwrap_or(0);
+                tips.push(BranchTip {
+                    name: normalize_branch_name(name),
+                    oid: target,
+                    is_remote: true,
+                    time_seconds,
+                });
+            }
+        }
+    }
+
+    Ok(tips)
+}
+
 /// Get the primary branch for a commit using a simplified approach
 /// Instead of walking all branch histories, we check if commit is reachable from main branches
 fn get_branch_for_commit_fast(
     repo: &Repository,
     commit_oid: git2::Oid,
     branch_tip_map: &HashMap<git2::Oid, (Vec<String>, bool)>,
+    branch_tips: &[BranchTip],
 ) -> (Vec<String>, bool) {
     // First check if this commit is a branch tip (fast path)
     if let Some((branches, is_remote)) = branch_tip_map.get(&commit_oid) {
@@ -163,26 +224,38 @@ fn get_branch_for_commit_fast(
         return (result, *is_remote);
     }
 
-    // For non-tip commits, check if reachable from main/master only (for performance)
-    // This is a simplified check - we don't try to find ALL branches
-    let main_branch_names = ["main", "master", "origin/main", "origin/master"];
-    
-    for branch_name in &main_branch_names {
-        if let Ok(reference) = repo.find_reference(&format!("refs/heads/{}", branch_name))
-            .or_else(|_| repo.find_reference(&format!("refs/remotes/{}", branch_name)))
-        {
-            if let Some(target) = reference.target() {
-                // Check if commit is an ancestor of the branch tip (limited depth)
-                if let Ok(true) = repo.graph_descendant_of(target, commit_oid) {
-                    let is_remote = branch_name.starts_with("origin/");
-                    return (vec![normalize_branch_name(branch_name)], is_remote);
-                }
+    // For non-tip commits, find all branches whose tip contains this commit.
+    let mut branches = Vec::new();
+    let mut is_on_remote = false;
+
+    for tip in branch_tips {
+        let is_ancestor = tip.oid == commit_oid
+            || repo
+                .graph_descendant_of(tip.oid, commit_oid)
+                .unwrap_or(false);
+
+        if is_ancestor {
+            if !branches.contains(&tip.name) {
+                branches.push(tip.name.clone());
+            }
+            if tip.is_remote {
+                is_on_remote = true;
             }
         }
     }
 
-    // Default: assume it's on some branch and likely pushed
-    (vec!["main".to_string()], true)
+    if branches.is_empty() {
+        return (vec!["unknown".to_string()], false);
+    }
+
+    branches.sort_by(|a, b| {
+        let a_main = is_main_branch(a);
+        let b_main = is_main_branch(b);
+        b_main.cmp(&a_main).then_with(|| a.cmp(b))
+    });
+    branches.truncate(3);
+
+    (branches, is_on_remote)
 }
 
 fn normalize_branch_name(branch_name: &str) -> String {
@@ -363,6 +436,45 @@ fn get_repo_commits(
     
     // Build branch tip map once upfront (much faster than per-commit checks)
     let branch_tip_map = build_branch_tip_map(&repo).unwrap_or_default();
+    let branch_tips_raw = build_branch_tip_list(&repo).unwrap_or_default();
+
+    // Consolidate by branch name and keep the newest tip per branch
+    let mut tips_by_name: HashMap<String, BranchTip> = HashMap::new();
+    for tip in branch_tips_raw {
+        tips_by_name
+            .entry(tip.name.clone())
+            .and_modify(|existing| {
+                if tip.time_seconds > existing.time_seconds {
+                    existing.oid = tip.oid;
+                    existing.time_seconds = tip.time_seconds;
+                }
+                if tip.is_remote {
+                    existing.is_remote = true;
+                }
+            })
+            .or_insert(tip);
+    }
+
+    let mut branch_tips: Vec<BranchTip> = tips_by_name.into_values().collect();
+    branch_tips.sort_by(|a, b| b.time_seconds.cmp(&a.time_seconds));
+
+    // Always include main-like branches even if they are old
+    let mut main_like: Vec<BranchTip> = branch_tips
+        .iter()
+        .filter(|tip| is_main_branch(&tip.name))
+        .cloned()
+        .collect();
+
+    let mut limited: Vec<BranchTip> = branch_tips
+        .into_iter()
+        .take(MAX_BRANCH_TIPS_FOR_MATCH)
+        .collect();
+
+    for tip in main_like.drain(..) {
+        if !limited.iter().any(|existing| existing.name == tip.name) {
+            limited.push(tip);
+        }
+    }
 
     let mut commits = Vec::new();
     let mut seen_commits = HashSet::new();
@@ -407,7 +519,8 @@ fn get_repo_commits(
         let files_changed = get_files_changed_fast(&repo, &commit);
 
         // Use the fast branch detection
-        let (branches, is_on_remote) = get_branch_for_commit_fast(&repo, oid, &branch_tip_map);
+        let (branches, is_on_remote) =
+            get_branch_for_commit_fast(&repo, oid, &branch_tip_map, &limited);
 
         let commit_id = format!("{}", oid);
         let url = if is_on_remote {
