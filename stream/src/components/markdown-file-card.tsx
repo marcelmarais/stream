@@ -261,16 +261,33 @@ export function FileCard({
   );
 }
 
-export function Header({
-  onScrollToDate,
-  folderPath,
+export function SearchButton({
   showSearch,
   setShowSearch,
 }: {
-  onScrollToDate: (date: Date) => void;
-  folderPath: string;
   showSearch: boolean;
   setShowSearch: (show: boolean) => void;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="no-drag h-8 w-[280px] justify-start gap-2 rounded-md border-border/30 bg-muted/30 px-3 font-normal text-xs backdrop-blur-sm"
+      onClick={() => setShowSearch(!showSearch)}
+      title="Search markdown files (Cmd/Ctrl+F)"
+    >
+      <MagnifyingGlassIcon className="size-4" weight="bold" />
+      <span className="text-muted-foreground">Search…</span>
+    </Button>
+  );
+}
+
+export function HeaderActions({
+  onScrollToDate,
+  folderPath,
+}: {
+  onScrollToDate: (date: Date) => void;
+  folderPath: string;
 }) {
   const { data: allFilesMetadata = [], isLoading: isLoadingMetadata } =
     useMarkdownMetadata(folderPath);
@@ -283,32 +300,47 @@ export function Header({
   );
 
   return (
-    <div className="!bg-transparent flex w-full items-center justify-end">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="text-xs"
-        onClick={() => setShowSearch(!showSearch)}
-        title="Search markdown files (Cmd+F)"
-      >
-        <MagnifyingGlassIcon className="h-4 w-4" weight="bold" />
-      </Button>
-      <CommitFilter />
+    <ButtonGroup className="no-drag [&_button]:no-drag rounded-md border-border/30 bg-muted/30 backdrop-blur-sm">
+      {!todayFileExists && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          onClick={async () => await createToday(folderPath)}
+          disabled={isLoadingMetadata || Boolean(creatingToday)}
+          title="Create today's file"
+        >
+          <CalendarPlusIcon className="size-4" />
+        </Button>
+      )}
+      <CommitFilter showBadges={false} />
+      <FileCalendar folderPath={folderPath} onScrollToDate={onScrollToDate} />
+    </ButtonGroup>
+  );
+}
 
-      <ButtonGroup>
-        {!todayFileExists && (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={async () => await createToday(folderPath)}
-            disabled={isLoadingMetadata || Boolean(creatingToday)}
-          >
-            <CalendarPlusIcon className="size-4" />
-          </Button>
-        )}
-        <FileCalendar folderPath={folderPath} onScrollToDate={onScrollToDate} />
-      </ButtonGroup>
+// Legacy Header component for backwards compatibility
+export function Header({
+  onScrollToDate,
+  folderPath,
+  showSearch,
+  setShowSearch,
+}: {
+  onScrollToDate?: (date: Date) => void;
+  folderPath: string;
+  showSearch: boolean;
+  setShowSearch: (show: boolean) => void;
+}) {
+  return (
+    <div className="!bg-transparent flex w-full items-center justify-end gap-2">
+      <SearchButton showSearch={showSearch} setShowSearch={setShowSearch} />
+      {onScrollToDate && (
+        <HeaderActions
+          onScrollToDate={onScrollToDate}
+          folderPath={folderPath}
+        />
+      )}
     </div>
   );
 }

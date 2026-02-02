@@ -144,6 +144,7 @@ export function FileCalendar({
             variant="ghost"
             disabled={isLoadingMetadata}
             title="Open calendar"
+            className="no-drag h-8 w-8 p-0"
           >
             <CalendarDotsIcon className="size-4" />
           </Button>

@@ -4,11 +4,12 @@ import { ArrowLeft } from "@phosphor-icons/react";
 import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Header } from "@/components/markdown-file-card";
+import { HeaderActions, SearchButton } from "@/components/markdown-file-card";
 import { Button } from "@/components/ui/button";
 
 interface TitlebarProps {
   actions?: ReactNode;
+  centerContent?: ReactNode;
   isLoading: boolean;
   onBack?: () => void;
   backLabel?: string;
@@ -18,7 +19,7 @@ interface TitlebarHeaderProps {
   isLoading: boolean;
   showSearch: boolean;
   setShowSearch: (show: boolean) => void;
-  handleScrollToDate: (date: Date) => void;
+  handleScrollToDate?: (date: Date) => void;
   folderPath: string;
   onBack?: () => void;
   backLabel?: string;
@@ -26,6 +27,7 @@ interface TitlebarHeaderProps {
 
 export function Titlebar({
   actions,
+  centerContent,
   isLoading,
   onBack,
   backLabel,
@@ -42,11 +44,9 @@ export function Titlebar({
   const titlebarClasses = [
     "backdrop-blur",
     "bg-background/60",
-    actions && "border-b",
-    "border-border/50",
     "drag",
     "fixed",
-    "h-10",
+    "h-14",
     "inset-x-0",
     "supports-[backdrop-filter]:bg-background/40",
     "top-0",
@@ -59,8 +59,9 @@ export function Titlebar({
 
   return (
     <div data-tauri-drag-region className={titlebarClasses}>
-      <div className="flex h-full w-full items-center justify-between px-4">
-        <div className="flex flex-shrink-0 items-center gap-2">
+      <div className="flex h-full w-full items-center px-4 pt-1">
+        {/* Left section - traffic lights and back button */}
+        <div className="flex w-[200px] flex-shrink-0 items-center gap-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -94,12 +95,15 @@ export function Titlebar({
           )}
         </div>
 
-        {/* Center drag region */}
-        <div data-tauri-drag-region className="drag h-full flex-1" />
+        {/* Center section - search bar */}
+        <div className="flex flex-1 items-center justify-center">
+          {centerContent && !isLoading && centerContent}
+        </div>
 
-        {actions && !isLoading && (
-          <div className="flex items-center justify-end">{actions}</div>
-        )}
+        {/* Right section - action buttons */}
+        <div className="flex w-[200px] flex-shrink-0 items-center justify-end">
+          {actions && !isLoading && actions}
+        </div>
       </div>
     </div>
   );
@@ -114,18 +118,21 @@ export function TitlebarHeader({
   onBack,
   backLabel,
 }: TitlebarHeaderProps) {
-  const actions = (
-    <Header
+  const centerContent = (
+    <SearchButton showSearch={showSearch} setShowSearch={setShowSearch} />
+  );
+
+  const actions = handleScrollToDate ? (
+    <HeaderActions
       onScrollToDate={handleScrollToDate}
       folderPath={folderPath}
-      showSearch={showSearch}
-      setShowSearch={setShowSearch}
     />
-  );
+  ) : null;
 
   return (
     <Titlebar
       actions={actions}
+      centerContent={centerContent}
       isLoading={isLoading}
       onBack={onBack}
       backLabel={backLabel}

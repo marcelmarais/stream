@@ -82,10 +82,6 @@ function StructuredPageView({ folderPath }: StructuredPageViewProps) {
     useCreateStructuredFile();
   const { mutate: deleteFile } = useDeleteStructuredFile(folderPath);
 
-  const handleScrollToDate = () => {
-    // Not applicable for structured view
-  };
-
   const handleFileSelectFromSearch = () => {
     setShowSearch(false);
   };
@@ -137,7 +133,6 @@ function StructuredPageView({ folderPath }: StructuredPageViewProps) {
           isLoading={false}
           showSearch={showSearch}
           setShowSearch={setShowSearch}
-          handleScrollToDate={handleScrollToDate}
           folderPath={folderPath}
         />
         <div className="flex h-full flex-col items-center justify-center p-6">
@@ -163,7 +158,6 @@ function StructuredPageView({ folderPath }: StructuredPageViewProps) {
         isLoading={isLoading}
         showSearch={showSearch}
         setShowSearch={setShowSearch}
-        handleScrollToDate={handleScrollToDate}
         folderPath={folderPath}
       />
 

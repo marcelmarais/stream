@@ -21,7 +21,7 @@ import { useAllLoadedCommits } from "@/hooks/use-git-queries";
 import { formatCommitAuthor } from "@/ipc/git-reader";
 import { useUserStore } from "@/stores/user-store";
 
-export function CommitFilter() {
+export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
   const folderPath = useUserStore((state) => state.folderPath);
   const filters = useUserStore((state) => state.commitFilters);
   const setFilters = useUserStore((state) => state.setCommitFilters);
@@ -112,7 +112,7 @@ export function CommitFilter() {
   if (commits.length === 0) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
-        <Button variant="ghost" size="sm" className="p-1 text-xs" disabled>
+        <Button variant="ghost" size="sm" className="no-drag h-8 w-8 p-0" disabled>
           <SlidersHorizontalIcon className="h-4 w-4" />
         </Button>
       </div>
@@ -123,10 +123,11 @@ export function CommitFilter() {
     <div className="flex items-center gap-2">
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm" className="p-1 text-xs">
-            <SlidersHorizontalIcon
-              className={`h-4 w-4 ${hasActiveFilters ? "fill-white" : ""}`}
-            />
+          <Button variant="ghost" size="sm" className="no-drag relative h-8 w-8 p-0" title="Filter commits">
+            <SlidersHorizontalIcon className="h-4 w-4" />
+            {hasActiveFilters && (
+              <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="mt-2 w-96 space-y-4" align="end">
@@ -272,7 +273,7 @@ export function CommitFilter() {
       </Popover>
 
       {/* Active Filter Badges */}
-      {hasActiveFilters && (
+      {showBadges && hasActiveFilters && (
         <div className="flex flex-wrap gap-2">
           {filters.authors.map((author) => (
             <Badge

@@ -112,10 +112,6 @@ function EditPageView({ folderPath, fileName }: EditPageViewProps) {
     router.push(`/browse/structured?path=${encodedPath}`);
   };
 
-  const handleScrollToDate = () => {
-    // Not applicable for edit view
-  };
-
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -133,7 +129,6 @@ function EditPageView({ folderPath, fileName }: EditPageViewProps) {
         isLoading={isLoading}
         showSearch={showSearch}
         setShowSearch={setShowSearch}
-        handleScrollToDate={handleScrollToDate}
         folderPath={folderPath}
         onBack={handleBack}
         backLabel="Back to files"
