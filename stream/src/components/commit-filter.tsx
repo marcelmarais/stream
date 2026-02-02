@@ -112,7 +112,12 @@ export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
   if (commits.length === 0) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
-        <Button variant="ghost" size="sm" className="no-drag h-8 w-8 p-0" disabled>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="no-drag h-8 w-8 p-0"
+          disabled
+        >
           <SlidersHorizontalIcon className="h-4 w-4" />
         </Button>
       </div>
@@ -123,7 +128,12 @@ export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
     <div className="flex items-center gap-2">
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm" className="no-drag relative h-8 w-8 p-0" title="Filter commits">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="no-drag relative h-8 w-8 p-0"
+            title="Filter commits"
+          >
             <SlidersHorizontalIcon className="h-4 w-4" />
             {hasActiveFilters && (
               <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
