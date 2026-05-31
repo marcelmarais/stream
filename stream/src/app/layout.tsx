@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Fira_Code, Inter } from "next/font/google";
-import { AutoRefreshProvider } from "@/components/auto-refresh-provider";
 import { AutoUpdater } from "@/components/auto-updater";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -42,7 +41,6 @@ export default function RootLayout({
             {children}
             <Toaster />
             <AutoUpdater />
-            <AutoRefreshProvider />
           </ThemeProvider>
         </QueryProvider>
       </body>

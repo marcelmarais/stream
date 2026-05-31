@@ -42,13 +42,11 @@ export function Titlebar({
   }, []);
 
   const titlebarClasses = [
-    "backdrop-blur",
-    "bg-background/60",
     "drag",
     "fixed",
     "h-14",
     "inset-x-0",
-    "supports-[backdrop-filter]:bg-background/40",
+    "overflow-visible",
     "top-0",
     "z-60",
   ].join(" ");
@@ -59,9 +57,13 @@ export function Titlebar({
 
   return (
     <div data-tauri-drag-region className={titlebarClasses}>
-      <div className="flex h-full w-full items-center px-4 pt-1">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-background/55 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)] supports-[backdrop-filter]:bg-background/35"
+      />
+      <div className="relative z-10 flex h-full w-full items-center gap-2 px-4 pt-1">
         {/* Left section - traffic lights and back button */}
-        <div className="flex w-[200px] flex-shrink-0 items-center gap-2">
+        <div className="flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center gap-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -96,12 +98,12 @@ export function Titlebar({
         </div>
 
         {/* Center section - search bar */}
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex min-w-0 flex-1 items-center justify-center">
           {centerContent && !isLoading && centerContent}
         </div>
 
         {/* Right section - action buttons */}
-        <div className="flex w-[200px] flex-shrink-0 items-center justify-end">
+        <div className="flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center justify-end">
           {actions && !isLoading && actions}
         </div>
       </div>

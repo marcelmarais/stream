@@ -272,12 +272,14 @@ export function SearchButton({
     <Button
       variant="ghost"
       size="sm"
-      className="no-drag h-8 w-[280px] justify-start gap-2 rounded-md border-border/30 bg-muted/30 px-3 font-normal text-xs backdrop-blur-sm"
+      className="no-drag h-8 min-w-8 max-w-[280px] flex-1 shrink justify-start gap-2 overflow-hidden rounded-full border-border/30 bg-muted/30 px-3 font-normal text-xs backdrop-blur-sm max-[520px]:max-w-8 max-[520px]:justify-center max-[520px]:px-0"
       onClick={() => setShowSearch(!showSearch)}
       title="Search markdown files (Cmd/Ctrl+F)"
     >
-      <MagnifyingGlassIcon className="size-4" weight="bold" />
-      <span className="text-muted-foreground">Search…</span>
+      <MagnifyingGlassIcon className="size-4 flex-shrink-0" weight="bold" />
+      <span className="truncate text-muted-foreground max-[520px]:hidden">
+        Search…
+      </span>
     </Button>
   );
 }
@@ -300,7 +302,7 @@ export function HeaderActions({
   );
 
   return (
-    <ButtonGroup className="no-drag [&_button]:no-drag rounded-md border-border/30 bg-muted/30 backdrop-blur-sm">
+    <ButtonGroup className="no-drag [&_button]:no-drag flex-shrink-0 rounded-md border-border/30 bg-muted/30 backdrop-blur-sm">
       {!todayFileExists && (
         <Button
           type="button"

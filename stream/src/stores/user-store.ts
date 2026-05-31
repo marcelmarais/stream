@@ -14,7 +14,6 @@ interface UserState {
 
   // UI state
   settingsOpen: boolean;
-  viewMode: "timeline" | "structured";
 
   // Filters
   commitFilters: CommitFilters;
@@ -23,7 +22,6 @@ interface UserState {
   setFolderPath: (path: string | null) => void;
   setActiveEditingFile: (file: MarkdownFileMetadata | null) => void;
   setSettingsOpen: (open: boolean) => void;
-  setViewMode: (mode: "timeline" | "structured") => void;
   setCommitFilters: (filters: CommitFilters) => void;
   reset: () => void;
 }
@@ -32,7 +30,6 @@ const initialState = {
   folderPath: null,
   activeEditingFile: null,
   settingsOpen: false,
-  viewMode: "timeline" as const,
   commitFilters: {
     authors: [],
     repos: [],
@@ -51,8 +48,6 @@ export const useUserStore = create<UserState>()(
 
       setSettingsOpen: (open) => set({ settingsOpen: open }),
 
-      setViewMode: (mode) => set({ viewMode: mode }),
-
       setCommitFilters: (filters) => set({ commitFilters: filters }),
 
       reset: () => set(initialState),
@@ -61,7 +56,6 @@ export const useUserStore = create<UserState>()(
       name: "user-state",
       partialize: (state) => ({
         folderPath: state.folderPath,
-        viewMode: state.viewMode,
       }),
     },
   ),
