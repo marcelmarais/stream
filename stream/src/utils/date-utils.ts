@@ -38,13 +38,13 @@ export function getDateFromFilename(fileName: string): string | null {
 
 /**
  * Formats a date key string (YYYY-MM-DD) into a human-readable display format
- * Output format: "weekday — month day, year" (all lowercase)
+ * Output format: "Weekday — Month day, year"
  *
  * @param dateStr - Date string in YYYY-MM-DD format
  * @returns Formatted date string
  *
  * @example
- * formatDisplayDate("2023-08-13") // returns "sunday — august 13, 2023"
+ * formatDisplayDate("2023-08-13") // returns "Sunday — August 13, 2023"
  */
 export function formatDisplayDate(dateStr: string | Date): string {
   const date = dateStr instanceof Date ? dateStr : new Date(dateStr);
@@ -55,6 +55,5 @@ export function formatDisplayDate(dateStr: string | Date): string {
       day: "numeric",
       year: "numeric",
     })
-    .replace(", ", " — ")
-    .toLowerCase();
+    .replace(", ", " — ");
 }

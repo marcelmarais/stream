@@ -4,7 +4,9 @@ import {
   MagnifyingGlassIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { AnimatePresence, motion } from "framer-motion";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import CommitFilter from "@/components/commit-filter";
 import CommitOverlay from "@/components/commit-overlay";
@@ -43,6 +45,8 @@ import { filterCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { useUserStore } from "@/stores/user-store";
+
+const commitMountTransition = { duration: 0.18, ease: "easeOut" } as const;
 
 export function FileName({
   content,
@@ -225,7 +229,7 @@ export function FileCard({
       <MarkdownEditor
         value={content}
         onChange={handleContentChange}
-        onSave={async () => await saveContentImmediate(content)}
+        onSave={saveContentImmediate}
         onFocus={onEditorFocus}
         isEditable={!isFocused}
       />
@@ -240,15 +244,25 @@ export function FileCard({
         />
       </div>
 
-      {hasCommits && (
-        <div className="mb-6">
-          <CommitOverlay
-            commits={commits}
-            date={file.createdAt}
-            className="w-full"
-          />
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {hasCommits && (
+          <motion.div
+            key="commit-overlay"
+            layout
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={commitMountTransition}
+            className="mb-6"
+          >
+            <CommitOverlay
+              commits={commits}
+              date={file.createdAt}
+              className="w-full"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {showSeparator && <Separator className="mt-2" />}
       {/* makes the last file look less awkward / squished */}
       {!showSeparator && <div className="pb-10" />}
@@ -268,12 +282,66 @@ export function SearchButton({
   showSearch: boolean;
   setShowSearch: (show: boolean) => void;
 }) {
+  const dragIntentRef = useRef<{
+    dragging: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    dragIntentRef.current = {
+      dragging: false,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const dragIntent = dragIntentRef.current;
+    if (!dragIntent || dragIntent.dragging) return;
+
+    const deltaX = event.clientX - dragIntent.x;
+    const deltaY = event.clientY - dragIntent.y;
+    if (Math.hypot(deltaX, deltaY) < 4) return;
+
+    dragIntent.dragging = true;
+    event.preventDefault();
+
+    try {
+      void getCurrentWindow()
+        .startDragging()
+        .catch(() => {});
+    } catch {
+      // Browser previews do not expose the Tauri window API.
+    }
+  };
+
+  const handlePointerUp = () => {
+    window.setTimeout(() => {
+      dragIntentRef.current = null;
+    }, 0);
+  };
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (dragIntentRef.current?.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    setShowSearch(!showSearch);
+  };
+
   return (
     <Button
       variant="ghost"
       size="sm"
       className="no-drag h-8 min-w-8 max-w-[280px] flex-1 shrink justify-start gap-2 overflow-hidden rounded-full border-border/30 bg-muted/30 px-3 font-normal text-xs backdrop-blur-sm max-[520px]:max-w-8 max-[520px]:justify-center max-[520px]:px-0"
-      onClick={() => setShowSearch(!showSearch)}
+      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
       title="Search markdown files (Cmd/Ctrl+F)"
     >
       <MagnifyingGlassIcon className="size-4 flex-shrink-0" weight="bold" />
@@ -383,12 +451,13 @@ export function FocusedFileOverlay({
     saveContentDebounced(newContent);
   };
 
-  const handleSave = async () => {
-    await saveContentImmediate(content);
-  };
-
   return (
-    <div className="fade-in fixed inset-0 z-50 flex animate-in flex-col bg-background duration-200">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={commitMountTransition}
+      className="fixed inset-0 z-50 flex flex-col bg-background"
+    >
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-10 pt-16">
         <DateHeader
           fileMetadata={file}
@@ -400,14 +469,17 @@ export function FocusedFileOverlay({
         <MarkdownEditor
           value={content}
           onChange={handleContentChange}
-          onSave={handleSave}
+          onSave={saveContentImmediate}
           onFocus={onEditorFocus || (() => {})}
           autoFocus={true}
           isEditable={true}
         />
       </div>
-      <div className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto w-full max-w-4xl px-6 py-6">
+      <motion.div
+        layout
+        className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      >
+        <motion.div layout className="mx-auto w-full max-w-4xl px-6 py-6">
           <FileName
             content={content}
             metadata={file}
@@ -423,23 +495,33 @@ export function FocusedFileOverlay({
             />
           </div>
 
-          {commits.length > 0 && (
-            <div className="mt-4">
-              <CommitOverlay
-                commits={commits}
-                date={file.createdAt}
-                className="overflow-y-scroll"
-              />
-            </div>
-          )}
-        </div>
-      </div>
+          <AnimatePresence>
+            {commits.length > 0 && (
+              <motion.div
+                key="focused-commit-overlay"
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={commitMountTransition}
+                className="mt-4"
+              >
+                <CommitOverlay
+                  commits={commits}
+                  date={file.createdAt}
+                  className="overflow-y-scroll"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </motion.div>
       {footerComponent}
 
       <CreateHabitDialog
         open={createHabitOpen}
         onOpenChange={setCreateHabitOpen}
       />
-    </div>
+    </motion.div>
   );
 }

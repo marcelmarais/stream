@@ -140,7 +140,7 @@ export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="mt-2 w-96 space-y-4" align="end">
+        <PopoverContent className="z-[70] mt-2 w-96 space-y-4" align="end">
           {/* Header */}
           <div>
             <h3 className="font-medium text-sm">Filter Commits</h3>

@@ -151,7 +151,7 @@ export function HabitOverlay({
                 </span>
               </div>
             </AccordionTrigger>
-            <AccordionContent>
+            <AccordionContent motionOpen={expanded === "habits"}>
               <CardContent className="pt-2">
                 <div className="max-h-[300px] space-y-2 overflow-y-auto">
                   {habits.map((habit) => (
