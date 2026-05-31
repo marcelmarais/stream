@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -8,6 +9,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "tiptap-markdown";
 import { SlashCommand } from "@/components/slash-command";
+import { TypingPolish } from "@/components/typing-polish";
 import { gitKeys } from "@/hooks/use-git-queries";
 import { useSaveShortcut } from "@/hooks/use-keyboard-shortcut";
 import { markdownKeys } from "@/hooks/use-markdown-queries";
@@ -17,9 +19,10 @@ import { useUserStore } from "@/stores/user-store";
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
-  onSave: () => void | Promise<void>;
+  onSave: (value: string) => void | Promise<void>;
   onFocus?: () => void;
   autoFocus?: boolean;
+  isActiveEditing?: boolean;
   isEditable: boolean;
 }
 
@@ -29,6 +32,7 @@ export function MarkdownEditor({
   onSave,
   onFocus,
   autoFocus = false,
+  isActiveEditing = false,
   isEditable = true,
 }: MarkdownEditorProps) {
   const isUpdatingFromProp = useRef(false);
@@ -44,6 +48,11 @@ export function MarkdownEditor({
           levels: [1, 2, 3, 4, 5, 6],
         },
       }),
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
+      TypingPolish,
       Typography,
       Markdown.configure({
         html: true,
@@ -116,7 +125,7 @@ export function MarkdownEditor({
         // If editor is focused, we need to preserve cursor position
         const { from, to } = editor.state.selection;
         isUpdatingFromProp.current = true;
-        editor.commands.setContent(value);
+        editor.commands.setContent(value, { emitUpdate: false });
         // Try to restore cursor position if editor was focused
         if (editor.isFocused) {
           const newDocSize = editor.state.doc.content.size;
@@ -148,10 +157,17 @@ export function MarkdownEditor({
     <div
       className={cn(
         "relative h-full w-full pb-4",
+        isActiveEditing && "min-h-[38vh]",
         isAIGenerating && "animate-pulse",
       )}
     >
-      <EditorContent editor={editor} />
+      <EditorContent
+        editor={editor}
+        className={cn(
+          "min-h-[inherit]",
+          isActiveEditing && "[&_.ProseMirror]:min-h-[inherit]",
+        )}
+      />
     </div>
   );
 }

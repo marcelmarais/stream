@@ -48,7 +48,7 @@ export function Titlebar({
     "inset-x-0",
     "overflow-visible",
     "top-0",
-    "z-60",
+    "z-40",
   ].join(" ");
 
   const handleClose = () => appWindow?.close();
@@ -59,28 +59,35 @@ export function Titlebar({
     <div data-tauri-drag-region className={titlebarClasses}>
       <div
         aria-hidden="true"
+        data-tauri-drag-region
         className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-background/55 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)] supports-[backdrop-filter]:bg-background/35"
       />
-      <div className="relative z-10 flex h-full w-full items-center gap-2 px-4 pt-1">
+      <div
+        data-tauri-drag-region
+        className="drag relative z-10 flex h-full w-full items-center gap-2 px-4 pt-1"
+      >
         {/* Left section - traffic lights and back button */}
-        <div className="flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center gap-2">
+        <div
+          data-tauri-drag-region
+          className="drag flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center gap-2"
+        >
           <div className="flex items-center gap-2">
             <button
               type="button"
               aria-label="Close window"
-              className="h-2.5 w-2.5 rounded-full bg-red-500"
+              className="no-drag h-2.5 w-2.5 rounded-full bg-red-500"
               onClick={handleClose}
             />
             <button
               type="button"
               aria-label="Minimize window"
-              className="h-2.5 w-2.5 rounded-full bg-yellow-500"
+              className="no-drag h-2.5 w-2.5 rounded-full bg-yellow-500"
               onClick={handleMinimize}
             />
             <button
               type="button"
               aria-label="Maximize window"
-              className="h-2.5 w-2.5 rounded-full bg-green-500"
+              className="no-drag h-2.5 w-2.5 rounded-full bg-green-500"
               onClick={handleMaximize}
             />
           </div>
@@ -98,12 +105,18 @@ export function Titlebar({
         </div>
 
         {/* Center section - search bar */}
-        <div className="flex min-w-0 flex-1 items-center justify-center">
+        <div
+          data-tauri-drag-region
+          className="drag flex min-w-0 flex-1 items-center justify-center"
+        >
           {centerContent && !isLoading && centerContent}
         </div>
 
         {/* Right section - action buttons */}
-        <div className="flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center justify-end">
+        <div
+          data-tauri-drag-region
+          className="drag flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center justify-end"
+        >
           {actions && !isLoading && actions}
         </div>
       </div>

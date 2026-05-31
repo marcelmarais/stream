@@ -7,6 +7,7 @@ import {
   GitBranchIcon,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 import {
   Accordion,
@@ -76,6 +77,9 @@ function truncateFilePath(filePath: string): string {
   return `.../${parts.slice(-2).join("/")}`;
 }
 
+const panelTransition = { duration: 0.18, ease: "easeOut" } as const;
+const smallTransition = { duration: 0.14, ease: "easeOut" } as const;
+
 function BranchGroup({ branchName, commits }: BranchGroupProps) {
   const [expanded, setExpanded] = useState<string | undefined>(undefined);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
@@ -96,8 +100,7 @@ function BranchGroup({ branchName, commits }: BranchGroupProps) {
   const firstCommit = sortedCommits[0];
   const remainingCommits = sortedCommits.slice(1);
   const isExpanded = expanded === "branch";
-
-  const allCommitsForTimeline = isExpanded ? sortedCommits : [firstCommit];
+  const hasRemainingCommits = remainingCommits.length > 0;
 
   return (
     <Accordion
@@ -126,19 +129,29 @@ function BranchGroup({ branchName, commits }: BranchGroupProps) {
         </AccordionTrigger>
 
         <div className="px-3 pt-1 pb-2">
-          {allCommitsForTimeline.map((commit, index) => (
-            <CommitItem
-              key={commit.id}
-              commit={commit}
-              expandedFiles={expandedFiles}
-              toggleFileExpansion={toggleFileExpansion}
-              compact={!isExpanded}
-              isLast={index === allCommitsForTimeline.length - 1}
-            />
-          ))}
-        </div>
+          <CommitItem
+            commit={firstCommit}
+            expandedFiles={expandedFiles}
+            toggleFileExpansion={toggleFileExpansion}
+            compact={!isExpanded}
+            isLast={!isExpanded || !hasRemainingCommits}
+          />
 
-        {remainingCommits.length > 0 && <AccordionContent className="hidden" />}
+          {hasRemainingCommits && (
+            <AccordionContent motionOpen={isExpanded} className="pb-0">
+              {remainingCommits.map((commit, index) => (
+                <CommitItem
+                  key={commit.id}
+                  commit={commit}
+                  expandedFiles={expandedFiles}
+                  toggleFileExpansion={toggleFileExpansion}
+                  compact={false}
+                  isLast={index === remainingCommits.length - 1}
+                />
+              ))}
+            </AccordionContent>
+          )}
+        </div>
       </AccordionItem>
     </Accordion>
   );
@@ -164,9 +177,22 @@ function CommitItem({
     minute: "2-digit",
   });
   const url = commit.url;
+  const filesExpanded = expandedFiles.has(commit.id);
+  const hasFileBadges = !compact && commit.files_changed.length > 0;
+  const filesToShow = filesExpanded
+    ? commit.files_changed
+    : commit.files_changed.slice(0, 3);
+  const remainingCount = commit.files_changed.length - 3;
 
   return (
-    <div className="group relative flex gap-3 pl-5">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={panelTransition}
+      className="group relative flex gap-3 pl-5"
+    >
       {/* Timeline dot */}
       <div className="absolute top-1 left-0 h-2.5 w-2.5 rounded-full border-2 border-muted-foreground/40 bg-background" />
       {/* Timeline line */}
@@ -211,57 +237,85 @@ function CommitItem({
         </div>
 
         {/* Row 3: File badges */}
-        {!compact && commit.files_changed.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {(() => {
-              const isExpanded = expandedFiles.has(commit.id);
-              const filesToShow = isExpanded
-                ? commit.files_changed
-                : commit.files_changed.slice(0, 3);
-              const remainingCount = commit.files_changed.length - 3;
-
-              return (
-                <>
+        <AnimatePresence initial={false}>
+          {hasFileBadges && (
+            <motion.div
+              key="file-badges"
+              layout
+              initial={{ height: 0, opacity: 0, y: -3 }}
+              animate={{ height: "auto", opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -3 }}
+              transition={smallTransition}
+              className="overflow-hidden"
+            >
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <AnimatePresence initial={false}>
                   {filesToShow.map((file) => (
-                    <Badge
+                    <motion.span
                       key={file}
-                      variant="outline"
-                      className="px-1.5 py-0.5 font-normal text-[10px] text-muted-foreground"
+                      layout
+                      initial={{ opacity: 0, scale: 0.96, y: -2 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -2 }}
+                      transition={smallTransition}
                     >
-                      {truncateFilePath(file)}
-                    </Badge>
+                      <Badge
+                        variant="outline"
+                        className="px-1.5 py-0.5 font-normal text-[10px] text-muted-foreground"
+                      >
+                        {truncateFilePath(file)}
+                      </Badge>
+                    </motion.span>
                   ))}
-                  {!isExpanded && remainingCount > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="cursor-pointer px-1.5 py-0.5 text-[10px] hover:bg-secondary/80"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFileExpansion(commit.id);
-                      }}
+                  {!filesExpanded && remainingCount > 0 && (
+                    <motion.span
+                      key="more-files"
+                      layout
+                      initial={{ opacity: 0, scale: 0.96, y: -2 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -2 }}
+                      transition={smallTransition}
                     >
-                      +{remainingCount} more
-                    </Badge>
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer px-1.5 py-0.5 text-[10px] hover:bg-secondary/80"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFileExpansion(commit.id);
+                        }}
+                      >
+                        +{remainingCount} more
+                      </Badge>
+                    </motion.span>
                   )}
-                  {isExpanded && commit.files_changed.length > 3 && (
-                    <Badge
-                      variant="secondary"
-                      className="cursor-pointer px-1.5 py-0.5 text-[10px] hover:bg-secondary/80"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFileExpansion(commit.id);
-                      }}
+                  {filesExpanded && commit.files_changed.length > 3 && (
+                    <motion.span
+                      key="less-files"
+                      layout
+                      initial={{ opacity: 0, scale: 0.96, y: -2 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -2 }}
+                      transition={smallTransition}
                     >
-                      less
-                    </Badge>
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer px-1.5 py-0.5 text-[10px] hover:bg-secondary/80"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFileExpansion(commit.id);
+                        }}
+                      >
+                        less
+                      </Badge>
+                    </motion.span>
                   )}
-                </>
-              );
-            })()}
-          </div>
-        )}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -294,7 +348,7 @@ function RepoCard({ repoName, commits }: RepoCardProps) {
               </span>
             </div>
           </AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent motionOpen={expanded === "repo"}>
             <CardContent className="p-2 pt-0">
               <ScrollArea className="h-[250px]">
                 <div className="space-y-2 pr-3">
@@ -333,11 +387,28 @@ export function CommitOverlay({ commits, className = "" }: CommitOverlayProps) {
   );
 
   return (
-    <div className={`space-y-3 ${className}`}>
-      {Object.entries(commitsByRepo).map(([repoName, repoCommits]) => (
-        <RepoCard key={repoName} repoName={repoName} commits={repoCommits} />
-      ))}
-    </div>
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={panelTransition}
+      className={`space-y-3 ${className}`}
+    >
+      <AnimatePresence initial={false}>
+        {Object.entries(commitsByRepo).map(([repoName, repoCommits]) => (
+          <motion.div
+            key={repoName}
+            layout
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={panelTransition}
+          >
+            <RepoCard repoName={repoName} commits={repoCommits} />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 

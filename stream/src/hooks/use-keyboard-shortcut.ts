@@ -11,7 +11,7 @@ export function useSaveShortcut(
   editor: Editor | null,
   value: string,
   onChange: (value: string) => void,
-  onSave: () => void | Promise<void>,
+  onSave: (value: string) => void | Promise<void>,
   isUpdatingFromProp: React.MutableRefObject<boolean>,
 ) {
   const isSavingRef = useRef(false);
@@ -31,37 +31,44 @@ export function useSaveShortcut(
 
       isSavingRef.current = true;
 
-      const result = await formatMarkdown(valueRef.current);
-      const formatted = result.formatted;
+      try {
+        // biome-ignore lint/suspicious/noExplicitAny: TipTap markdown storage type not exported
+        const storage = editor.storage as any;
+        const currentMarkdown = storage.markdown.getMarkdown();
+        const result = await formatMarkdown(
+          typeof currentMarkdown === "string" ? currentMarkdown : valueRef.current,
+        );
+        const formatted = result.formatted;
 
-      if (!formatted) {
+        if (!formatted) {
+          return;
+        }
+
+        // Update the editor content directly, preserving cursor position
+        const { from, to } = editor.state.selection;
+
+        isUpdatingFromProp.current = true;
+        editor.commands.setContent(formatted, { emitUpdate: false });
+
+        // Restore cursor position
+        const newDocSize = editor.state.doc.content.size;
+        const safeFrom = Math.min(from, newDocSize);
+        const safeTo = Math.min(to, newDocSize);
+        editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
+
+        // Update the store
+        onChangeRef.current(formatted);
+        isUpdatingFromProp.current = false;
+
+        await onSaveRef.current(formatted);
+        toast.success("Saved successfully", {
+          description: "Markdown formatted and saved",
+          duration: 1000,
+        });
+      } finally {
+        isUpdatingFromProp.current = false;
         isSavingRef.current = false;
-        return;
       }
-
-      // Update the editor content directly, preserving cursor position
-      const { from, to } = editor.state.selection;
-
-      isUpdatingFromProp.current = true;
-      editor.commands.setContent(formatted);
-
-      // Restore cursor position
-      const newDocSize = editor.state.doc.content.size;
-      const safeFrom = Math.min(from, newDocSize);
-      const safeTo = Math.min(to, newDocSize);
-      editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
-
-      // Update the store
-      onChangeRef.current(formatted);
-      isUpdatingFromProp.current = false;
-
-      await onSaveRef.current();
-      toast.success("Saved successfully", {
-        description: "Markdown formatted and saved",
-        duration: 1000,
-      });
-
-      isSavingRef.current = false;
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {

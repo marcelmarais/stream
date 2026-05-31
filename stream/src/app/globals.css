@@ -255,6 +255,44 @@
       @apply !mt-0 !mb-1 !pt-0 !pb-0;
     }
 
+    & li.typing-polish-list-item {
+      @apply !list-none;
+    }
+
+    & .typing-polish-list-marker {
+      @apply inline-block w-6 select-none text-muted-foreground;
+    }
+
+    & .typing-polish-prefix-strike {
+      text-decoration: line-through;
+    }
+
+    /* Task lists */
+    & ul[data-type="taskList"] {
+      @apply !list-none !pl-0;
+    }
+
+    & ul[data-type="taskList"] li[data-type="taskItem"] {
+      @apply flex !mb-1 items-start gap-2;
+    }
+
+    & ul[data-type="taskList"] li[data-type="taskItem"] > label {
+      @apply mt-0.5 flex h-6 items-center;
+    }
+
+    & ul[data-type="taskList"] li[data-type="taskItem"] input[type="checkbox"] {
+      @apply size-4 rounded border-border;
+      accent-color: var(--primary);
+    }
+
+    & ul[data-type="taskList"] li[data-type="taskItem"] > div {
+      @apply min-w-0 flex-1;
+    }
+
+    & ul[data-type="taskList"] li[data-type="taskItem"] > div > p {
+      @apply !mt-0 !mb-0;
+    }
+
     /* Blockquotes */
     & blockquote {
       @apply !mt-3 !mb-3 !font-normal;

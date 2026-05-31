@@ -2,6 +2,7 @@
 
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { CaretDownIcon } from "@phosphor-icons/react";
+import { AnimatePresence, motion } from "framer-motion";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -47,11 +48,45 @@ function AccordionTrigger({
   );
 }
 
+type AccordionContentProps = React.ComponentProps<
+  typeof AccordionPrimitive.Content
+> & {
+  motionOpen?: boolean;
+};
+
 function AccordionContent({
   className,
   children,
+  motionOpen,
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Content>) {
+}: AccordionContentProps) {
+  if (typeof motionOpen === "boolean") {
+    return (
+      <AccordionPrimitive.Content
+        data-slot="accordion-content"
+        aria-hidden={!motionOpen}
+        className="overflow-hidden text-sm"
+        {...props}
+        forceMount
+      >
+        <AnimatePresence initial={false}>
+          {motionOpen && (
+            <motion.div
+              key="accordion-content"
+              initial={{ height: 0, opacity: 0, y: -4 }}
+              animate={{ height: "auto", opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -4 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="overflow-hidden"
+            >
+              <div className={cn("pt-0 pb-4", className)}>{children}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </AccordionPrimitive.Content>
+    );
+  }
+
   return (
     <AccordionPrimitive.Content
       data-slot="accordion-content"

@@ -149,7 +149,7 @@ export function FileCalendar({
             <CalendarDotsIcon className="size-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="mt-2 w-auto p-0" align="end">
+        <PopoverContent className="z-[70] mt-2 w-auto p-0" align="end">
           <Calendar
             mode="single"
             onSelect={handleDateSelect}
