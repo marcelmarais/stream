@@ -1,14 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { remove, stat } from "@tauri-apps/plugin-fs";
-import {
-  markFileRefreshedMeta,
-  type RefreshInterval,
-  readMeta,
-  setFileDescriptionMeta,
-  setFileLocation,
-  setFileRefreshIntervalMeta,
-} from "@/ipc/meta";
-import { classifyRelevantDailyFiles, mergeRelevantContent } from "@/utils/ai";
+import { readMeta, setFileLocation } from "@/ipc/meta";
 
 /**
  * Represents markdown file metadata without content
@@ -32,102 +24,17 @@ export interface MarkdownFileMetadata {
   dateFromFilename: Date;
 }
 
-/**
- * Represents structured markdown file metadata without content
- * (for arbitrary .md files in the structured directory)
- */
-export interface StructuredMarkdownFileMetadata {
-  /** The full file path */
-  filePath: string;
-  /** The filename without the directory path */
-  fileName: string;
-  /** The file creation date */
-  createdAt: Date;
-  /** The file modification date */
-  modifiedAt: Date;
-  /** The file size in bytes */
-  size: number;
-  /** The country associated with this file (from meta.json) */
-  country?: string;
-  /** The city associated with this file (from meta.json) */
-  city?: string;
-}
-
-/**
- * Represents a complete structured markdown file with content and metadata
- */
-export interface StructuredMarkdownFile {
-  /** The full file path */
-  filePath: string;
-  /** The filename without the directory path */
-  fileName: string;
-  /** The file creation date */
-  createdAt: Date;
-  /** The file modification date */
-  modifiedAt: Date;
-  /** The file size in bytes */
-  size: number;
-  /** The country associated with this file (from meta.json) */
-  country?: string;
-  /** The city associated with this file (from meta.json) */
-  city?: string;
-  /** The file description (from meta.json) */
-  description?: string;
-  /** The file content */
-  content: string;
-  /** The refresh interval (from meta.json) */
-  refreshInterval?: string;
-  /** The last refreshed timestamp */
-  lastRefreshedAt?: Date;
-}
-
-/**
- * Rust-side metadata structure (matches Rust struct)
- */
 interface RustMarkdownFileMetadata {
   file_path: string;
   file_name: string;
-  created_at: number; // Unix timestamp in milliseconds
-  modified_at: number; // Unix timestamp in milliseconds
+  created_at: number;
+  modified_at: number;
   size: number;
   country?: string;
   city?: string;
-  date_from_filename: number; // Date from filename as Unix timestamp (midnight UTC)
+  date_from_filename: number;
 }
 
-/**
- * Rust-side structured markdown metadata structure (matches Rust struct)
- */
-interface RustStructuredMarkdownFileMetadata {
-  file_path: string;
-  file_name: string;
-  created_at: number; // Unix timestamp in milliseconds
-  modified_at: number; // Unix timestamp in milliseconds
-  size: number;
-  country?: string;
-  city?: string;
-}
-
-/**
- * Rust-side structured markdown file structure with content (matches Rust struct)
- */
-interface RustStructuredMarkdownFile {
-  file_path: string;
-  file_name: string;
-  created_at: number; // Unix timestamp in milliseconds
-  modified_at: number; // Unix timestamp in milliseconds
-  size: number;
-  country?: string;
-  city?: string;
-  description?: string;
-  content: string;
-  refresh_interval?: string;
-  last_refreshed_at?: number;
-}
-
-/**
- * Options for reading markdown files
- */
 interface ReadMarkdownOptions {
   /** Maximum file size to read in bytes (default: 10MB) */
   maxFileSize?: number;
@@ -139,18 +46,12 @@ interface ReadMarkdownOptions {
  * Files are sorted by the date in the filename (newest first).
  * This function only reads file metadata, not content.
  * Uses a fast Rust-based implementation for optimal performance.
- *
- * @param directoryPath - The path to the directory to search
- * @param options - Additional options for reading files
- * @returns Promise<MarkdownFileMetadata[]> - Array of markdown file metadata sorted by filename date
  */
 export async function readAllMarkdownFilesMetadata(
   directoryPath: string,
   options: ReadMarkdownOptions = {},
 ): Promise<MarkdownFileMetadata[]> {
-  const {
-    maxFileSize = 10 * 1024 * 1024, // 10MB default
-  } = options;
+  const { maxFileSize = 10 * 1024 * 1024 } = options;
 
   try {
     const rustMetadata: RustMarkdownFileMetadata[] = await invoke(
@@ -204,7 +105,7 @@ export async function readAllMarkdownFilesMetadata(
 export async function readMarkdownFilesContentByPaths(
   filePaths: string[],
 ): Promise<Map<string, string>> {
-  const markdown_files: Record<string, string> = await invoke(
+  const markdownFiles: Record<string, string> = await invoke(
     "read_markdown_files_content",
     {
       filePaths,
@@ -212,7 +113,7 @@ export async function readMarkdownFilesContentByPaths(
   );
 
   const map = new Map<string, string>();
-  for (const [path, content] of Object.entries(markdown_files)) {
+  for (const [path, content] of Object.entries(markdownFiles)) {
     map.set(path, content);
   }
 
@@ -223,10 +124,6 @@ export async function readMarkdownFilesContentByPaths(
  * Writes content to a markdown file at the specified path.
  * If the file is newly created, it will automatically store the user's current location
  * (country and city) in meta.json (best effort).
- *
- * @param filePath - The absolute path to the file to write
- * @param content - The content to write to the file
- * @returns Promise<void>
  */
 export async function writeMarkdownFileContent(
   filePath: string,
@@ -247,9 +144,7 @@ export async function writeMarkdownFileContent(
     if (!fileExists) {
       const baseFolderPath =
         options.baseFolderPath ||
-        (filePath.includes("/structured/")
-          ? filePath.split("/structured/")[0]
-          : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/"))));
+        filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
 
       const detected = await getCurrentLocation();
       const fallback = (await readMeta(baseFolderPath)).globals?.lastLocation;
@@ -321,7 +216,6 @@ export async function ensureMarkdownFileForDate(
     await stat(filePath);
     return { filePath, created: false };
   } catch {
-    // File doesn't exist, create it
     await writeMarkdownFileContent(filePath, "", {
       baseFolderPath: directoryPath,
     });
@@ -420,11 +314,6 @@ export async function getCurrentLocation(): Promise<
 
 /**
  * Sets location metadata (country and city) for a file in meta.json.
- *
- * @param folderPath - The base folder path containing meta.json
- * @param filePath - The absolute path to the file
- * @param country - The country name
- * @param city - The city name
  */
 export async function setFileLocationMetadata(
   folderPath: string,
@@ -443,419 +332,7 @@ export async function setFileLocationMetadata(
 
 /**
  * Deletes a markdown file at the specified path.
- *
- * @param filePath - The absolute path to the file to delete
- * @returns Promise<void>
  */
 export async function deleteMarkdownFile(filePath: string): Promise<void> {
   await remove(filePath);
-}
-
-/**
- * Reads metadata for structured markdown files in the structured subdirectory.
- * Reads all .md files regardless of naming pattern from {directoryPath}/structured/.
- * Files are sorted by modification time (newest first).
- * This function only reads file metadata, not content.
- * Uses a fast Rust-based implementation for optimal performance.
- *
- * @param directoryPath - The base path (structured directory will be {directoryPath}/structured)
- * @param options - Additional options for reading files
- * @returns Promise<StructuredMarkdownFileMetadata[]> - Array of structured markdown file metadata
- */
-export async function readStructuredMarkdownFilesMetadata(
-  directoryPath: string,
-  options: ReadMarkdownOptions = {},
-): Promise<StructuredMarkdownFileMetadata[]> {
-  const {
-    maxFileSize = 10 * 1024 * 1024, // 10MB default
-  } = options;
-
-  try {
-    const rustMetadata: RustStructuredMarkdownFileMetadata[] = await invoke(
-      "read_structured_markdown_files_metadata",
-      {
-        directoryPath,
-        maxFileSize,
-      },
-    );
-
-    const files: StructuredMarkdownFileMetadata[] = rustMetadata.map(
-      (rustFile) => ({
-        filePath: rustFile.file_path,
-        fileName: rustFile.file_name,
-        createdAt: new Date(rustFile.created_at),
-        modifiedAt: new Date(rustFile.modified_at),
-        size: rustFile.size,
-        country: rustFile.country,
-        city: rustFile.city,
-      }),
-    );
-
-    const meta = await readMeta(directoryPath);
-    const base = directoryPath.endsWith("/")
-      ? directoryPath
-      : `${directoryPath}/`;
-
-    return files.map((file) => {
-      const key = file.filePath.startsWith(base)
-        ? file.filePath.slice(base.length)
-        : file.filePath;
-      const location = meta.files[key]?.location;
-      if (!location) return file;
-      return { ...file, country: location.country, city: location.city };
-    });
-  } catch (error) {
-    console.error(
-      `Error reading structured directory ${directoryPath}:`,
-      error,
-    );
-    throw new Error(
-      `Failed to read structured markdown files metadata from directory: ${error}`,
-    );
-  }
-}
-
-/**
- * Reads all structured markdown files (metadata + content) in one go.
- * Reads all .md files regardless of naming pattern from {directoryPath}/structured/.
- * Files are sorted by modification time (newest first).
- * Uses a fast Rust-based implementation for optimal performance.
- *
- * @param directoryPath - The base path (structured directory will be {directoryPath}/structured)
- * @param options - Additional options for reading files
- * @returns Promise<StructuredMarkdownFile[]> - Array of structured markdown files with content
- */
-export async function readStructuredMarkdownFiles(
-  directoryPath: string,
-  options: ReadMarkdownOptions = {},
-): Promise<StructuredMarkdownFile[]> {
-  const {
-    maxFileSize = 10 * 1024 * 1024, // 10MB default
-  } = options;
-
-  try {
-    const rustFiles: RustStructuredMarkdownFile[] = await invoke(
-      "read_structured_markdown_files",
-      {
-        directoryPath,
-        maxFileSize,
-      },
-    );
-
-    const files: StructuredMarkdownFile[] = rustFiles.map((rustFile) => ({
-      filePath: rustFile.file_path,
-      fileName: rustFile.file_name,
-      createdAt: new Date(rustFile.created_at),
-      modifiedAt: new Date(rustFile.modified_at),
-      size: rustFile.size,
-      country: rustFile.country,
-      city: rustFile.city,
-      description: rustFile.description,
-      content: rustFile.content,
-      refreshInterval: rustFile.refresh_interval,
-      lastRefreshedAt: rustFile.last_refreshed_at
-        ? new Date(rustFile.last_refreshed_at)
-        : undefined,
-    }));
-
-    const meta = await readMeta(directoryPath);
-    const base = directoryPath.endsWith("/")
-      ? directoryPath
-      : `${directoryPath}/`;
-
-    return files.map((file) => {
-      const key = file.filePath.startsWith(base)
-        ? file.filePath.slice(base.length)
-        : file.filePath;
-      const entry = meta.files[key];
-      if (!entry) return file;
-
-      const location = entry.location;
-      const refresh = entry.refresh;
-
-      return {
-        ...file,
-        country: location?.country ?? file.country,
-        city: location?.city ?? file.city,
-        description: entry.description ?? file.description,
-        refreshInterval: refresh?.interval ?? file.refreshInterval,
-        lastRefreshedAt: refresh?.lastRefreshedAt
-          ? new Date(refresh.lastRefreshedAt)
-          : file.lastRefreshedAt,
-      };
-    });
-  } catch (error) {
-    console.error(
-      `Error reading structured files from ${directoryPath}:`,
-      error,
-    );
-    throw new Error(
-      `Failed to read structured markdown files from directory: ${error}`,
-    );
-  }
-}
-
-/**
- * Creates a structured markdown file with the given name in the structured subdirectory.
- * Creates the structured directory if it doesn't exist.
- *
- * @param directoryPath - The base path (file will be created in {directoryPath}/structured/)
- * @param fileName - The filename (should end with .md)
- * @param content - Optional initial content for the file (defaults to empty string)
- * @param description - Optional description for the file
- * @returns Promise<string> - The absolute path to the created file
- */
-export async function createStructuredMarkdownFile(
-  directoryPath: string,
-  fileName: string,
-  content = "",
-  description = "",
-): Promise<string> {
-  try {
-    // Build the structured directory path
-    const structuredDir = directoryPath.endsWith("/")
-      ? `${directoryPath}structured`
-      : `${directoryPath}/structured`;
-
-    // Ensure the structured directory exists
-    const { mkdir, exists } = await import("@tauri-apps/plugin-fs");
-
-    const dirExists = await exists(structuredDir);
-    if (!dirExists) {
-      await mkdir(structuredDir, { recursive: true });
-    }
-
-    // Ensure filename ends with .md
-    const sanitizedFileName = fileName.endsWith(".md")
-      ? fileName
-      : `${fileName}.md`;
-
-    const filePath = `${structuredDir}/${sanitizedFileName}`;
-
-    // Check if file already exists
-    try {
-      await stat(filePath);
-      throw new Error(`File already exists: ${sanitizedFileName}`);
-    } catch (error) {
-      // If stat throws an error, file doesn't exist, proceed with creation
-      // But if it's a different error than "not found", we should check
-      if (error && typeof error === "object" && "message" in error) {
-        const message = (error as { message: string }).message;
-        if (
-          !message.includes("not found") &&
-          !message.includes("No such file")
-        ) {
-          throw error;
-        }
-      }
-    }
-
-    // Write the file
-    await writeMarkdownFileContent(filePath, content, {
-      baseFolderPath: directoryPath,
-    });
-
-    // Set description if provided
-    if (description) {
-      try {
-        await setFileDescription(filePath, description);
-      } catch (error) {
-        console.warn(`Could not set description for ${filePath}:`, error);
-      }
-    }
-
-    return filePath;
-  } catch (error) {
-    console.error(
-      `Error creating structured markdown file ${fileName}:`,
-      error,
-    );
-    throw new Error(`Failed to create structured markdown file: ${error}`);
-  }
-}
-
-/**
- * Sets the description for a file in meta.json.
- *
- * @param filePath - The absolute path to the file
- * @param description - The description text
- * @returns Promise<void>
- */
-export async function setFileDescription(
-  filePath: string,
-  description: string,
-): Promise<void> {
-  try {
-    const baseFolderPath = filePath.includes("/structured/")
-      ? filePath.split("/structured/")[0]
-      : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
-    await setFileDescriptionMeta(baseFolderPath, filePath, description);
-  } catch (error) {
-    console.error(`Error setting description for ${filePath}:`, error);
-    throw new Error(`Failed to set file description: ${error}`);
-  }
-}
-
-/**
- * Sets the refresh interval for a file in meta.json.
- *
- * @param filePath - The absolute path to the file
- * @param interval - The refresh interval ("none", "hourly", "daily", "weekly")
- * @returns Promise<void>
- */
-export async function setFileRefreshInterval(
-  filePath: string,
-  interval: string,
-): Promise<void> {
-  try {
-    const normalized = interval.toLowerCase() as RefreshInterval;
-    const baseFolderPath = filePath.includes("/structured/")
-      ? filePath.split("/structured/")[0]
-      : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
-    await setFileRefreshIntervalMeta(baseFolderPath, filePath, normalized);
-  } catch (error) {
-    console.error(`Error setting refresh interval for ${filePath}:`, error);
-    throw new Error(`Failed to set refresh interval: ${error}`);
-  }
-}
-
-/**
- * Marks a file as refreshed by updating the last refreshed timestamp.
- * This should be called after the TypeScript-side refresh logic completes.
- *
- * @param filePath - The absolute path to the file
- * @returns Promise<void>
- */
-export async function markFileAsRefreshed(filePath: string): Promise<void> {
-  try {
-    const baseFolderPath = filePath.includes("/structured/")
-      ? filePath.split("/structured/")[0]
-      : filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
-    await markFileRefreshedMeta(baseFolderPath, filePath);
-  } catch (error) {
-    console.error(`Error marking file as refreshed ${filePath}:`, error);
-    throw new Error(`Failed to mark file as refreshed: ${error}`);
-  }
-}
-
-/**
- * Gets a list of file paths that need to be refreshed based on their
- * refresh interval and last refresh time.
- *
- * @param directoryPath - The base directory path (will check {directoryPath}/structured)
- * @returns Promise<string[]> - Array of file paths that need refresh
- */
-export async function getFilesNeedingRefresh(
-  directoryPath: string,
-): Promise<string[]> {
-  try {
-    const meta = await readMeta(directoryPath);
-    const structuredFiles =
-      await readStructuredMarkdownFilesMetadata(directoryPath);
-    const now = Date.now();
-
-    const intervalMs: Record<RefreshInterval, number | null> = {
-      minutely: 60 * 1000,
-      hourly: 60 * 60 * 1000,
-      daily: 24 * 60 * 60 * 1000,
-      weekly: 7 * 24 * 60 * 60 * 1000,
-      none: null,
-    };
-
-    const base = directoryPath.endsWith("/")
-      ? directoryPath
-      : `${directoryPath}/`;
-
-    return structuredFiles
-      .map((f) => f.filePath)
-      .filter((filePath) => {
-        const key = filePath.startsWith(base)
-          ? filePath.slice(base.length)
-          : filePath;
-        const refresh = meta.files[key]?.refresh;
-        const interval = refresh?.interval || "none";
-        const duration = intervalMs[interval];
-        if (!duration) return false;
-        const last = refresh?.lastRefreshedAt || 0;
-        return now - last >= duration;
-      });
-  } catch (error) {
-    console.error(`Error getting files needing refresh:`, error);
-    throw new Error(`Failed to get files needing refresh: ${error}`);
-  }
-}
-
-/**
- * AI-powered refresh function that analyzes recent daily markdown files
- * and intelligently merges relevant content into the structured file.
- *
- * @param filePath - The absolute path to the structured file to refresh
- * @returns Promise<void>
- */
-export async function refreshFileWithAI(filePath: string): Promise<void> {
-  try {
-    // Read the structured file being refreshed
-    const files = await readStructuredMarkdownFiles(
-      filePath.split("/structured/")[0],
-    );
-    const structuredFile = files.find((f) => f.filePath === filePath);
-
-    if (!structuredFile) {
-      throw new Error(`Could not find structured file: ${filePath}`);
-    }
-
-    const baseFolderPath = filePath.split("/structured/")[0];
-
-    const dailyFilesMetadata =
-      await readAllMarkdownFilesMetadata(baseFolderPath);
-    const recentDailyFiles = dailyFilesMetadata.slice(0, 30);
-
-    if (recentDailyFiles.length === 0) {
-      console.log("No daily files found, skipping refresh");
-      await markFileAsRefreshed(filePath);
-      return;
-    }
-
-    // Read content for those files
-    const dailyFilePaths = recentDailyFiles.map((f) => f.filePath);
-    const dailyFilesContent =
-      await readMarkdownFilesContentByPaths(dailyFilePaths);
-
-    // Build array of daily files with content
-    const dailyFilesWithContent = recentDailyFiles.map((metadata) => ({
-      metadata,
-      content: dailyFilesContent.get(metadata.filePath) || "",
-    }));
-
-    // Classify which files contain relevant information
-    const relevantDailyFiles = await classifyRelevantDailyFiles(
-      structuredFile.fileName,
-      structuredFile.description || "",
-      structuredFile.content,
-      dailyFilesWithContent,
-    );
-
-    if (relevantDailyFiles.length === 0) {
-      console.log("No relevant content found in daily files, skipping update");
-      await markFileAsRefreshed(filePath);
-      return;
-    }
-
-    const updatedContent = await mergeRelevantContent(
-      structuredFile.fileName,
-      structuredFile.description || "",
-      structuredFile.content,
-      relevantDailyFiles,
-    );
-
-    await writeMarkdownFileContent(filePath, updatedContent);
-    await markFileAsRefreshed(filePath);
-
-    console.log(
-      `Successfully refreshed ${structuredFile.fileName} with content from ${relevantDailyFiles.length} daily file(s)`,
-    );
-  } catch (error) {
-    console.error(`Error refreshing file ${filePath}:`, error);
-    throw new Error(`Failed to refresh file: ${error}`);
-  }
 }

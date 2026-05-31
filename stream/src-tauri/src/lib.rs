@@ -1,24 +1,18 @@
 mod ipc;
 mod search;
 
-use tauri::{Emitter, Manager, WindowEvent};
+use tauri::{Manager, WindowEvent};
 
 #[cfg(target_os = "macos")]
 use objc::runtime::Object;
 #[cfg(target_os = "macos")]
 use objc::{msg_send, sel, sel_impl};
 
-pub use ipc::{
-    FetchResult, GitCommit, MarkdownFileMetadata, RepoCommits, StructuredMarkdownFile,
-    StructuredMarkdownFileMetadata,
-};
+pub use ipc::{FetchResult, GitCommit, MarkdownFileMetadata, RepoCommits};
 
 use crate::ipc::git::{fetch_repos, get_git_commits_for_repos};
 use crate::ipc::markdown::{
-    get_files_needing_refresh, mark_file_as_refreshed, read_markdown_files_content,
-    read_markdown_files_metadata, read_structured_markdown_files,
-    read_structured_markdown_files_metadata, set_file_description, set_file_location_metadata,
-    set_file_refresh_interval, update_last_refreshed,
+    read_markdown_files_content, read_markdown_files_metadata, set_file_location_metadata,
 };
 
 #[cfg(target_os = "macos")]
@@ -59,17 +53,10 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             read_markdown_files_metadata,
-            read_structured_markdown_files_metadata,
-            read_structured_markdown_files,
             read_markdown_files_content,
             get_git_commits_for_repos,
             fetch_repos,
             set_file_location_metadata,
-            set_file_description,
-            set_file_refresh_interval,
-            update_last_refreshed,
-            mark_file_as_refreshed,
-            get_files_needing_refresh,
             search::search_markdown_files,
             search::rebuild_search_index
         ])
@@ -92,15 +79,6 @@ pub fn run() {
                     }
                 }
             }
-
-            // Start background thread to check for files needing refresh
-            let app_handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(10));
-                if let Err(e) = app_handle.emit("check-for-refresh", ()) {
-                    eprintln!("Failed to emit check-for-refresh event: {}", e);
-                }
-            });
 
             Ok(())
         })

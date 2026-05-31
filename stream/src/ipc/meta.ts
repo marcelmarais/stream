@@ -1,13 +1,5 @@
 import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-
 import type { Habit } from "@/ipc/habit-reader";
-
-export type RefreshInterval =
-  | "none"
-  | "minutely"
-  | "hourly"
-  | "daily"
-  | "weekly";
 
 export interface LocationMeta {
   country: string;
@@ -21,15 +13,8 @@ export interface LocationMeta {
   updatedAt?: number;
 }
 
-export interface RefreshMeta {
-  interval?: RefreshInterval;
-  lastRefreshedAt?: number;
-}
-
 export interface FileMeta {
   location?: LocationMeta;
-  description?: string;
-  refresh?: RefreshMeta;
   /**
    * Reserved for future per-file features (tags, mood, etc).
    * Keep it JSON-serializable.
@@ -202,65 +187,6 @@ export async function setFileLocation(
         [key]: {
           ...existing,
           location: nextLocation,
-        },
-      },
-    };
-  });
-}
-
-export async function setFileDescriptionMeta(
-  folderPath: string,
-  filePath: string,
-  description: string,
-): Promise<void> {
-  const key = getMetaKeyForFilePath(folderPath, filePath);
-  await updateMeta(folderPath, (current) => {
-    const existing = current.files[key] || {};
-    return {
-      ...current,
-      files: {
-        ...current.files,
-        [key]: { ...existing, description },
-      },
-    };
-  });
-}
-
-export async function setFileRefreshIntervalMeta(
-  folderPath: string,
-  filePath: string,
-  interval: RefreshInterval,
-): Promise<void> {
-  const key = getMetaKeyForFilePath(folderPath, filePath);
-  await updateMeta(folderPath, (current) => {
-    const existing = current.files[key] || {};
-    return {
-      ...current,
-      files: {
-        ...current.files,
-        [key]: {
-          ...existing,
-          refresh: { ...existing.refresh, interval },
-        },
-      },
-    };
-  });
-}
-
-export async function markFileRefreshedMeta(
-  folderPath: string,
-  filePath: string,
-): Promise<void> {
-  const key = getMetaKeyForFilePath(folderPath, filePath);
-  await updateMeta(folderPath, (current) => {
-    const existing = current.files[key] || {};
-    return {
-      ...current,
-      files: {
-        ...current.files,
-        [key]: {
-          ...existing,
-          refresh: { ...existing.refresh, lastRefreshedAt: nowMs() },
         },
       },
     };
