@@ -255,15 +255,21 @@
       @apply !mt-0 !mb-1 !pt-0 !pb-0;
     }
 
-    & li.typing-polish-list-item {
-      @apply !list-none;
+    /* Obsidian-style GFM strikethrough: hide ~~, strike content */
+    & .typing-polish-strike-syntax {
+      font-size: 0;
+      line-height: 0;
+      letter-spacing: 0;
+      opacity: 0;
+      width: 0;
+      display: inline-block;
+      overflow: hidden;
+      vertical-align: baseline;
+      pointer-events: none;
+      user-select: none;
     }
 
-    & .typing-polish-list-marker {
-      @apply inline-block w-6 select-none text-muted-foreground;
-    }
-
-    & .typing-polish-prefix-strike {
+    & .typing-polish-strike-content {
       text-decoration: line-through;
     }
 
