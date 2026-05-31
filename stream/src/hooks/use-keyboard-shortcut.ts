@@ -36,7 +36,9 @@ export function useSaveShortcut(
         const storage = editor.storage as any;
         const currentMarkdown = storage.markdown.getMarkdown();
         const result = await formatMarkdown(
-          typeof currentMarkdown === "string" ? currentMarkdown : valueRef.current,
+          typeof currentMarkdown === "string"
+            ? currentMarkdown
+            : valueRef.current,
         );
         const formatted = result.formatted;
 
