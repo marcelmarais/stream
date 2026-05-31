@@ -59,9 +59,9 @@ export function Titlebar({
 
   return (
     <div data-tauri-drag-region className={titlebarClasses}>
-      <div className="flex h-full w-full items-center px-4 pt-1">
+      <div className="flex h-full w-full items-center gap-2 px-4 pt-1">
         {/* Left section - traffic lights and back button */}
-        <div className="flex w-[200px] flex-shrink-0 items-center gap-2">
+        <div className="flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center gap-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -96,12 +96,12 @@ export function Titlebar({
         </div>
 
         {/* Center section - search bar */}
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex min-w-0 flex-1 items-center justify-center">
           {centerContent && !isLoading && centerContent}
         </div>
 
         {/* Right section - action buttons */}
-        <div className="flex w-[200px] flex-shrink-0 items-center justify-end">
+        <div className="flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center justify-end">
           {actions && !isLoading && actions}
         </div>
       </div>
