@@ -33,4 +33,3 @@
 
 ### AI-Powered Features (WIP)
 - **Smart Todos**: Type `/todos` in any note to extract open tasks from yesterday's notes and commits.
-- **Smart files** (WIP): create files with a description of content you want automatically extracted from you daily notes.
