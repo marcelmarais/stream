@@ -1,9 +1,9 @@
 name: Release
 
+# Releases are published from a Mac with `pnpm release`. This is the fallback:
+# gh workflow run release.yml --ref <tag>
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
