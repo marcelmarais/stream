@@ -86,7 +86,7 @@ check_repo() {
   [ "$(git branch --show-current)" = "main" ] || fail "Release from main"
   [ -z "$(git status --porcelain)" ] || fail "Commit or stash your changes first"
 
-  git fetch --quiet origin main --tags
+  git fetch --quiet origin main
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || fail "main isn't in sync with origin/main"
 }
 
@@ -117,6 +117,9 @@ verify_build() {
 write_notes() {
   local previous="$1" notes="$2"
 
+  # Local tags can drift from GitHub's, so read the published one
+  git fetch --quiet origin "refs/tags/v$previous"
+
   {
     echo "## Installation Instructions (macOS)"
     echo
@@ -126,7 +129,7 @@ write_notes() {
     echo
     echo "## What's changed"
     echo
-    git log --no-merges --format='- %s' "v$previous..HEAD" -- .
+    git log --no-merges --format='- %s' "FETCH_HEAD..HEAD" -- .
   } >"$notes"
 }
 
@@ -145,7 +148,7 @@ current="$(node "$HELPERS" version "$CONFIG")"
 version="$(node "$HELPERS" next-version "$CONFIG" "$bump")"
 tag="v$version"
 
-if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null || gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+if [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ] || gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
   fail "$tag already exists"
 fi
 
