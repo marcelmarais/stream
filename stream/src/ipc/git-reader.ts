@@ -23,6 +23,22 @@ export interface RepoCommits {
   error?: string;
 }
 
+export interface DiscoveredRepo {
+  path: string;
+  display_path: string;
+  name: string;
+  last_modified: number | null; // Unix timestamp in milliseconds
+}
+
+/**
+ * Find git repositories on this machine, most recently active first
+ */
+export async function discoverGitRepos(
+  knownRepos: string[],
+): Promise<DiscoveredRepo[]> {
+  return invoke("discover_git_repos", { knownRepos });
+}
+
 /**
  * Date range interface for filtering commits
  */

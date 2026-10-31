@@ -5,7 +5,6 @@ import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { HeaderActions, SearchButton } from "@/components/markdown-file-card";
-import { Button } from "@/components/ui/button";
 
 interface TitlebarProps {
   actions?: ReactNode;
@@ -75,15 +74,14 @@ export function Titlebar({
           />
         </div>
         {onBack && (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="no-drag"
+          <button
+            type="button"
+            className="no-drag ml-2 flex h-6 items-center gap-1.5 whitespace-nowrap text-muted-foreground hover:text-foreground"
             onClick={onBack}
-            title={backLabel || "Back"}
           >
-            <ArrowLeft />
-          </Button>
+            <ArrowLeft className="size-3" />
+            {backLabel || "Back"}
+          </button>
         )}
       </div>
 

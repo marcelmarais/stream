@@ -30,6 +30,3 @@
 - **Filtering**: Filter commits by author, repository, or search term
 - **Commit Details**: See commit messages, authors, timestamps, branches, and files changed
 - **Fetch from Remote**: One-click fetch latest changes from all connected repos
-
-### AI-Powered Features (WIP)
-- **Smart Todos**: Type `/todos` in any note to extract open tasks from yesterday's notes and commits.

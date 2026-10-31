@@ -9,23 +9,10 @@ import {
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import {
-  livePreview,
-  type SlashMenuState,
-  slashMenu,
-} from "@/components/live-preview";
-import {
-  loadYesterdayContext,
-  SlashCommandList,
-  type SlashCommandListHandle,
-  type SlashMenuItem,
-  useSlashCommandData,
-} from "@/components/slash-command";
+import { livePreview } from "@/components/live-preview";
 import { cn } from "@/lib/utils";
-import { streamYesterdaySummary } from "@/utils/ai";
 
 const externalChange = Annotation.define<boolean>();
 
@@ -41,10 +28,6 @@ interface MarkdownEditorProps {
   isActiveEditing?: boolean;
   isEditable: boolean;
 }
-
-const SLASH_COMMANDS: SlashMenuItem[] = [
-  { title: "todos", description: "collect yesterday's open points" },
-];
 
 function diffChange(current: string, next: string) {
   const max = Math.min(current.length, next.length);
@@ -81,14 +64,9 @@ export function MarkdownEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const editableRef = useRef(new Compartment());
-  const streamPosRef = useRef<number | null>(null);
   const recentEditsRef = useRef<string[]>([]);
-  const slashListRef = useRef<SlashCommandListHandle>(null);
   const callbacksRef = useRef({ onChange, onSave, onFocus });
   const initialRef = useRef({ value, isEditable });
-  const [slash, setSlash] = useState<SlashMenuState | null>(null);
-  const [isAIGenerating, setIsAIGenerating] = useState(false);
-  const slashCommandData = useSlashCommandData();
 
   useEffect(() => {
     callbacksRef.current = { onChange, onSave, onFocus };
@@ -125,10 +103,6 @@ export function MarkdownEditor({
           ]),
           placeholder("Start typing..."),
           livePreview(),
-          slashMenu(
-            setSlash,
-            (event) => slashListRef.current?.onKeyDown({ event }) ?? false,
-          ),
           editableRef.current.of(
             EditorView.editable.of(initialRef.current.isEditable),
           ),
@@ -140,13 +114,6 @@ export function MarkdownEditor({
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) {
               return;
-            }
-
-            if (streamPosRef.current !== null) {
-              streamPosRef.current = update.changes.mapPos(
-                streamPosRef.current,
-                1,
-              );
             }
 
             if (
@@ -218,98 +185,14 @@ export function MarkdownEditor({
     return () => clearTimeout(timer);
   }, [autoFocus]);
 
-  const runTodos = async (from: number, to: number) => {
-    const view = viewRef.current;
-
-    if (!view) {
-      return;
-    }
-
-    const heading = "## todo\n\n";
-
-    const insertAtStream = (text: string) => {
-      if (viewRef.current === view && streamPosRef.current !== null) {
-        view.dispatch({
-          changes: { from: streamPosRef.current, insert: text },
-        });
-      }
-    };
-
-    setIsAIGenerating(true);
-    view.dispatch({
-      changes: { from, to, insert: heading },
-      selection: { anchor: from + heading.length },
-    });
-    streamPosRef.current = from + heading.length;
-
-    try {
-      const { markdownContent, commits } =
-        await loadYesterdayContext(slashCommandData);
-
-      let buffer = "";
-      let flushTimer: number | null = null;
-      const flush = () => {
-        if (buffer) {
-          insertAtStream(buffer);
-          buffer = "";
-        }
-      };
-
-      await streamYesterdaySummary(markdownContent, commits, (delta) => {
-        buffer += delta;
-        if (flushTimer === null) {
-          flushTimer = window.setTimeout(() => {
-            flush();
-            flushTimer = null;
-          }, 60);
-        }
-      });
-
-      flush();
-      insertAtStream("\n\n");
-    } catch (error) {
-      console.error("Error executing todos:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to generate todos";
-      insertAtStream(`❌ Error: ${message}`);
-    } finally {
-      streamPosRef.current = null;
-      setIsAIGenerating(false);
-    }
-  };
-
-  const slashItems = slash
-    ? SLASH_COMMANDS.filter((item) =>
-        item.title.toLowerCase().startsWith(slash.query.toLowerCase()),
-      )
-    : [];
-
   return (
     <div
       className={cn(
         "relative h-full w-full pb-4",
         isActiveEditing && "min-h-[38vh]",
-        isAIGenerating && "animate-pulse",
       )}
     >
       <div ref={containerRef} className="min-h-[inherit]" />
-
-      {slash &&
-        createPortal(
-          // biome-ignore lint/a11y/noStaticElementInteractions: keeps editor focus while clicking the menu
-          <div
-            className="fixed z-50"
-            style={{ left: slash.left, top: slash.top }}
-            onMouseDown={(event) => event.preventDefault()}
-          >
-            <SlashCommandList
-              ref={slashListRef}
-              items={slashItems}
-              command={() => runTodos(slash.from, slash.to)}
-            />
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }

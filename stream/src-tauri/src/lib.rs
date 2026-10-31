@@ -14,6 +14,7 @@ use crate::ipc::git::{fetch_repos, get_git_commits_for_repos};
 use crate::ipc::markdown::{
     read_markdown_files_content, read_markdown_files_metadata, set_file_location_metadata,
 };
+use crate::ipc::repos::discover_git_repos;
 
 #[cfg(target_os = "macos")]
 fn setup_macos_window(window: &tauri::Window) -> Result<(), Box<dyn std::error::Error>> {
@@ -56,6 +57,7 @@ pub fn run() {
             read_markdown_files_content,
             get_git_commits_for_repos,
             fetch_repos,
+            discover_git_repos,
             set_file_location_metadata,
             search::search_markdown_files,
             search::rebuild_search_index

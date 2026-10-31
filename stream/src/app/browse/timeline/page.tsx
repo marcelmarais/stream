@@ -15,6 +15,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Footer } from "@/components/footer";
 import { FileCard, FocusedFileOverlay } from "@/components/markdown-file-card";
 import { SearchBar } from "@/components/search-bar";
+import { SettingsPage } from "@/components/settings-page";
 import { TitlebarHeader } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,6 +93,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
   );
   const [showSearch, setShowSearch] = useState(false);
 
+  const settingsOpen = useUserStore((state) => state.settingsOpen);
   const activeEditingFile = useUserStore((state) => state.activeEditingFile);
   const setActiveEditingFile = useUserStore(
     (state) => state.setActiveEditingFile,
@@ -288,6 +290,8 @@ function TimelineView({ folderPath }: { folderPath: string }) {
           footerComponent={<Footer folderPath={folderPath} />}
         />
       )}
+
+      {settingsOpen && <SettingsPage folderPath={folderPath} />}
     </>
   );
 }

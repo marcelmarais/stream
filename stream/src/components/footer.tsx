@@ -1,5 +1,3 @@
-import { useRouter } from "next/navigation";
-import SettingsDialog from "@/components/settings-dialog";
 import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import { useUserStore } from "@/stores/user-store";
@@ -9,9 +7,6 @@ interface FooterProps {
 }
 
 export function Footer({ folderPath }: FooterProps) {
-  const router = useRouter();
-
-  const settingsOpen = useUserStore((state) => state.settingsOpen);
   const setSettingsOpen = useUserStore((state) => state.setSettingsOpen);
 
   const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
@@ -30,8 +25,8 @@ export function Footer({ folderPath }: FooterProps) {
         <button
           type="button"
           className="truncate text-foreground"
-          onClick={() => router.push("/?back=true")}
-          title={folderPath || "Click to go back to folder selection"}
+          onClick={() => setSettingsOpen(true)}
+          title={folderPath}
         >
           {folderName}
         </button>
@@ -62,7 +57,6 @@ export function Footer({ folderPath }: FooterProps) {
       >
         settings
       </button>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

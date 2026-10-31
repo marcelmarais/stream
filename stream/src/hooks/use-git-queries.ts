@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   type CommitsByDate,
   createDateRange,
+  discoverGitRepos,
   getGitCommitsForRepos,
   groupCommitsByDate,
 } from "@/ipc/git-reader";
@@ -28,6 +29,8 @@ export interface FetchResult {
 export const gitKeys = {
   all: ["git"] as const,
   repos: (folderPath: string) => [...gitKeys.all, "repos", folderPath] as const,
+  discovered: (folderPath: string) =>
+    [...gitKeys.all, "discovered", folderPath] as const,
   commits: (folderPath: string, dateKey: string, repos: string[]) =>
     [...gitKeys.all, "commits", folderPath, dateKey, repos] as const,
 };
@@ -98,6 +101,18 @@ export function useConnectedRepos(folderPath: string) {
 }
 
 /**
+ * Hook to find repositories on this machine. The scan takes milliseconds, so
+ * it runs every time rather than keeping an index that could go stale.
+ */
+export function useDiscoveredRepos(folderPath: string) {
+  return useQuery({
+    queryKey: gitKeys.discovered(folderPath),
+    queryFn: async () => discoverGitRepos(await getConnectedRepos(folderPath)),
+    staleTime: 0,
+  });
+}
+
+/**
  * Hook to add a repository to the connected repos list
  */
 export function useAddRepo(folderPath: string) {
@@ -117,6 +132,9 @@ export function useAddRepo(folderPath: string) {
     },
     onSuccess: (updatedRepos) => {
       queryClient.setQueryData(gitKeys.repos(folderPath), updatedRepos);
+      queryClient.invalidateQueries({
+        queryKey: gitKeys.discovered(folderPath),
+      });
     },
   });
 }
