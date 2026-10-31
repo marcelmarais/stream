@@ -1,14 +1,11 @@
 "use client";
 
 import { GearIcon } from "@phosphor-icons/react";
-import type { Editor } from "@tiptap/react";
-import { Extension, ReactRenderer } from "@tiptap/react";
-import type { SuggestionOptions } from "@tiptap/suggestion";
-import Suggestion from "@tiptap/suggestion";
+import { useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import type { Instance as TippyInstance } from "tippy.js";
-import tippy from "tippy.js";
 import { Button } from "@/components/ui/button";
+import { gitKeys } from "@/hooks/use-git-queries";
+import { markdownKeys } from "@/hooks/use-markdown-queries";
 import { useApiKey } from "@/hooks/use-user-data";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
@@ -16,25 +13,24 @@ import { useUserStore } from "@/stores/user-store";
 import {
   getYesterdayDateString,
   getYesterdayMarkdownFileName,
-  streamYesterdaySummary,
 } from "@/utils/ai";
 
-interface SlashCommandItem {
+export interface SlashMenuItem {
   title: string;
   description?: string;
-  command: (props: {
-    editor: Editor;
-    range: { from: number; to: number };
-  }) => void;
 }
 
 interface SlashCommandProps {
-  items: SlashCommandItem[];
-  command: (item: SlashCommandItem) => void;
+  items: SlashMenuItem[];
+  command: (item: SlashMenuItem) => void;
 }
 
-const SlashCommandList = forwardRef<
-  { onKeyDown: (props: { event: KeyboardEvent }) => boolean },
+export interface SlashCommandListHandle {
+  onKeyDown: (props: { event: KeyboardEvent }) => boolean;
+}
+
+export const SlashCommandList = forwardRef<
+  SlashCommandListHandle,
   SlashCommandProps
 >((props, ref) => {
   const setSettingsOpen = useUserStore((state) => state.setSettingsOpen);
@@ -159,266 +155,75 @@ interface CommitData {
   }>;
 }
 
-interface SlashCommandOptions {
-  onAIGenerationChange?: (isGenerating: boolean) => void;
+interface SlashCommandDataSources {
   getMetadata?: () => MarkdownFileMetadata[];
   getContent?: (filePath: string) => string | undefined;
-  getFolderPath?: () => string;
   getCommitsForDate?: (dateKey: string) => CommitData | undefined;
 }
 
 /**
- * Get available AI commands based on API key configuration
+ * Query-cache getters for the data slash commands read
  */
-function getAICommands(
-  onAIGenerationChange?: (isGenerating: boolean) => void,
-  getMetadata?: () => MarkdownFileMetadata[],
-  getContent?: (filePath: string) => string | undefined,
-  getCommitsForDate?: (dateKey: string) => CommitData | undefined,
-): SlashCommandItem[] {
-  return [
-    {
-      title: "todos",
-      description: "collect yesterday's open points",
-      command: async ({
-        editor,
-        range,
-      }: {
-        editor: Editor;
-        range: { from: number; to: number };
-      }) => {
-        const loadingText = "Generating todos...";
+export function useSlashCommandData(): SlashCommandDataSources {
+  const queryClient = useQueryClient();
+  const folderPath = useUserStore((state) => state.folderPath);
 
-        // Notify that AI generation has started
-        onAIGenerationChange?.(true);
-
-        // Show loading indicator
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .insertContent(loadingText)
-          .run();
-
-        try {
-          // Get yesterday's date and filename
-          const yesterdayDateStr = getYesterdayDateString();
-          const yesterdayFileName = getYesterdayMarkdownFileName();
-
-          // Get metadata from the getter function
-          const allFilesMetadata = getMetadata?.() || [];
-          const yesterdayFile = allFilesMetadata.find(
-            (file) => file.fileName === yesterdayFileName,
-          );
-
-          // Get yesterday's markdown content
-          let markdownContent = "";
-          if (yesterdayFile) {
-            const cachedContent = getContent?.(yesterdayFile.filePath);
-            if (cachedContent !== undefined) {
-              markdownContent = cachedContent;
-            } else {
-              const contentMap = await readMarkdownFilesContentByPaths([
-                yesterdayFile.filePath,
-              ]);
-              markdownContent = contentMap.get(yesterdayFile.filePath) ?? "";
-            }
-          }
-
-          // Get yesterday's commits
-          const yesterdayData = getCommitsForDate?.(yesterdayDateStr);
-          const yesterdayCommits = yesterdayData?.commits || [];
-
-          const { state } = editor;
-          const { doc } = state;
-          let loadingPos = -1;
-
-          doc.descendants((node, pos) => {
-            if (node.isText && node.text?.includes(loadingText)) {
-              loadingPos = pos;
-              return false;
-            }
-            return true;
-          });
-
-          if (loadingPos !== -1) {
-            editor
-              .chain()
-              .focus()
-              .deleteRange({
-                from: loadingPos,
-                to: loadingPos + loadingText.length,
-              })
-              .insertContent("## todo\n\n")
-              .run();
-          }
-
-          let buffer = "";
-          let flushTimer: number | null = null;
-          const flush = () => {
-            if (!buffer) return;
-            editor.chain().focus().insertContent(buffer).run();
-            buffer = "";
-          };
-          const scheduleFlush = () => {
-            if (flushTimer !== null) return;
-            flushTimer = window.setTimeout(() => {
-              flush();
-              flushTimer = null;
-            }, 60);
-          };
-
-          await streamYesterdaySummary(
-            markdownContent,
-            yesterdayCommits,
-            (delta) => {
-              buffer += delta;
-              scheduleFlush();
-            },
-          );
-
-          flush();
-          editor.chain().focus().insertContent("\n\n").run();
-
-          // Notify completion
-          onAIGenerationChange?.(false);
-        } catch (error) {
-          console.error("Error executing todos:", error);
-          const { state } = editor;
-          const { doc } = state;
-          let loadingPos = -1;
-
-          doc.descendants((node, pos) => {
-            if (node.isText && node.text?.includes(loadingText)) {
-              loadingPos = pos;
-              return false;
-            }
-            return true;
-          });
-
-          if (loadingPos !== -1) {
-            const errorMessage =
-              error instanceof Error
-                ? error.message
-                : "Failed to generate todos";
-            editor
-              .chain()
-              .focus()
-              .deleteRange({
-                from: loadingPos,
-                to: loadingPos + loadingText.length,
-              })
-              .insertContent(`❌ Error: ${errorMessage}`)
-              .run();
-          } else {
-            const errorMessage =
-              error instanceof Error
-                ? error.message
-                : "Failed to generate todos";
-            editor
-              .chain()
-              .focus()
-              .insertContent(`\n\n❌ Error: ${errorMessage}`)
-              .run();
-          }
-
-          onAIGenerationChange?.(false);
+  return {
+    getMetadata: () => {
+      const queries = queryClient.getQueriesData({
+        queryKey: markdownKeys.all,
+      });
+      for (const [key, data] of queries) {
+        if (key[1] === "metadata" && Array.isArray(data)) {
+          return data;
         }
-      },
+      }
+      return [];
     },
-  ];
+    getContent: (filePath: string) => {
+      return queryClient.getQueryData<string>(markdownKeys.content(filePath));
+    },
+    getCommitsForDate: (dateKey: string) => {
+      const repos =
+        queryClient.getQueryData<string[]>(gitKeys.repos(folderPath || "")) ||
+        [];
+      return queryClient.getQueryData(
+        gitKeys.commits(folderPath || "", dateKey, repos),
+      );
+    },
+  };
 }
 
-export const SlashCommand = Extension.create<SlashCommandOptions>({
-  name: "slashCommand",
+/**
+ * Get yesterday's note and commits, the input for the todos command
+ */
+export async function loadYesterdayContext({
+  getMetadata,
+  getContent,
+  getCommitsForDate,
+}: SlashCommandDataSources) {
+  const yesterdayDateStr = getYesterdayDateString();
+  const yesterdayFileName = getYesterdayMarkdownFileName();
 
-  addOptions() {
-    return {
-      onAIGenerationChange: undefined,
-      getMetadata: undefined,
-      getContent: undefined,
-    };
-  },
+  const allFilesMetadata = getMetadata?.() || [];
+  const yesterdayFile = allFilesMetadata.find(
+    (file) => file.fileName === yesterdayFileName,
+  );
 
-  addProseMirrorPlugins() {
-    return [
-      Suggestion({
-        editor: this.editor,
-        char: "/",
-        command: ({ editor, range, props }) => {
-          props.command({ editor, range });
-        },
-        items: ({ query }) => {
-          const items = getAICommands(
-            this.options.onAIGenerationChange,
-            this.options.getMetadata,
-            this.options.getContent,
-            this.options.getCommitsForDate,
-          );
-          return items.filter((item) =>
-            item.title.toLowerCase().startsWith(query.toLowerCase()),
-          );
-        },
-        render: () => {
-          let component: ReactRenderer<
-            { onKeyDown: (props: { event: KeyboardEvent }) => boolean },
-            SlashCommandProps
-          >;
-          let popup: TippyInstance[];
+  let markdownContent = "";
+  if (yesterdayFile) {
+    const cachedContent = getContent?.(yesterdayFile.filePath);
+    if (cachedContent !== undefined) {
+      markdownContent = cachedContent;
+    } else {
+      const contentMap = await readMarkdownFilesContentByPaths([
+        yesterdayFile.filePath,
+      ]);
+      markdownContent = contentMap.get(yesterdayFile.filePath) ?? "";
+    }
+  }
 
-          return {
-            onStart: (props) => {
-              component = new ReactRenderer(SlashCommandList, {
-                props,
-                editor: props.editor,
-              });
+  const yesterdayData = getCommitsForDate?.(yesterdayDateStr);
 
-              if (!props.clientRect) {
-                return;
-              }
-
-              popup = tippy("body", {
-                getReferenceClientRect: props.clientRect as () => DOMRect,
-                appendTo: () => document.body,
-                content: component.element,
-                showOnCreate: true,
-                interactive: true,
-                trigger: "manual",
-                placement: "bottom-start",
-                animation: "shift-away",
-                duration: [200, 150],
-                inertia: true,
-                maxWidth: "none",
-                arrow: false,
-                theme: "slash-command",
-              });
-            },
-            onUpdate(props) {
-              component.updateProps(props);
-
-              if (!props.clientRect) {
-                return;
-              }
-
-              popup[0].setProps({
-                getReferenceClientRect: props.clientRect as () => DOMRect,
-              });
-            },
-            onKeyDown(props) {
-              if (props.event.key === "Escape") {
-                popup[0].hide();
-                return true;
-              }
-
-              return component.ref?.onKeyDown(props) ?? false;
-            },
-            onExit() {
-              popup[0].destroy();
-              component.destroy();
-            },
-          };
-        },
-      } as SuggestionOptions),
-    ];
-  },
-});
+  return { markdownContent, commits: yesterdayData?.commits || [] };
+}
