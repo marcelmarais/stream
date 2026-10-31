@@ -37,6 +37,19 @@ export function getDateFromFilename(fileName: string): string | null {
 }
 
 /**
+ * Format a date as a day title, e.g. "Saturday 31 October"
+ */
+export function formatDayTitle(date: Date): string {
+  return date
+    .toLocaleDateString("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    })
+    .replace(",", "");
+}
+
+/**
  * Formats a date key string (YYYY-MM-DD) into a human-readable display format
  * Output format: "Weekday — Month day, year"
  *

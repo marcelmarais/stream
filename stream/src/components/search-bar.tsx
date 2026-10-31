@@ -1,14 +1,8 @@
 "use client";
 
-import {
-  CircleNotchIcon,
-  DotIcon,
-  FileTextIcon,
-  MagnifyingGlassIcon,
-} from "@phosphor-icons/react";
 import React, { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -75,132 +69,100 @@ export function SearchBar({
       onOpenChange={onOpenChange}
       title="Search Markdown Files"
       description="Search through your markdown files"
-      className="max-w-3xl"
-      shouldFilter={false}
+      className="sm:max-w-xl"
     >
-      <CommandInput
-        placeholder="Search markdown files..."
-        value={searchQuery}
-        onValueChange={setSearchQuery}
-        className="border-0"
-      />
+      <Command shouldFilter={false}>
+        <CommandInput
+          placeholder="search notes"
+          value={searchQuery}
+          onValueChange={setSearchQuery}
+        />
 
-      <div
-        className={cn(
-          "flex h-8 items-center px-4",
-          searchQuery && deferredResults && "border-b",
-        )}
-      >
         {searchQuery && deferredResults && (
-          <div className="flex items-center text-muted-foreground text-xs">
-            <span className={cn(isStale && "opacity-50")}>
+          <div
+            className={cn(
+              "flex h-7 items-center gap-1.5 border-b px-3 text-muted-foreground text-xs",
+              isStale && "opacity-50",
+            )}
+          >
+            <span>
               {deferredResults.totalResults}{" "}
               {deferredResults.totalResults === 1 ? "result" : "results"}
             </span>
-            <DotIcon className="h-6 w-6" />
-            <span className={cn(isStale && "opacity-50")}>
+            <span aria-hidden="true">·</span>
+            <span>
               {fileCount} {fileCount === 1 ? "file" : "files"}
             </span>
-            <DotIcon className="h-6 w-6" />
-            <span className={cn(isStale && "opacity-50")}>
-              {deferredResults.searchTimeMs}ms
-            </span>
-          </div>
-        )}
-      </div>
-
-      <CommandList
-        ref={scrollRef}
-        className={cn(
-          "h-[400px] max-h-[70vh] transition-opacity duration-200",
-          isStale && "opacity-60",
-        )}
-      >
-        {isLoading && (
-          <div className="flex h-[400px] items-center justify-center text-muted-foreground">
-            <CircleNotchIcon
-              className="mr-2 h-5 w-5 animate-spin"
-              weight="bold"
-            />
-            <span>Searching...</span>
+            <span aria-hidden="true">·</span>
+            <span>{deferredResults.searchTimeMs}ms</span>
           </div>
         )}
 
-        {!isLoading &&
-          !error &&
-          searchQuery &&
-          deferredResults?.totalResults === 0 && (
-            <CommandEmpty>
-              <div className="flex h-[350px] flex-col items-center justify-center gap-3">
-                <MagnifyingGlassIcon
-                  className="h-10 w-10 text-muted-foreground opacity-50"
-                  weight="duotone"
-                />
-                <p className="text-muted-foreground text-sm">
-                  No results found for "{searchQuery}"
-                </p>
-              </div>
-            </CommandEmpty>
+        <CommandList
+          ref={scrollRef}
+          className={cn(
+            "h-[360px] max-h-[60vh] transition-opacity duration-200",
+            isStale && "opacity-60",
+          )}
+        >
+          {isLoading && (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Searching...
+            </div>
           )}
 
-        {!searchQuery && !isLoading && (
-          <div className="flex h-[350px] flex-col items-center justify-center gap-3">
-            <MagnifyingGlassIcon
-              className="h-10 w-10 text-muted-foreground opacity-50"
-              weight="duotone"
-            />
-            <p className="text-muted-foreground text-sm">
-              Start typing to search your markdown files
-            </p>
-          </div>
-        )}
+          {!isLoading &&
+            !error &&
+            searchQuery &&
+            deferredResults?.totalResults === 0 && (
+              <CommandEmpty>No results for "{searchQuery}"</CommandEmpty>
+            )}
 
-        {!isLoading &&
-          deferredResults &&
-          deferredResults.totalResults > 0 &&
-          Object.entries(groupedResults).map(([filePath, matches]) => {
-            const fileName = filePath.split("/").pop() || filePath;
+          {!searchQuery && !isLoading && (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Start typing to search your notes
+            </div>
+          )}
 
-            return (
-              <CommandGroup
-                key={filePath}
-                heading={
-                  <div className="flex w-full items-center">
-                    <Badge
-                      variant="default"
-                      className="cursor-pointer truncate font-medium"
-                      onClick={() =>
-                        handleFileClick(filePath, matches[0].lineNumber)
-                      }
-                    >
-                      <FileTextIcon className="h-4 w-4" />
-                      {fileName}
-                    </Badge>
-                    {matches.length > 1 && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-auto font-normal text-xs"
+          {!isLoading &&
+            deferredResults &&
+            deferredResults.totalResults > 0 &&
+            Object.entries(groupedResults).map(([filePath, matches]) => {
+              const fileName = filePath.split("/").pop() || filePath;
+
+              return (
+                <CommandGroup
+                  key={filePath}
+                  heading={
+                    <div className="flex w-full items-center justify-between text-muted-foreground">
+                      <button
+                        type="button"
+                        className="truncate hover:text-foreground"
+                        onClick={() =>
+                          handleFileClick(filePath, matches[0].lineNumber)
+                        }
                       >
-                        {matches.length}
-                      </Badge>
-                    )}
-                  </div>
-                }
-              >
-                {matches.map((match, idx) => (
-                  <MatchItem
-                    key={`${match.filePath}-${match.lineNumber}-${idx}`}
-                    match={match}
-                    idx={idx}
-                    onClick={() =>
-                      handleFileClick(match.filePath, match.lineNumber)
-                    }
-                  />
-                ))}
-              </CommandGroup>
-            );
-          })}
-      </CommandList>
+                        {fileName}
+                      </button>
+                      {matches.length > 1 && <span>{matches.length}</span>}
+                    </div>
+                  }
+                >
+                  {matches.map((match, idx) => (
+                    <MatchItem
+                      key={`${match.filePath}-${match.lineNumber}-${idx}`}
+                      match={match}
+                      idx={idx}
+                      onClick={() =>
+                        handleFileClick(match.filePath, match.lineNumber)
+                      }
+                    />
+                  ))}
+                </CommandGroup>
+              );
+            })}
+        </CommandList>
+      </Command>
     </CommandDialog>
   );
 }
@@ -225,11 +187,11 @@ const MatchItem = React.memo(
         key={`${match.filePath}-${match.lineNumber}-${idx}`}
         value={`${match.filePath}-${match.lineNumber}-${idx}`}
         onSelect={onClick}
-        className="mx-0 flex flex-col items-start gap-2 px-0 py-3"
+        className="px-2 py-1.5"
       >
-        <p className="text-xs leading-relaxed">
+        <span className="min-w-0 font-sans text-[13.5px] text-body leading-snug">
           {highlightMatch(match.contextSnippet, match.matchRanges)}
-        </p>
+        </span>
       </CommandItem>
     );
   },
@@ -267,10 +229,7 @@ function highlightMatch(text: string, ranges: Array<[number, number]>) {
     }
 
     parts.push(
-      <mark
-        key={`match-${i}`}
-        className="rounded bg-yellow-500/30 px-0.5 text-yellow-200"
-      >
+      <mark key={`match-${i}`} className="bg-primary text-primary-foreground">
         {text.slice(start, end)}
       </mark>,
     );

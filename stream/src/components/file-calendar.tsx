@@ -1,4 +1,3 @@
-import { CalendarDotsIcon } from "@phosphor-icons/react";
 import { type ComponentProps, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
@@ -33,14 +32,14 @@ function CustomDayButton({
       variant="ghost"
       size="icon"
       className={cn(
-        "relative h-9 w-9 p-0 font-normal",
+        "relative size-8 p-0 font-normal",
         modifiers.selected &&
           "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
         modifiers.today && "bg-accent",
       )}
       {...props}
     >
-      <span className={cn(!hasFile && "text-muted-foreground opacity-40")}>
+      <span className={cn(!hasFile && "text-muted-foreground")}>
         {day.date.getDate()}
       </span>
       {hasFile && (
@@ -137,19 +136,19 @@ export function FileCalendar({
   return (
     <>
       <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={isLoadingMetadata}
-            title="Open calendar"
-            className="no-drag h-8 w-8 p-0"
-          >
-            <CalendarDotsIcon className="size-4" />
-          </Button>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              disabled={isLoadingMetadata}
+              title="Open calendar"
+              className="no-drag h-6 hover:text-foreground disabled:opacity-50"
+            />
+          }
+        >
+          calendar
         </PopoverTrigger>
-        <PopoverContent className="z-[70] mt-2 w-auto p-0" align="end">
+        <PopoverContent className="z-[70] w-auto gap-0 p-0" align="end">
           <Calendar
             mode="single"
             onSelect={handleDateSelect}
@@ -160,7 +159,7 @@ export function FileCalendar({
             }}
             autoFocus
           />
-          <div className="border-t p-3">
+          <div className="border-t p-2">
             <Button
               type="button"
               size="sm"

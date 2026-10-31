@@ -1,20 +1,12 @@
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
+import { GeistSerif } from "geist/font/serif/variable";
 import type { Metadata } from "next";
-import { Fira_Code, Inter } from "next/font/google";
 import { AutoUpdater } from "@/components/auto-updater";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
-
-const firaCode = Fira_Code({
-  variable: "--font-fira-code",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Stream",
@@ -29,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${firaCode.variable} optimizeLegibility antialiased`}
+        className={`${GeistSans.variable} ${GeistMono.variable} ${GeistSerif.variable} optimizeLegibility antialiased`}
       >
         <QueryProvider>
           <ThemeProvider

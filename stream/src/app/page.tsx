@@ -1,6 +1,5 @@
 "use client";
 
-import { FolderIcon } from "@phosphor-icons/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Titlebar } from "@/components/titlebar-header";
@@ -55,7 +54,7 @@ function HomeContent() {
     return (
       <>
         <Titlebar isLoading={true} />
-        <div className="flex min-h-screen items-center justify-center pt-10">
+        <div className="flex min-h-screen items-center justify-center pt-9">
           <div className="animate-pulse text-muted-foreground">Loading...</div>
         </div>
       </>
@@ -65,13 +64,13 @@ function HomeContent() {
   return (
     <>
       <Titlebar isLoading={false} />
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 pt-12">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 pt-9">
         <div className="w-full max-w-md space-y-8 text-center">
           <div className="space-y-2">
-            <h1 className="cursor-default select-none font-semibold text-2xl text-foreground tracking-tight">
+            <h1 className="cursor-default select-none font-serif text-[32px] text-heading">
               stream.
             </h1>
-            <p className="cursor-default select-none text-muted-foreground text-sm">
+            <p className="cursor-default select-none text-muted-foreground">
               Select a folder to get started
             </p>
           </div>
@@ -95,7 +94,7 @@ function HomeContent() {
                     console.error("Error opening folder picker:", error);
                   }
                 }}
-                className="w-full rounded-md bg-primary px-4 py-3 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
+                className="h-8 w-full rounded-sm bg-primary px-3 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/80"
               >
                 Open Folder
               </button>
@@ -120,13 +119,12 @@ function HomeContent() {
                       console.error("Error opening folder picker:", error);
                     }
                   }}
-                  className="h-auto w-full cursor-pointer justify-start rounded-md border border-border bg-muted/50 px-3 py-3 text-muted-foreground text-sm transition-colors hover:bg-muted/70"
+                  className="h-auto w-full justify-start border-well-rule bg-well px-3 py-2.5 text-muted-foreground"
                 >
-                  <div className="flex w-full items-center gap-3">
-                    <FolderIcon className="size-5 flex-shrink-0" />
-                    <div className="flex flex-1 flex-col items-center">
+                  <div className="flex w-full min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 flex-1 flex-col items-center">
                       <div
-                        className="truncate font-mono text-foreground"
+                        className="max-w-full truncate text-foreground"
                         title={selectedFolder}
                       >
                         {selectedFolder}
@@ -155,7 +153,7 @@ export default function Home() {
       fallback={
         <>
           <Titlebar isLoading={true} />
-          <div className="flex min-h-screen items-center justify-center pt-10">
+          <div className="flex min-h-screen items-center justify-center pt-9">
             <div className="animate-pulse text-muted-foreground">
               Loading...
             </div>
