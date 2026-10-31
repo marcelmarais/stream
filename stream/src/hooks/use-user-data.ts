@@ -5,77 +5,11 @@ import {
   getSelectedFolder,
   setSelectedFolder,
 } from "@/ipc/selected-folder";
-import {
-  getApiKey as getApiKeyIPC,
-  removeApiKey as removeApiKeyIPC,
-  setApiKey as setApiKeyIPC,
-} from "@/ipc/settings";
 
 export const userDataKeys = {
   all: ["userData"] as const,
-  apiKey: () => [...userDataKeys.all, "apiKey"] as const,
   selectedFolder: () => [...userDataKeys.all, "selectedFolder"] as const,
 };
-
-/**
- * Hook to get the stored API key
- */
-export function useApiKey() {
-  return useQuery({
-    queryKey: userDataKeys.apiKey(),
-    queryFn: async () => {
-      const key = await getApiKeyIPC();
-      return key;
-    },
-    staleTime: 60000, // Consider fresh for 1 minute
-  });
-}
-
-/**
- * Hook to save/update the API key
- */
-export function useSetApiKey() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (apiKey: string) => {
-      if (!apiKey.trim()) {
-        throw new Error("Please enter an API key");
-      }
-      await setApiKeyIPC(apiKey.trim());
-      return apiKey.trim();
-    },
-    onSuccess: (apiKey) => {
-      queryClient.setQueryData(userDataKeys.apiKey(), apiKey);
-      toast.success("API key saved successfully");
-    },
-    onError: (error: Error) => {
-      console.error("Error saving API key:", error);
-      toast.error(error.message || "Failed to save API key");
-    },
-  });
-}
-
-/**
- * Hook to remove the API key
- */
-export function useRemoveApiKey() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async () => {
-      await removeApiKeyIPC();
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(userDataKeys.apiKey(), null);
-      toast.success("API key removed");
-    },
-    onError: (error: Error) => {
-      console.error("Error removing API key:", error);
-      toast.error("Failed to remove API key");
-    },
-  });
-}
 
 /**
  * Hook to get the selected folder
