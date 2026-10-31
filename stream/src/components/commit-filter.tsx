@@ -1,6 +1,6 @@
 "use client";
 
-import { SlidersHorizontalIcon, XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@phosphor-icons/react";
 import { useCallback, useId, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,53 +111,47 @@ export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
 
   if (commits.length === 0) {
     return (
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="no-drag h-8 w-8 p-0"
-          disabled
-        >
-          <SlidersHorizontalIcon className="h-4 w-4" />
-        </Button>
-      </div>
+      <button type="button" className="no-drag h-6 opacity-50" disabled>
+        filter
+      </button>
     );
   }
 
   return (
     <div className="flex items-center gap-2">
       <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="no-drag relative h-8 w-8 p-0"
-            title="Filter commits"
-          >
-            <SlidersHorizontalIcon className="h-4 w-4" />
-            {hasActiveFilters && (
-              <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
-            )}
-          </Button>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              className="no-drag relative h-6 hover:text-foreground"
+              title="Filter commits"
+            />
+          }
+        >
+          filter
+          {hasActiveFilters && (
+            <span className="-right-1.5 absolute top-1 size-1 bg-primary" />
+          )}
         </PopoverTrigger>
-        <PopoverContent className="z-[70] mt-2 w-96 space-y-4" align="end">
+        <PopoverContent className="z-[70] w-80 gap-3" align="end">
           {/* Header */}
           <div>
-            <h3 className="font-medium text-sm">Filter Commits</h3>
+            <h3 className="font-semibold text-foreground">Filter commits</h3>
           </div>
 
           {/* Search Input */}
           <div>
             <label
               htmlFor={searchId}
-              className="mb-2 block font-medium text-xs"
+              className="mb-1.5 block text-muted-foreground text-xs"
             >
               Search
             </label>
             <Input
               id={searchId}
               type="text"
-              placeholder="Search messages, authors, or repos..."
+              placeholder="messages, authors or repos"
               value={filters.searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full text-xs"
@@ -169,13 +163,17 @@ export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
             <div>
               <label
                 htmlFor={authorSelectId}
-                className="mb-2 block font-medium text-xs"
+                className="mb-1.5 block text-muted-foreground text-xs"
               >
-                Author ({uniqueAuthors.length} available)
+                Author
               </label>
-              <Select onValueChange={handleAuthorChange}>
+              <Select
+                onValueChange={(author) => {
+                  if (typeof author === "string") handleAuthorChange(author);
+                }}
+              >
                 <SelectTrigger id={authorSelectId} className="w-full">
-                  <SelectValue placeholder="Select author..." />
+                  <SelectValue placeholder="Select author" />
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px] overflow-y-auto">
                   {uniqueAuthors.map((author) => (
@@ -219,13 +217,17 @@ export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
             <div>
               <label
                 htmlFor={repoSelectId}
-                className="mb-2 block font-medium text-xs"
+                className="mb-1.5 block text-muted-foreground text-xs"
               >
-                Repository ({uniqueRepos.length} available)
+                Repository
               </label>
-              <Select onValueChange={handleRepoChange}>
+              <Select
+                onValueChange={(repo) => {
+                  if (typeof repo === "string") handleRepoChange(repo);
+                }}
+              >
                 <SelectTrigger id={repoSelectId} className="w-full">
-                  <SelectValue placeholder="Select repository..." />
+                  <SelectValue placeholder="Select repository" />
                 </SelectTrigger>
                 <SelectContent>
                   {uniqueRepos.map((repo) => (
@@ -268,14 +270,14 @@ export function CommitFilter({ showBadges = true }: { showBadges?: boolean }) {
 
           {/* Clear all filters button */}
           {hasActiveFilters && (
-            <div className="border-t pt-4">
+            <div className="border-t pt-3">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleClearFilters}
                 className="w-full"
               >
-                Clear All Filters
+                Clear filters
               </Button>
             </div>
           )}

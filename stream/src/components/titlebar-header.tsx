@@ -41,84 +41,64 @@ export function Titlebar({
     }
   }, []);
 
-  const titlebarClasses = [
-    "drag",
-    "fixed",
-    "h-14",
-    "inset-x-0",
-    "overflow-visible",
-    "top-0",
-    "z-40",
-  ].join(" ");
-
   const handleClose = () => appWindow?.close();
   const handleMinimize = () => appWindow?.minimize();
   const handleMaximize = () => appWindow?.toggleMaximize();
 
   return (
-    <div data-tauri-drag-region className={titlebarClasses}>
-      <div
-        aria-hidden="true"
-        data-tauri-drag-region
-        className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-background/55 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)] supports-[backdrop-filter]:bg-background/35"
-      />
+    <div
+      data-tauri-drag-region
+      className="drag fixed inset-x-0 top-0 z-40 flex h-9 items-center gap-4 border-b bg-background px-3"
+    >
       <div
         data-tauri-drag-region
-        className="drag relative z-10 flex h-full w-full items-center gap-2 px-4 pt-1"
+        className="drag flex w-[clamp(6rem,24vw,10rem)] shrink-0 items-center gap-2"
       >
-        {/* Left section - traffic lights and back button */}
-        <div
-          data-tauri-drag-region
-          className="drag flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center gap-2"
-        >
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Close window"
-              className="no-drag h-2.5 w-2.5 rounded-full bg-red-500"
-              onClick={handleClose}
-            />
-            <button
-              type="button"
-              aria-label="Minimize window"
-              className="no-drag h-2.5 w-2.5 rounded-full bg-yellow-500"
-              onClick={handleMinimize}
-            />
-            <button
-              type="button"
-              aria-label="Maximize window"
-              className="no-drag h-2.5 w-2.5 rounded-full bg-green-500"
-              onClick={handleMaximize}
-            />
-          </div>
-          {onBack && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="no-drag text-xs"
-              onClick={onBack}
-              title={backLabel || "Back"}
-            >
-              <ArrowLeft className="h-4 w-4" weight="bold" />
-            </Button>
-          )}
+        <div className="group flex items-center gap-[7px]">
+          <button
+            type="button"
+            aria-label="Close window"
+            className="no-drag size-[9px] rounded-[2px] bg-rail group-hover:bg-red-500"
+            onClick={handleClose}
+          />
+          <button
+            type="button"
+            aria-label="Minimize window"
+            className="no-drag size-[9px] rounded-[2px] bg-rail group-hover:bg-yellow-500"
+            onClick={handleMinimize}
+          />
+          <button
+            type="button"
+            aria-label="Maximize window"
+            className="no-drag size-[9px] rounded-[2px] bg-rail group-hover:bg-green-500"
+            onClick={handleMaximize}
+          />
         </div>
+        {onBack && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="no-drag"
+            onClick={onBack}
+            title={backLabel || "Back"}
+          >
+            <ArrowLeft />
+          </Button>
+        )}
+      </div>
 
-        {/* Center section - search bar */}
-        <div
-          data-tauri-drag-region
-          className="drag flex min-w-0 flex-1 items-center justify-center"
-        >
-          {centerContent && !isLoading && centerContent}
-        </div>
+      <div
+        data-tauri-drag-region
+        className="drag flex min-w-0 flex-1 items-center justify-center"
+      >
+        {centerContent && !isLoading && centerContent}
+      </div>
 
-        {/* Right section - action buttons */}
-        <div
-          data-tauri-drag-region
-          className="drag flex w-[clamp(6rem,24vw,12.5rem)] flex-shrink-0 items-center justify-end"
-        >
-          {actions && !isLoading && actions}
-        </div>
+      <div
+        data-tauri-drag-region
+        className="drag flex w-[clamp(6rem,24vw,10rem)] shrink-0 items-center justify-end"
+      >
+        {actions && !isLoading && actions}
       </div>
     </div>
   );

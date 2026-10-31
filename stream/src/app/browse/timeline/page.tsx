@@ -1,6 +1,5 @@
 "use client";
 
-import { CalendarPlusIcon, FileTextIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { throttle } from "lodash-es";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -197,7 +196,6 @@ function TimelineView({ folderPath }: { folderPath: string }) {
   const renderItem = useCallback(
     (index: number) => {
       const file = allFilesMetadata[index];
-      const isLastFile = index === allFilesMetadata.length - 1;
       if (!file) return null;
 
       return (
@@ -211,7 +209,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
           }
           isFocused={focusedFile?.filePath === file.filePath}
           onEditorFocus={() => setActiveEditingFile(file)}
-          showSeparator={!isLastFile}
+          isLast={index === allFilesMetadata.length - 1}
         />
       );
     },
@@ -249,12 +247,12 @@ function TimelineView({ folderPath }: { folderPath: string }) {
       >
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
-          <div className="text-muted-foreground text-sm">Loading...</div>
+          <div className="text-muted-foreground">Loading...</div>
         </div>
       </div>
 
       {!isLoadingMetadata && allFilesMetadata.length > 0 && (
-        <div className="mx-auto mt-12 min-h-0 w-full max-w-4xl flex-1 px-6">
+        <div className="mx-auto mt-9 min-h-0 w-full max-w-2xl flex-1">
           <Virtuoso
             ref={virtuosoRef}
             totalCount={allFilesMetadata.length}
@@ -267,7 +265,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
       )}
 
       {!isLoadingMetadata && allFilesMetadata.length === 0 && (
-        <div className="mt-12">
+        <div className="mt-9">
           <EmptyState folderPath={folderPath} />
         </div>
       )}
@@ -300,36 +298,20 @@ function EmptyState({ folderPath }: { folderPath: string }) {
 
   return (
     <div className="flex flex-1 items-center justify-center p-8">
-      <div className="flex max-w-md flex-col items-center gap-6 text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-          <FileTextIcon
-            className="h-10 w-10 text-muted-foreground"
-            weight="duotone"
-            aria-hidden="true"
-          />
-        </div>
-
-        <div className="flex max-w-[300px] flex-col gap-2">
-          <h3 className="font-semibold text-foreground text-xl">
-            No markdown files found
-          </h3>
-          <p className="text-muted-foreground text-sm">
-            No files matching the{" "}
-            <code className="bg-muted px-0.5 font-mono text-foreground">
-              YYYY-MM-DD.md
-            </code>{" "}
-            format were found in the selected folder.
-          </p>
-        </div>
-
+      <div className="flex max-w-[300px] flex-col items-center gap-4 text-center">
+        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
+          No notes yet
+        </h2>
+        <p className="text-muted-foreground">
+          Files named{" "}
+          <code className="bg-muted px-1 text-foreground">YYYY-MM-DD.md</code>{" "}
+          in this folder show up here.
+        </p>
         <Button
           onClick={() => createToday(folderPath)}
           disabled={creatingToday}
-          size="lg"
-          className="min-w-[140px] gap-2"
         >
-          <CalendarPlusIcon className="h-5 w-5" weight="bold" />
-          {creatingToday ? "Creating..." : "Create Today"}
+          {creatingToday ? "Creating..." : "Create today's note"}
         </Button>
       </div>
     </div>

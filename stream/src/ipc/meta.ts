@@ -1,5 +1,4 @@
 import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import type { Habit } from "@/ipc/habit-reader";
 
 export interface LocationMeta {
   country: string;
@@ -29,10 +28,11 @@ export interface StreamMeta {
     lastLocation?: LocationMeta;
   };
   files: Record<string, FileMeta>;
-  habits: {
-    items: Habit[];
-    extra?: Record<string, unknown>;
-  };
+  /**
+   * Left by versions with habit tracking. Carried through untouched so
+   * rewriting meta.json doesn't delete it.
+   */
+  habits?: unknown;
   extra?: Record<string, unknown>;
 }
 
@@ -67,7 +67,6 @@ function createDefaultMeta(): StreamMeta {
     schemaVersion: 1,
     updatedAt: nowMs(),
     files: {},
-    habits: { items: [] },
   };
 }
 
@@ -120,15 +119,7 @@ export async function readMeta(folderPath: string): Promise<StreamMeta> {
       globals: parsed.globals,
       files:
         parsed.files && typeof parsed.files === "object" ? parsed.files : {},
-      habits:
-        parsed.habits && typeof parsed.habits === "object"
-          ? {
-              items: Array.isArray(parsed.habits.items)
-                ? parsed.habits.items
-                : [],
-              extra: parsed.habits.extra,
-            }
-          : { items: [] },
+      habits: parsed.habits,
       extra: parsed.extra,
     };
   } catch (error) {
@@ -158,7 +149,6 @@ export async function updateMeta(
       schemaVersion: 1,
       updatedAt: nowMs(),
       files: next.files || {},
-      habits: next.habits || { items: [] },
     };
     await writeMeta(folderPath, stamped);
     return stamped;

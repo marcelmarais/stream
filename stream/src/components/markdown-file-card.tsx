@@ -1,23 +1,15 @@
-import {
-  CalendarPlusIcon,
-  CopyIcon,
-  MagnifyingGlassIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
+import { CopyIcon, TrashIcon } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import CommitFilter from "@/components/commit-filter";
-import CommitOverlay from "@/components/commit-overlay";
-import { CreateHabitDialog } from "@/components/create-habit-dialog";
+import CommitPanel from "@/components/commit-panel";
 import { DateHeader } from "@/components/date-header";
 import { FileCalendar } from "@/components/file-calendar";
 import type { Footer as FooterComponent } from "@/components/footer";
-import { HabitOverlay } from "@/components/habit-overlay";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -33,7 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { useCommitsForDate } from "@/hooks/use-git-queries";
 import {
   useCreateTodayFile,
@@ -44,7 +35,7 @@ import {
 import { filterCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
-import { useUserStore } from "@/stores/user-store";
+import { cn } from "@/lib/utils";
 
 const commitMountTransition = { duration: 0.18, ease: "easeOut" } as const;
 
@@ -93,41 +84,38 @@ export function FileName({
 
   return (
     <>
-      <div className="group relative flex items-center justify-end bg-transparent">
-        <div className="-top-8 pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-40% via-background/30 to-80% to-background" />
-
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
+      <ContextMenu>
+        <ContextMenuTrigger
+          render={
+            <button
+              type="button"
               onClick={handleCopyToClipboard}
-              className="relative z-10 flex items-center justify-end gap-2 font-base text-muted-foreground text-sm transition-colors hover:bg-transparent hover:text-primary"
-            >
-              <CopyIcon className="size-4 opacity-0 transition-opacity group-hover:opacity-100" />
-              {metadata.fileName}
-            </Button>
-          </ContextMenuTrigger>
-          <ContextMenuContent>
-            <ContextMenuItem
-              onClick={handleCopyToClipboard}
-              disabled={isDeleting}
-            >
-              <CopyIcon className="size-4" />
-              Copy content
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-            <ContextMenuItem
-              onClick={() => setDeleteDialogOpen(true)}
-              disabled={isDeleting}
-              className="text-destructive focus:text-destructive"
-            >
-              <TrashIcon className="size-4 text-destructive" />
-              Delete file
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      </div>
+              title="Copy note"
+              className="hover:text-foreground"
+            />
+          }
+        >
+          {metadata.fileName}
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            onClick={handleCopyToClipboard}
+            disabled={isDeleting}
+          >
+            <CopyIcon />
+            Copy content
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => setDeleteDialogOpen(true)}
+            disabled={isDeleting}
+          >
+            <TrashIcon />
+            Delete file
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
@@ -135,10 +123,8 @@ export function FileName({
             <DialogTitle>Delete file?</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete{" "}
-              <span className="font-medium text-primary">
-                {metadata.fileName}
-              </span>
-              ? This action cannot be undone.
+              <span className="text-foreground">{metadata.fileName}</span>? This
+              action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -171,7 +157,7 @@ interface FileCardProps {
   onToggleFocus: () => void;
   isFocused: boolean;
   onEditorFocus: () => void;
-  showSeparator: boolean;
+  isLast: boolean;
 }
 
 export function FileCard({
@@ -180,12 +166,8 @@ export function FileCard({
   onToggleFocus,
   isFocused = false,
   onEditorFocus,
-  showSeparator = true,
+  isLast = false,
 }: FileCardProps) {
-  const [createHabitOpen, setCreateHabitOpen] = useState(false);
-  const activeEditingFile = useUserStore((state) => state.activeEditingFile);
-  const isEditorFocused = activeEditingFile?.filePath === file.filePath;
-
   const {
     content,
     isLoading,
@@ -207,71 +189,42 @@ export function FileCard({
     saveContentDebounced(newContent);
   };
 
-  if (isLoading) {
-    return (
-      <div className="mt-4 flex items-center justify-center pb-8">
-        <div className="text-center">
-          <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
-          <div className="text-muted-foreground text-sm">Loading...</div>
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="mt-8 px-4">
-      <DateHeader
-        fileMetadata={file}
-        isFocused={isFocused}
-        onToggleFocus={onToggleFocus}
-        folderPath={folderPath}
+    <article className={cn("relative pt-6 pr-7 pb-3 pl-12", isLast && "pb-12")}>
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-6 w-px bg-rail"
       />
+      {isLoading ? (
+        <div className="py-8 text-muted-foreground">Loading...</div>
+      ) : (
+        <>
+          <DateHeader
+            fileMetadata={file}
+            isFocused={isFocused}
+            onToggleFocus={onToggleFocus}
+            folderPath={folderPath}
+            fileName={
+              <FileName
+                content={content}
+                metadata={file}
+                folderPath={folderPath}
+              />
+            }
+          />
 
-      <MarkdownEditor
-        value={content}
-        onChange={handleContentChange}
-        onSave={saveContentImmediate}
-        onFocus={onEditorFocus}
-        isEditable={!isFocused}
-      />
+          <MarkdownEditor
+            value={content}
+            onChange={handleContentChange}
+            onSave={saveContentImmediate}
+            onFocus={onEditorFocus}
+            isEditable={!isFocused}
+          />
 
-      <FileName content={content} metadata={file} folderPath={folderPath} />
-
-      <div className="mt-2 mb-4">
-        <HabitOverlay
-          date={file.dateFromFilename}
-          onCreateHabit={() => setCreateHabitOpen(true)}
-          isFocused={isEditorFocused}
-        />
-      </div>
-
-      <AnimatePresence initial={false}>
-        {hasCommits && (
-          <motion.div
-            key="commit-overlay"
-            layout
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={commitMountTransition}
-            className="mb-6"
-          >
-            <CommitOverlay
-              commits={commits}
-              date={file.createdAt}
-              className="w-full"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {showSeparator && <Separator className="mt-2" />}
-      {/* makes the last file look less awkward / squished */}
-      {!showSeparator && <div className="pb-10" />}
-
-      <CreateHabitDialog
-        open={createHabitOpen}
-        onOpenChange={setCreateHabitOpen}
-      />
-    </div>
+          {hasCommits && <CommitPanel commits={commits} />}
+        </>
+      )}
+    </article>
   );
 }
 
@@ -334,21 +287,18 @@ export function SearchButton({
   };
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="no-drag h-8 min-w-8 max-w-[280px] flex-1 shrink justify-start gap-2 overflow-hidden rounded-full border-border/30 bg-muted/30 px-3 font-normal text-xs backdrop-blur-sm max-[520px]:max-w-8 max-[520px]:justify-center max-[520px]:px-0"
+    <button
+      type="button"
+      className="no-drag flex h-6 w-full max-w-[300px] items-center justify-between rounded-sm bg-card px-2 text-muted-foreground hover:text-foreground"
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       title="Search markdown files (Cmd/Ctrl+F)"
     >
-      <MagnifyingGlassIcon className="size-4 flex-shrink-0" weight="bold" />
-      <span className="truncate text-muted-foreground max-[520px]:hidden">
-        Search…
-      </span>
-    </Button>
+      <span>search</span>
+      <span className="text-faint">⌘F</span>
+    </button>
   );
 }
 
@@ -370,47 +320,20 @@ export function HeaderActions({
   );
 
   return (
-    <ButtonGroup className="no-drag [&_button]:no-drag flex-shrink-0 rounded-md border-border/30 bg-muted/30 backdrop-blur-sm">
+    <div className="no-drag flex shrink-0 items-center gap-3 text-muted-foreground">
       {!todayFileExists && (
-        <Button
+        <button
           type="button"
-          size="sm"
-          variant="ghost"
-          className="h-8 w-8 p-0"
+          className="no-drag h-6 hover:text-foreground disabled:opacity-50"
           onClick={async () => await createToday(folderPath)}
           disabled={isLoadingMetadata || Boolean(creatingToday)}
           title="Create today's file"
         >
-          <CalendarPlusIcon className="size-4" />
-        </Button>
+          today
+        </button>
       )}
       <CommitFilter showBadges={false} />
       <FileCalendar folderPath={folderPath} onScrollToDate={onScrollToDate} />
-    </ButtonGroup>
-  );
-}
-
-// Legacy Header component for backwards compatibility
-export function Header({
-  onScrollToDate,
-  folderPath,
-  showSearch,
-  setShowSearch,
-}: {
-  onScrollToDate?: (date: Date) => void;
-  folderPath: string;
-  showSearch: boolean;
-  setShowSearch: (show: boolean) => void;
-}) {
-  return (
-    <div className="!bg-transparent flex w-full items-center justify-end gap-2">
-      <SearchButton showSearch={showSearch} setShowSearch={setShowSearch} />
-      {onScrollToDate && (
-        <HeaderActions
-          onScrollToDate={onScrollToDate}
-          folderPath={folderPath}
-        />
-      )}
     </div>
   );
 }
@@ -430,8 +353,6 @@ export function FocusedFileOverlay({
   onEditorFocus,
   folderPath,
 }: FocusedFileOverlayProps) {
-  const [createHabitOpen, setCreateHabitOpen] = useState(false);
-
   const {
     content,
     updateContentOptimistically,
@@ -458,70 +379,40 @@ export function FocusedFileOverlay({
       transition={commitMountTransition}
       className="fixed inset-0 z-50 flex flex-col bg-background"
     >
-      <div className="mx-auto w-full max-w-4xl flex-1 overflow-auto px-10 pt-16">
-        <DateHeader
-          fileMetadata={file}
-          isFocused={true}
-          onToggleFocus={onClose}
-          folderPath={folderPath}
-        />
-
-        <MarkdownEditor
-          value={content}
-          onChange={handleContentChange}
-          onSave={saveContentImmediate}
-          onFocus={onEditorFocus || (() => {})}
-          autoFocus={true}
-          isEditable={true}
-        />
-      </div>
-      <motion.div
-        layout
-        className="flex-shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-      >
-        <motion.div layout className="mx-auto w-full max-w-4xl px-6 py-6">
-          <FileName
-            content={content}
-            metadata={file}
+      <div className="mx-auto w-full max-w-2xl flex-1 overflow-auto">
+        <article className="relative min-h-full pt-10 pr-7 pb-3 pl-12">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-6 w-px bg-rail"
+          />
+          <DateHeader
+            fileMetadata={file}
+            isFocused={true}
+            onToggleFocus={onClose}
             folderPath={folderPath}
-            onDelete={onClose}
+            fileName={
+              <FileName
+                content={content}
+                metadata={file}
+                folderPath={folderPath}
+                onDelete={onClose}
+              />
+            }
           />
 
-          <div className="mt-4">
-            <HabitOverlay
-              date={file.dateFromFilename}
-              onCreateHabit={() => setCreateHabitOpen(true)}
-              isFocused={true}
-            />
-          </div>
+          <MarkdownEditor
+            value={content}
+            onChange={handleContentChange}
+            onSave={saveContentImmediate}
+            onFocus={onEditorFocus || (() => {})}
+            autoFocus={true}
+            isEditable={true}
+          />
 
-          <AnimatePresence>
-            {commits.length > 0 && (
-              <motion.div
-                key="focused-commit-overlay"
-                layout
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 4 }}
-                transition={commitMountTransition}
-                className="mt-4"
-              >
-                <CommitOverlay
-                  commits={commits}
-                  date={file.createdAt}
-                  className="overflow-y-scroll"
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </motion.div>
+          {commits.length > 0 && <CommitPanel commits={commits} />}
+        </article>
+      </div>
       {footerComponent}
-
-      <CreateHabitDialog
-        open={createHabitOpen}
-        onOpenChange={setCreateHabitOpen}
-      />
     </motion.div>
   );
 }

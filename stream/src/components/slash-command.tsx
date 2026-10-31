@@ -1,9 +1,7 @@
 "use client";
 
-import { GearIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { gitKeys } from "@/hooks/use-git-queries";
 import { markdownKeys } from "@/hooks/use-markdown-queries";
 import { useApiKey } from "@/hooks/use-user-data";
@@ -89,50 +87,38 @@ export const SlashCommandList = forwardRef<
 
   if (!apiKey)
     return (
-      <Button
-        variant="outline"
-        className="min-w-[220px] cursor-pointer gap-2 rounded-xl border bg-popover p-4 text-muted-foreground text-xs"
+      <button
+        type="button"
+        className="min-w-[220px] rounded-sm border border-input bg-popover px-2.5 py-1.5 text-left text-muted-foreground hover:text-foreground"
         onClick={() => setSettingsOpen(true)}
       >
-        <GearIcon className="h-4 w-4 shrink-0" />
-        <span className="flex-1">
-          Configure your API key in{" "}
-          <span className="font-semibold underline">settings</span> to use AI
-          features
-        </span>
-      </Button>
+        Add your API key in <span className="underline">settings</span> to use
+        AI features
+      </button>
     );
 
   return (
-    <div className="z-50 min-w-[220px] rounded-xl border bg-popover p-1 shadow-xl">
+    <div className="z-50 min-w-[320px] rounded-sm border border-input bg-popover">
       {props.items.length > 0 ? (
         props.items.map((item, index) => (
           <button
             key={item.title}
             type="button"
-            className={`relative flex w-full cursor-default select-none items-center gap-3 rounded-md px-3 py-2 text-sm outline-none transition-colors ${
-              index === selectedIndex
-                ? "bg-accent text-accent-foreground"
-                : "text-popover-foreground hover:bg-accent/50 hover:text-accent-foreground"
+            className={`flex w-full cursor-default select-none gap-3 px-2.5 py-1.5 text-left outline-none ${
+              index === selectedIndex ? "bg-accent" : "hover:bg-accent"
             }`}
             onClick={() => selectItem(index)}
             onMouseEnter={() => setSelectedIndex(index)}
           >
-            <div className="flex flex-col items-start gap-0.5">
-              <span className="font-semibold text-xs leading-none">
-                {item.title}
-              </span>
-              {item.description && (
-                <span className="text-muted-foreground text-xs leading-none">
-                  {item.description}
-                </span>
-              )}
-            </div>
+            <span className="text-primary">/{item.title}</span>
+            {item.description && (
+              <span className="text-muted-foreground">{item.description}</span>
+            )}
           </button>
         ))
       ) : (
-        <div className="flex flex-col gap-2 px-3 py-2 text-muted-foreground">
-          <span className="text-xs">No slash commands found</span>
+        <div className="px-2.5 py-1.5 text-muted-foreground">
+          No slash commands found
         </div>
       )}
     </div>

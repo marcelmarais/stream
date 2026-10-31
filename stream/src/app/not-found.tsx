@@ -19,13 +19,13 @@ export default function NotFound() {
   return (
     <>
       <Titlebar isLoading={false} />
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 pt-12">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 pt-9">
         <div className="w-full max-w-md space-y-8 text-center">
           <div className="space-y-2">
-            <h1 className="cursor-default select-none font-semibold text-2xl text-foreground tracking-tight">
+            <h1 className="cursor-default select-none font-serif text-[32px] text-heading">
               404 - Page Not Found
             </h1>
-            <p className="cursor-default select-none text-muted-foreground text-sm">
+            <p className="cursor-default select-none text-muted-foreground">
               Redirecting to home page...
             </p>
           </div>

@@ -720,7 +720,7 @@ function toggleInlineMark(mark: InlineMark) {
 }
 
 const noteHighlighting = HighlightStyle.define([
-  { tag: tags.strong, fontWeight: "700" },
+  { tag: tags.strong, fontWeight: "600" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
   { tag: tags.url, color: "var(--muted-foreground)" },
@@ -728,14 +728,20 @@ const noteHighlighting = HighlightStyle.define([
   { tag: tags.labelName, color: "var(--muted-foreground)" },
 ]);
 
+const SERIF_FONT = 'var(--font-geist-serif), "Times New Roman", serif';
+const MONO_FONT = "var(--font-geist-mono), ui-monospace, monospace";
+
+// Geist Serif has one weight and thin hairlines, so it stops at heading 2
 const headingStyles = Object.fromEntries(
   [1, 2, 3, 4, 5, 6].map((level) => [
     `.cm-note-h${level}`,
     {
+      fontFamily: level <= 2 ? SERIF_FONT : MONO_FONT,
       fontSize: `var(--note-h${level}-size)`,
       lineHeight: `var(--note-h${level}-line-height)`,
-      fontWeight: "700",
-      letterSpacing: "-0.01em",
+      fontWeight: level <= 2 ? "400" : "600",
+      fontSynthesis: "none",
+      letterSpacing: level <= 2 ? "-0.01em" : "0",
       color: "var(--heading)",
       paddingTop: "0.5em",
     },
@@ -745,8 +751,9 @@ const headingStyles = Object.fromEntries(
 const noteTheme = EditorView.theme({
   "&": {
     backgroundColor: "transparent",
-    color: "var(--foreground)",
-    fontSize: "1rem",
+    color: "var(--body)",
+    fontFamily: "var(--font-geist-sans), ui-sans-serif, sans-serif",
+    fontSize: "var(--note-font-size)",
     minHeight: "inherit",
   },
   "&.cm-focused": { outline: "none" },
@@ -785,7 +792,7 @@ const noteTheme = EditorView.theme({
   },
   ".cm-note-code, .cm-note-codeblock": {
     backgroundColor: "var(--muted)",
-    fontFamily: "var(--font-fira-code), ui-monospace, Menlo, monospace",
+    fontFamily: MONO_FONT,
     fontSize: "var(--note-code-size)",
   },
   ".cm-note-code": { borderRadius: "0.2em", padding: "0.1em 0.25em" },
