@@ -4,6 +4,8 @@ import { Tabs } from "@base-ui/react/tabs";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMemo, useState } from "react";
+import { AgentStack } from "@/components/agent-stack";
+import type { RunningAgent } from "@/ipc/agents";
 import type { GitCommit } from "@/ipc/git-reader";
 import {
   formatCommitAuthor,
@@ -14,20 +16,25 @@ import { cn } from "@/lib/utils";
 
 const VISIBLE_COMMITS = 4;
 const VISIBLE_FILES = 6;
+const NO_BRANCH = "no branch";
+const NO_AGENTS: RunningAgent[] = [];
 
 interface CommitPanelProps {
   commits: GitCommit[];
+  agents?: RunningAgent[];
   className?: string;
 }
 
 interface BranchGroup {
   name: string;
   commits: GitCommit[];
+  agents: RunningAgent[];
 }
 
 interface RepoGroup {
   name: string;
   commits: GitCommit[];
+  agents: RunningAgent[];
   branches: BranchGroup[];
   fileCount: number;
 }
@@ -55,41 +62,75 @@ function getCommitBranch(commit: GitCommit): string {
     branch.replace("origin/", ""),
   );
   return (
-    branches.find((branch) => !isMainBranch(branch)) ??
-    branches[0] ??
-    "no branch"
+    branches.find((branch) => !isMainBranch(branch)) ?? branches[0] ?? NO_BRANCH
   );
 }
 
-function groupCommits(commits: GitCommit[]): RepoGroup[] {
-  const repos = new Map<string, GitCommit[]>();
+function getRepoName(repoPath: string): string {
+  return repoPath.split("/").pop() || repoPath;
+}
 
-  for (const commit of [...commits].sort((a, b) => b.timestamp - a.timestamp)) {
-    const repoName = commit.repo_path.split("/").pop() || commit.repo_path;
-    repos.set(repoName, [...(repos.get(repoName) ?? []), commit]);
+function groupBranches(
+  commits: GitCommit[],
+  agents: RunningAgent[],
+): BranchGroup[] {
+  const branches = new Map<string, BranchGroup>();
+
+  const getBranch = (name: string) => {
+    const branch = branches.get(name) ?? { name, commits: [], agents: [] };
+    branches.set(name, branch);
+    return branch;
+  };
+
+  for (const commit of commits) {
+    getBranch(getCommitBranch(commit)).commits.push(commit);
   }
 
-  return [...repos].map(([name, repoCommits]) => {
-    const branches = new Map<string, GitCommit[]>();
+  for (const agent of agents) {
+    getBranch(agent.branch ?? NO_BRANCH).agents.push(agent);
+  }
 
-    for (const commit of repoCommits) {
-      const branch = getCommitBranch(commit);
-      branches.set(branch, [...(branches.get(branch) ?? []), commit]);
-    }
+  // Sorting is stable, so branches otherwise stay newest first
+  return [...branches.values()].sort(
+    (a, b) => Number(b.agents.length > 0) - Number(a.agents.length > 0),
+  );
+}
 
-    return {
-      name,
-      commits: repoCommits,
-      branches: [...branches].map(([branchName, branchCommits]) => ({
-        name: branchName,
-        commits: branchCommits,
-      })),
-      fileCount: countFiles(repoCommits),
-    };
-  });
+function groupRepos(commits: GitCommit[], agents: RunningAgent[]): RepoGroup[] {
+  const repos = new Map<
+    string,
+    { commits: GitCommit[]; agents: RunningAgent[] }
+  >();
+
+  const getRepo = (repoPath: string) => {
+    const name = getRepoName(repoPath);
+    const repo = repos.get(name) ?? { commits: [], agents: [] };
+    repos.set(name, repo);
+    return repo;
+  };
+
+  for (const commit of [...commits].sort((a, b) => b.timestamp - a.timestamp)) {
+    getRepo(commit.repo_path).commits.push(commit);
+  }
+
+  for (const agent of agents) {
+    getRepo(agent.repo_path).agents.push(agent);
+  }
+
+  return [...repos].map(([name, repo]) => ({
+    name,
+    commits: repo.commits,
+    agents: repo.agents,
+    branches: groupBranches(repo.commits, repo.agents),
+    fileCount: countFiles(repo.commits),
+  }));
 }
 
 function getBranchSpan(commits: GitCommit[]): string {
+  if (commits.length === 0) {
+    return "No commits yet";
+  }
+
   const latest = formatTime(commits[0].timestamp);
   const earliest = formatTime(commits[commits.length - 1].timestamp);
   return latest === earliest ? latest : `${earliest} to ${latest}`;
@@ -207,18 +248,25 @@ function BranchSection({
 
   return (
     <div className="flex flex-col">
-      <div className="grid h-[27px] grid-cols-[6px_minmax(0,1fr)_auto] items-center gap-x-2 px-2.5">
+      <div className="flex h-[27px] items-center gap-x-2 px-2.5">
         <span
           aria-hidden="true"
           className={cn(
-            "size-1.5 rounded-full",
+            "size-1.5 shrink-0 rounded-full",
             isLatest ? "bg-primary" : "bg-muted-foreground",
           )}
         />
         <span className="truncate font-semibold text-foreground">
           {branch.name}
         </span>
-        <span className="text-muted-foreground">
+        {branch.agents.length > 0 && (
+          <AgentStack
+            agents={branch.agents}
+            size={14}
+            className="-ml-1 shrink-0"
+          />
+        )}
+        <span className="ml-auto shrink-0 text-muted-foreground">
           {getBranchSpan(branch.commits)}
         </span>
       </div>
@@ -243,8 +291,12 @@ function BranchSection({
   );
 }
 
-export function CommitPanel({ commits, className }: CommitPanelProps) {
-  const repos = useMemo(() => groupCommits(commits), [commits]);
+export function CommitPanel({
+  commits,
+  agents = NO_AGENTS,
+  className,
+}: CommitPanelProps) {
+  const repos = useMemo(() => groupRepos(commits, agents), [commits, agents]);
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [lastRepo, setLastRepo] = useState<string | null>(null);
   const [openCommitId, setOpenCommitId] = useState<string | null>(null);
@@ -270,6 +322,8 @@ export function CommitPanel({ commits, className }: CommitPanelProps) {
     return null;
   }
 
+  const fileCount = repo?.fileCount ?? countFiles(commits);
+
   return (
     <div className={cn("relative", className)}>
       <span
@@ -285,25 +339,45 @@ export function CommitPanel({ commits, className }: CommitPanelProps) {
             aria-label="Repositories"
             className="flex min-w-0 items-stretch overflow-x-auto"
           >
-            {repos.map(({ name, commits: repoCommits }) => (
-              <Tabs.Tab
+            {repos.map(({ name, commits: repoCommits, agents: repoAgents }) => (
+              <div
                 key={name}
-                value={name}
-                onClick={() => toggleRepo(name)}
                 className={cn(
-                  "flex shrink-0 items-center gap-[7px] border-well-rule border-r px-[11px] font-medium",
+                  "flex shrink-0 items-stretch border-well-rule border-r",
                   name === activeRepo &&
                     "shadow-[inset_0_-2px_0_var(--primary)]",
-                  isOpen && name !== activeRepo
-                    ? "text-muted-foreground"
-                    : "text-foreground",
                 )}
               >
-                <span>{name}</span>
-                <span className="font-normal text-muted-foreground">
-                  {repoCommits.length}
-                </span>
-              </Tabs.Tab>
+                <Tabs.Tab
+                  value={name}
+                  onClick={() => toggleRepo(name)}
+                  className={cn(
+                    "flex items-center gap-[7px] px-[11px] font-medium",
+                    repoAgents.length > 0 && "pr-1",
+                    isOpen && name !== activeRepo
+                      ? "text-muted-foreground"
+                      : "text-foreground",
+                  )}
+                >
+                  <span>{name}</span>
+                  {repoCommits.length > 0 && (
+                    <span className="font-normal text-muted-foreground">
+                      {repoCommits.length}
+                    </span>
+                  )}
+                </Tabs.Tab>
+                {repoAgents.length > 0 && (
+                  <AgentStack
+                    agents={repoAgents}
+                    moving={name !== activeRepo}
+                    size={15}
+                    className={cn(
+                      "pr-1.5",
+                      name === activeRepo && "opacity-60",
+                    )}
+                  />
+                )}
+              </div>
             ))}
           </Tabs.List>
           <button
@@ -313,9 +387,7 @@ export function CommitPanel({ commits, className }: CommitPanelProps) {
             aria-label={isOpen ? "Close commits" : "Open commits"}
             className="ml-auto flex shrink-0 items-center gap-2 px-2.5 text-muted-foreground hover:text-foreground"
           >
-            <span>
-              {pluralise(repo?.fileCount ?? countFiles(commits), "file")}
-            </span>
+            {fileCount > 0 && <span>{pluralise(fileCount, "file")}</span>}
             <CaretRightIcon
               className={cn("size-3", isOpen && "rotate-90")}
               aria-hidden="true"

@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod git;
 pub mod location;
 pub mod markdown;
