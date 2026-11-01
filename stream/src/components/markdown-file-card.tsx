@@ -1,7 +1,7 @@
 import { CopyIcon, TrashIcon } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion } from "framer-motion";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 import CommitFilter from "@/components/commit-filter";
 import CommitPanel from "@/components/commit-panel";
@@ -40,16 +40,19 @@ import { getDateKey } from "@/utils/date-utils";
 
 const commitMountTransition = { duration: 0.18, ease: "easeOut" } as const;
 
-export function FileName({
+/** Right-click menu for copying or deleting a note. */
+export function NoteMenu({
   content,
   metadata,
   folderPath,
   onDelete,
+  children,
 }: {
   content: string | undefined;
   metadata: MarkdownFileMetadata;
   folderPath: string;
   onDelete?: () => void;
+  children: ReactNode;
 }) {
   const fileName = metadata.fileName.split(".")[0];
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -86,18 +89,7 @@ export function FileName({
   return (
     <>
       <ContextMenu>
-        <ContextMenuTrigger
-          render={
-            <button
-              type="button"
-              onClick={handleCopyToClipboard}
-              title="Copy note"
-              className="hover:text-foreground"
-            />
-          }
-        >
-          {metadata.fileName}
-        </ContextMenuTrigger>
+        <ContextMenuTrigger className="w-full">{children}</ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem
             onClick={handleCopyToClipboard}
@@ -208,13 +200,15 @@ export function FileCard({
             isFocused={isFocused}
             onToggleFocus={onToggleFocus}
             folderPath={folderPath}
-            fileName={
-              <FileName
+            renderTitle={(title) => (
+              <NoteMenu
                 content={content}
                 metadata={file}
                 folderPath={folderPath}
-              />
-            }
+              >
+                {title}
+              </NoteMenu>
+            )}
           />
 
           <MarkdownEditor
@@ -400,14 +394,16 @@ export function FocusedFileOverlay({
             isFocused={true}
             onToggleFocus={onClose}
             folderPath={folderPath}
-            fileName={
-              <FileName
+            renderTitle={(title) => (
+              <NoteMenu
                 content={content}
                 metadata={file}
                 folderPath={folderPath}
                 onDelete={onClose}
-              />
-            }
+              >
+                {title}
+              </NoteMenu>
+            )}
           />
 
           <MarkdownEditor
