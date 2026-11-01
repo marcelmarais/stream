@@ -8,13 +8,19 @@ import {
   isolateHistory,
 } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { foldedRanges } from "@codemirror/language";
 import { diff } from "@codemirror/merge";
 import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import {
+  collapsedHeadings,
+  restoreCollapsedHeadings,
+} from "@/components/heading-fold";
 import { livePreview } from "@/components/live-preview";
 import { cn } from "@/lib/utils";
+import { useCollapsedHeadingsStore } from "@/stores/collapsed-headings-store";
 import { formatMarkdown } from "@/utils/markdown-formatter";
 
 const externalChange = Annotation.define<boolean>();
@@ -23,6 +29,7 @@ const externalChange = Annotation.define<boolean>();
 const MAX_RECENT_EDITS = 100;
 
 interface MarkdownEditorProps {
+  filePath: string;
   value: string;
   onChange: (value: string) => void;
   onSave: (value: string) => void | Promise<void>;
@@ -89,6 +96,7 @@ async function formatDocument(view: EditorView) {
 }
 
 export function MarkdownEditor({
+  filePath,
   value,
   onChange,
   onSave,
@@ -102,7 +110,7 @@ export function MarkdownEditor({
   const editableRef = useRef(new Compartment());
   const recentEditsRef = useRef<string[]>([]);
   const callbacksRef = useRef({ onChange, onSave, onFocus });
-  const initialRef = useRef({ value, isEditable });
+  const initialRef = useRef({ filePath, value, isEditable });
 
   useEffect(() => {
     callbacksRef.current = { onChange, onSave, onFocus };
@@ -164,6 +172,20 @@ export function MarkdownEditor({
               callbacksRef.current.onChange(doc);
             }
           }),
+          EditorView.updateListener.of((update) => {
+            // The card behind focus mode must not overwrite the overlay's folds
+            if (
+              foldedRanges(update.startState) !== foldedRanges(update.state) &&
+              update.state.facet(EditorView.editable)
+            ) {
+              useCollapsedHeadingsStore
+                .getState()
+                .setCollapsedHeadings(
+                  initialRef.current.filePath,
+                  collapsedHeadings(update.view.state),
+                );
+            }
+          }),
         ],
       }),
     });
@@ -197,11 +219,25 @@ export function MarkdownEditor({
   }, [value]);
 
   useEffect(() => {
-    viewRef.current?.dispatch({
+    const view = viewRef.current;
+
+    if (!view) {
+      return;
+    }
+
+    view.dispatch({
       effects: editableRef.current.reconfigure(
         EditorView.editable.of(isEditable),
       ),
     });
+
+    // Runs on mount, and picks up folds changed in focus mode when it closes
+    restoreCollapsedHeadings(
+      view,
+      useCollapsedHeadingsStore.getState().byFile[
+        initialRef.current.filePath
+      ] ?? [],
+    );
   }, [isEditable]);
 
   useEffect(() => {

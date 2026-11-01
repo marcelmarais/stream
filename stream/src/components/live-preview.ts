@@ -23,6 +23,11 @@ import {
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { tags } from "@lezer/highlight";
+import {
+  headingFolds,
+  moveRightPastFold,
+  toggleHeadingFold,
+} from "./heading-fold";
 import { LinkChipWidget, linkHref, linkLabel } from "./link-chip";
 
 const HEADING_NODE = /^ATXHeading([1-6])$/;
@@ -876,6 +881,38 @@ const noteTheme = EditorView.theme({
     width: "1em",
   },
   ".cm-note-strike": { textDecoration: "line-through" },
+  // Hangs in the margin left of the note, between the rail and the text
+  ".cm-note-fold": {
+    alignItems: "center",
+    color: "var(--muted-foreground)",
+    cursor: "pointer",
+    display: "inline-flex",
+    height: "1lh",
+    justifyContent: "center",
+    marginLeft: "-22px",
+    opacity: "0",
+    position: "absolute",
+    transition: "opacity 120ms ease",
+    width: "20px",
+  },
+  ".cm-note-fold svg": {
+    fill: "currentColor",
+    height: "12px",
+    transition: "transform 120ms ease",
+    width: "12px",
+  },
+  ".cm-line:hover .cm-note-fold, .cm-note-fold-collapsed": { opacity: "1" },
+  ".cm-note-fold:hover": { color: "var(--heading)" },
+  ".cm-note-fold-collapsed svg": { transform: "rotate(-90deg)" },
+  ".cm-note-fold-placeholder": {
+    color: "var(--muted-foreground)",
+    cursor: "pointer",
+    fontFamily: "var(--font-geist-sans), ui-sans-serif, sans-serif",
+    fontSize: "var(--note-font-size)",
+    fontWeight: "400",
+    marginLeft: "0.4em",
+  },
+  ".cm-note-fold-placeholder:hover": { color: "var(--heading)" },
   ...headingStyles,
 });
 
@@ -891,6 +928,7 @@ export function livePreview(): Extension {
     noteTheme,
     syntaxHighlighting(noteHighlighting),
     livePreviewPlugin,
+    headingFolds(),
     skipListMarker,
     Prec.highest(
       keymap.of([
@@ -902,6 +940,8 @@ export function livePreview(): Extension {
         { key: "Mod-i", run: toggleInlineMark(EMPHASIS) },
         { key: "Mod-Shift-s", run: toggleInlineMark(STRIKETHROUGH) },
         { key: "Mod-e", run: toggleInlineMark(INLINE_CODE) },
+        { key: "Mod-.", run: toggleHeadingFold },
+        { key: "ArrowRight", run: moveRightPastFold },
       ]),
     ),
   ];

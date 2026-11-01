@@ -23,6 +23,7 @@ https://github.com/user-attachments/assets/9f320143-e342-481f-a886-acdeadb86e85
 - **Your agents.** Claude Code and Codex sessions appear next to the branch they're working on. Hover to see what each one is doing, click to open its chat, and look for the lime dot when one is waiting for you. Stream only reads session files on your Mac.
 - **One note a day.** Every day gets its own markdown file, all in one long timeline. Jump to any date from the calendar.
 - **Markdown that formats as you type.** The symbols disappear as you write and come back when your cursor reaches them. Links collapse into a small chip with the site's icon.
+- **Collapsible headings.** Click the arrow beside a heading to fold its section. Stream remembers what you folded, and the file itself never changes.
 - **Search.** ⌘F searches every note as you type.
 - **Plain files.** Notes are `YYYY-MM-DD.md` files in a folder you choose, so anything that reads markdown can read them.
 
@@ -41,6 +42,7 @@ Pull requests and checks come through the [GitHub CLI](https://cli.github.com), 
 | ⌘F       | Search your notes             |
 | ⌘S       | Save and format with Prettier |
 | ⌘O       | Focus on the current note     |
+| ⌘.       | Fold or unfold a heading      |
 
 ## Development
 

@@ -211,6 +211,8 @@ export function FileCard({
           />
 
           <MarkdownEditor
+            key={file.filePath}
+            filePath={file.filePath}
             value={content}
             onChange={handleContentChange}
             onSave={saveContentImmediate}
@@ -406,6 +408,8 @@ export function FocusedFileOverlay({
           />
 
           <MarkdownEditor
+            key={file.filePath}
+            filePath={file.filePath}
             value={content}
             onChange={handleContentChange}
             onSave={saveContentImmediate}
