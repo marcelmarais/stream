@@ -26,6 +26,14 @@ const TURN_EVENTS: &[&str] = &[
 
 const CLAUDE_TITLE_EVENTS: &[&str] = &[r#""type":"custom-title""#, r#""type":"ai-title""#];
 
+/// The last few moves of a turn fit here, unless a tool returned something huge
+const ACTIVITY_WINDOW: u64 = 256 * 1024;
+
+const ACTIVITY_MAX_CHARS: usize = 80;
+
+const CLAUDE_CHAT_URL: &str = "claude://code/continue?session=";
+const CODEX_CHAT_URL: &str = "codex://threads/";
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentKind {
@@ -50,6 +58,16 @@ pub struct RunningAgent {
     pub branch: Option<String>,
     /// When the current turn or wait began, in Unix milliseconds
     pub since: Option<u64>,
+    /// What it's doing now, or what it's waiting for
+    pub activity: Option<String>,
+    pub chat: Option<ChatLink>,
+}
+
+/// Where the conversation lives: a link into the app, or the app running it
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ChatLink {
+    pub target: String,
+    pub app: String,
 }
 
 /// A running agent before it's matched to a connected repository
@@ -61,6 +79,8 @@ struct Session {
     title: Option<String>,
     cwd: PathBuf,
     since: Option<u64>,
+    activity: Option<String>,
+    chat: Option<ChatLink>,
 }
 
 /// List Claude Code and Codex sessions working in `repo_paths`. Both tools keep
@@ -82,6 +102,38 @@ pub(crate) async fn list_running_agents(
     .map_err(|e| e.to_string())
 }
 
+/// Bring an agent's chat to the front. Only opens what `list_running_agents`
+/// hands out, so this can't be used to open anything else.
+#[tauri::command]
+pub(crate) async fn open_agent_chat(target: String) -> Result<(), String> {
+    if !is_chat_target(&target) {
+        return Err("Not an agent chat".to_string());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let status = Command::new("/usr/bin/open")
+            .arg(&target)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map_err(|e| e.to_string())?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("Couldn't open {target}"))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn is_chat_target(target: &str) -> bool {
+    target.starts_with(CLAUDE_CHAT_URL)
+        || target.starts_with(CODEX_CHAT_URL)
+        || (target.starts_with('/') && target.ends_with(".app") && Path::new(target).is_dir())
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeSession {
@@ -92,6 +144,8 @@ struct ClaudeSession {
     name: Option<String>,
     name_source: Option<String>,
     status_updated_at: Option<u64>,
+    waiting_for: Option<String>,
+    host_session_id: Option<String>,
 }
 
 /// Claude Code keeps one file per process. A killed process leaves its file
@@ -120,43 +174,169 @@ fn claude_sessions(home: &Path, is_alive: impl Fn(u32) -> bool) -> Vec<Session> 
                 return None;
             }
 
+            let transcript = claude_transcript(home, &session.session_id);
+            let activity = match status {
+                AgentStatus::Working => transcript.as_deref().and_then(claude_activity),
+                AgentStatus::Waiting => session.waiting_for.clone(),
+            };
+
             Some(Session {
-                title: claude_title(home, &session),
+                title: claude_title(transcript.as_deref(), &session),
+                chat: claude_chat(&session),
                 id: session.session_id,
                 kind: AgentKind::Claude,
                 status,
                 cwd: session.cwd,
                 since: session.status_updated_at,
+                activity,
             })
         })
         .collect()
 }
 
+/// A session that moves into a worktree keeps writing to the folder it started
+/// in, and can leave a stale copy under its new one, so the newest file wins
+fn claude_transcript(home: &Path, session_id: &str) -> Option<PathBuf> {
+    fs::read_dir(home.join(".claude/projects"))
+        .ok()?
+        .flatten()
+        .map(|project| project.path().join(format!("{session_id}.jsonl")))
+        .filter_map(|path| Some((fs::metadata(&path).ok()?.modified().ok()?, path)))
+        .max_by_key(|(modified, _)| *modified)
+        .map(|(_, path)| path)
+}
+
 /// A `derived` name is a placeholder like `stream-26`, used until the chat has
 /// a real title, so prefer the title in the transcript when there is one
-fn claude_title(home: &Path, session: &ClaudeSession) -> Option<String> {
+fn claude_title(transcript: Option<&Path>, session: &ClaudeSession) -> Option<String> {
     let name = session.name.clone().filter(|name| !name.is_empty());
+    let from_transcript = || transcript.and_then(transcript_title);
 
     if session.name_source.as_deref() == Some("derived") {
-        transcript_title(home, session).or(name)
+        from_transcript().or(name)
     } else {
-        name.or_else(|| transcript_title(home, session))
+        name.or_else(from_transcript)
     }
 }
 
-fn transcript_title(home: &Path, session: &ClaudeSession) -> Option<String> {
-    let project: String = session
-        .cwd
-        .to_string_lossy()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
-    let transcript = home
-        .join(".claude/projects")
-        .join(project)
-        .join(format!("{}.jsonl", session.session_id));
+/// Desktop sessions open in the Claude app. A terminal session has no chat
+/// there, so the best one click can do is bring its terminal forward.
+fn claude_chat(session: &ClaudeSession) -> Option<ChatLink> {
+    match session.host_session_id.as_deref() {
+        Some(id) if id.starts_with("local_") => Some(ChatLink {
+            target: format!("{CLAUDE_CHAT_URL}{id}"),
+            app: "Claude".to_string(),
+        }),
+        _ => running_app(session.pid),
+    }
+}
 
-    let tail = read_tail(&transcript, TRANSCRIPT_WINDOW)?;
+/// The app a process was started from, found by walking up its parents
+fn running_app(pid: u32) -> Option<ChatLink> {
+    let output = Command::new("/bin/ps")
+        .args(["-axo", "pid=,ppid=,comm="])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+
+    enclosing_app(pid, &String::from_utf8_lossy(&output.stdout))
+}
+
+fn enclosing_app(pid: u32, process_list: &str) -> Option<ChatLink> {
+    let processes: HashMap<u32, (u32, &str)> =
+        process_list.lines().filter_map(parse_process).collect();
+
+    let mut current = pid;
+    for _ in 0..processes.len() {
+        let (parent, command) = processes.get(&current)?;
+        if let Some(end) = command.find(".app/") {
+            let bundle = &command[..end + ".app".len()];
+            return Some(ChatLink {
+                target: bundle.to_string(),
+                app: Path::new(bundle).file_stem()?.to_str()?.to_string(),
+            });
+        }
+        current = *parent;
+    }
+
+    None
+}
+
+fn parse_process(line: &str) -> Option<(u32, (u32, &str))> {
+    let (pid, rest) = line.trim_start().split_once(char::is_whitespace)?;
+    let (parent, command) = rest.trim_start().split_once(char::is_whitespace)?;
+    Some((
+        pid.parse().ok()?,
+        (parent.parse().ok()?, command.trim_start()),
+    ))
+}
+
+/// The latest tool call of the running turn, in words
+fn claude_activity(transcript: &Path) -> Option<String> {
+    let tail = read_tail(transcript, ACTIVITY_WINDOW)?;
+
+    tail.lines()
+        .rev()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|record| record["isSidechain"] != true)
+        .take_while(|record| !is_user_prompt(record))
+        .filter(|record| record["type"] == "assistant")
+        .find_map(|record| {
+            record["message"]["content"]
+                .as_array()?
+                .iter()
+                .rev()
+                .find_map(describe_tool)
+        })
+}
+
+/// Tool results come back as user lines too, but they don't start a turn
+fn is_user_prompt(record: &Value) -> bool {
+    record["type"] == "user"
+        && !record["message"]["content"]
+            .as_array()
+            .is_some_and(|blocks| blocks.iter().any(|block| block["type"] == "tool_result"))
+}
+
+fn describe_tool(block: &Value) -> Option<String> {
+    if block["type"] != "tool_use" {
+        return None;
+    }
+
+    let input = &block["input"];
+    let file_name = || {
+        let path = input["file_path"].as_str()?;
+        Path::new(path).file_name()?.to_str()
+    };
+
+    let activity = match block["name"].as_str()? {
+        "Edit" | "MultiEdit" | "Write" | "NotebookEdit" => format!("Editing {}", file_name()?),
+        "Read" => format!("Reading {}", file_name()?),
+        "Bash" => input["description"]
+            .as_str()
+            .unwrap_or("Running a command")
+            .to_string(),
+        "Grep" | "Glob" => "Searching the code".to_string(),
+        "WebSearch" | "WebFetch" => "Reading the web".to_string(),
+        "Agent" | "Task" => "Running a subagent".to_string(),
+        _ => return None,
+    };
+
+    Some(one_line(&activity))
+}
+
+fn one_line(text: &str) -> String {
+    let line = text.lines().next().unwrap_or_default().trim();
+
+    if line.chars().count() <= ACTIVITY_MAX_CHARS {
+        return line.to_string();
+    }
+    let cut: String = line.chars().take(ACTIVITY_MAX_CHARS).collect();
+    format!("{}…", cut.trim_end())
+}
+
+fn transcript_title(transcript: &Path) -> Option<String> {
+    let tail = read_tail(transcript, TRANSCRIPT_WINDOW)?;
 
     tail.lines()
         .rev()
@@ -234,6 +414,11 @@ fn codex_session(rollout: &Path) -> Option<Session> {
     let (id, cwd) = rollout_meta(rollout)?;
 
     Some(Session {
+        chat: Some(ChatLink {
+            target: format!("{CODEX_CHAT_URL}{id}"),
+            app: "Codex".to_string(),
+        }),
+        activity: codex_activity(rollout),
         id,
         kind: AgentKind::Codex,
         status: AgentStatus::Working,
@@ -241,6 +426,25 @@ fn codex_session(rollout: &Path) -> Option<Session> {
         cwd,
         since,
     })
+}
+
+/// Codex's tool calls are scripts, which don't read well, but it narrates what
+/// it's doing in short commentary messages as it goes
+fn codex_activity(rollout: &Path) -> Option<String> {
+    let tail = read_tail(rollout, ACTIVITY_WINDOW)?;
+
+    tail.lines()
+        .rev()
+        .take_while(|line| !line.contains(TURN_EVENTS[0]))
+        .filter(|line| line.contains(r#""phase":"commentary""#))
+        .find_map(|line| {
+            let record: Value = serde_json::from_str(line).ok()?;
+            if record["payload"]["type"] != "message" {
+                return None;
+            }
+            let text = record["payload"]["content"][0]["text"].as_str()?;
+            Some(one_line(text))
+        })
 }
 
 enum TurnEvent {
@@ -362,6 +566,8 @@ fn place_in_repos(sessions: Vec<Session>, repo_paths: &[String]) -> Vec<RunningA
                 title: session.title,
                 repo_path,
                 since: session.since,
+                activity: session.activity,
+                chat: session.chat,
             })
         })
         .collect();
@@ -495,7 +701,271 @@ mod tests {
             title: None,
             cwd: cwd.to_path_buf(),
             since: None,
+            activity: None,
+            chat: None,
         }
+    }
+
+    fn assistant_tool(name: &str, input: Value) -> Value {
+        json!({
+            "type": "assistant",
+            "message": { "content": [{ "type": "tool_use", "name": name, "input": input }] },
+        })
+    }
+
+    fn write_transcript(home: &TempHome, project: &str, session: &str, lines: &[Value]) -> PathBuf {
+        let folder = home.0.join(".claude/projects").join(project);
+        fs::create_dir_all(&folder).unwrap();
+        let path = folder.join(format!("{session}.jsonl"));
+        let lines: Vec<String> = lines.iter().map(Value::to_string).collect();
+        fs::write(&path, lines.join("\n") + "\n").unwrap();
+        path
+    }
+
+    fn commentary(text: &str) -> Value {
+        json!({
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "phase": "commentary",
+                "content": [{ "type": "output_text", "text": text }],
+            },
+        })
+    }
+
+    #[test]
+    fn describes_the_latest_claude_tool_call() {
+        let home = TempHome::new();
+        let tool_result = json!({
+            "type": "user",
+            "message": { "content": [{ "type": "tool_result" }] },
+        });
+        let transcript = write_transcript(
+            &home,
+            "project",
+            "one",
+            &[
+                assistant_tool("Read", json!({ "file_path": "/repo/src/first.rs" })),
+                tool_result,
+                assistant_tool("Edit", json!({ "file_path": "/repo/src/second.rs" })),
+                assistant_tool("mcp__plan__update", json!({})),
+            ],
+        );
+
+        assert_eq!(
+            claude_activity(&transcript).as_deref(),
+            Some("Editing second.rs")
+        );
+    }
+
+    #[test]
+    fn uses_the_description_of_a_claude_command() {
+        let home = TempHome::new();
+        let transcript = write_transcript(
+            &home,
+            "project",
+            "one",
+            &[assistant_tool(
+                "Bash",
+                json!({ "command": "cargo test", "description": "Run the tests" }),
+            )],
+        );
+
+        assert_eq!(
+            claude_activity(&transcript).as_deref(),
+            Some("Run the tests")
+        );
+    }
+
+    #[test]
+    fn a_new_prompt_clears_the_last_turns_activity() {
+        let home = TempHome::new();
+        let prompt = json!({ "type": "user", "message": { "content": "next task" } });
+        let transcript = write_transcript(
+            &home,
+            "project",
+            "one",
+            &[
+                assistant_tool("Read", json!({ "file_path": "/repo/old.rs" })),
+                prompt,
+            ],
+        );
+
+        assert_eq!(claude_activity(&transcript), None);
+    }
+
+    #[test]
+    fn ignores_subagent_tool_calls() {
+        let home = TempHome::new();
+        let mut subagent = assistant_tool("Read", json!({ "file_path": "/repo/sub.rs" }));
+        subagent["isSidechain"] = json!(true);
+        let transcript = write_transcript(
+            &home,
+            "project",
+            "one",
+            &[
+                assistant_tool("Read", json!({ "file_path": "/repo/main.rs" })),
+                subagent,
+            ],
+        );
+
+        assert_eq!(
+            claude_activity(&transcript).as_deref(),
+            Some("Reading main.rs")
+        );
+    }
+
+    #[test]
+    fn finds_a_transcript_left_in_the_folder_the_session_started_in() {
+        let home = TempHome::new();
+        let stale = write_transcript(&home, "worktree", "one", &[]);
+        let live = write_transcript(&home, "project", "one", &[]);
+        let earlier = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+        File::options()
+            .write(true)
+            .open(&stale)
+            .unwrap()
+            .set_modified(earlier)
+            .unwrap();
+
+        assert_eq!(claude_transcript(&home.0, "one"), Some(live));
+    }
+
+    #[test]
+    fn links_a_desktop_session_to_its_chat() {
+        let home = TempHome::new();
+        home.add_claude(
+            1,
+            json!({ "status": "busy", "hostSessionId": "local_abc-123" }),
+        );
+
+        let sessions = claude_sessions(&home.0, |_| true);
+
+        assert_eq!(
+            sessions[0].chat,
+            Some(ChatLink {
+                target: "claude://code/continue?session=local_abc-123".to_string(),
+                app: "Claude".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn shows_what_a_claude_session_is_waiting_for() {
+        let home = TempHome::new();
+        home.add_claude(
+            1,
+            json!({ "status": "waiting", "waitingFor": "approve Bash" }),
+        );
+
+        let sessions = claude_sessions(&home.0, |_| true);
+
+        assert_eq!(sessions[0].activity.as_deref(), Some("approve Bash"));
+    }
+
+    #[test]
+    fn finds_the_app_a_terminal_session_runs_in() {
+        let processes = "\
+            1 0 /sbin/launchd\n\
+            50 1 /System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal\n\
+            60 50 login\n\
+            70 60 -zsh\n\
+            80 70 /Users/me/.local/bin/claude\n";
+
+        assert_eq!(
+            enclosing_app(80, processes),
+            Some(ChatLink {
+                target: "/System/Applications/Utilities/Terminal.app".to_string(),
+                app: "Terminal".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn keeps_spaces_in_an_app_name_and_stops_at_the_outer_app() {
+        let processes = "\
+            1 0 /sbin/launchd\n\
+            50 1 /Applications/Visual Studio Code.app/Contents/MacOS/Electron\n\
+            60 50 /Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper\n\
+            80 60 /Users/me/.local/bin/claude\n";
+
+        assert_eq!(
+            enclosing_app(80, processes).map(|chat| chat.app),
+            Some("Visual Studio Code".to_string())
+        );
+    }
+
+    #[test]
+    fn has_no_app_for_a_session_outside_one() {
+        let processes = "1 0 /sbin/launchd\n80 1 /usr/bin/tmux\n90 80 claude\n";
+
+        assert_eq!(enclosing_app(90, processes), None);
+    }
+
+    #[test]
+    fn only_opens_chats_and_apps() {
+        let home = TempHome::new();
+        let app = home.0.join("Terminal.app");
+        fs::create_dir_all(&app).unwrap();
+
+        assert!(is_chat_target("claude://code/continue?session=local_one"));
+        assert!(is_chat_target("codex://threads/one"));
+        assert!(is_chat_target(app.to_str().unwrap()));
+
+        assert!(!is_chat_target("https://example.com"));
+        assert!(!is_chat_target("/Applications/Missing.app"));
+        assert!(!is_chat_target("/etc/passwd"));
+        assert!(!is_chat_target("claude://claude.ai/new"));
+    }
+
+    #[test]
+    fn reads_the_latest_codex_commentary_of_the_running_turn() {
+        let home = TempHome::new();
+        let rollout = home.add_rollout(
+            "one",
+            "/repo",
+            json!("vscode"),
+            &[
+                commentary("From the last turn"),
+                turn("task_started"),
+                commentary("I'll check the panel.\nThen fix it."),
+            ],
+        );
+
+        let sessions = codex_sessions(&home.0, &[rollout]);
+
+        assert_eq!(
+            sessions[0].activity.as_deref(),
+            Some("I'll check the panel.")
+        );
+        assert_eq!(
+            sessions[0].chat.as_ref().map(|chat| chat.target.as_str()),
+            Some("codex://threads/one")
+        );
+    }
+
+    #[test]
+    fn a_new_codex_turn_clears_the_last_activity() {
+        let home = TempHome::new();
+        let rollout = home.add_rollout(
+            "one",
+            "/repo",
+            json!("vscode"),
+            &[commentary("From the last turn"), turn("task_started")],
+        );
+
+        let sessions = codex_sessions(&home.0, &[rollout]);
+
+        assert_eq!(sessions[0].activity, None);
+    }
+
+    #[test]
+    fn shortens_long_activity() {
+        let activity = one_line(&"word ".repeat(40));
+
+        assert!(activity.ends_with('…'));
+        assert!(activity.chars().count() <= ACTIVITY_MAX_CHARS + 1);
     }
 
     #[test]
@@ -538,12 +1008,13 @@ mod tests {
             1,
             json!({ "status": "busy", "name": "stream-26", "nameSource": "derived", "cwd": cwd }),
         );
-        let project = home
-            .0
-            .join(".claude/projects/-Users-me--claude-worktrees-one");
-        fs::create_dir_all(&project).unwrap();
         let title = json!({ "type": "ai-title", "aiTitle": "Add agent presence" });
-        fs::write(project.join("session-1.jsonl"), format!("{title}\n")).unwrap();
+        write_transcript(
+            &home,
+            "-Users-me--claude-worktrees-one",
+            "session-1",
+            &[title],
+        );
 
         let sessions = claude_sessions(&home.0, |_| true);
 

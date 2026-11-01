@@ -8,7 +8,8 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentKind, RunningAgent } from "@/ipc/agents";
+import { toast } from "sonner";
+import { type AgentKind, openAgentChat, type RunningAgent } from "@/ipc/agents";
 import { cn } from "@/lib/utils";
 
 const VISIBLE_AGENTS = 3;
@@ -261,18 +262,29 @@ function formatElapsed(since: number): string {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+function getWaitingLabel(activity: string | null): string {
+  return activity ? `Waiting for you: ${activity}` : "Waiting for you";
+}
+
 function AgentDetail({ agent }: { agent: RunningAgent }) {
-  const name = AGENT_NAMES[agent.kind];
-  const detail =
-    agent.status === "waiting"
-      ? [name, "waiting for you"]
-      : [name, agent.branch, agent.since ? formatElapsed(agent.since) : null];
+  const { activity, chat, since, status, title } = agent;
+  const isWaiting = status === "waiting";
+  const summary = isWaiting ? getWaitingLabel(activity) : activity;
+  const footer = [
+    !isWaiting && since ? formatElapsed(since) : null,
+    chat ? `Click to open in ${chat.app}` : null,
+  ];
 
   return (
     <>
-      <span className="text-foreground">{agent.title ?? "Untitled chat"}</span>
+      <span className="text-foreground">{title ?? "Untitled chat"}</span>
+      {summary && (
+        <span className={isWaiting ? "text-primary" : "text-body"}>
+          {summary}
+        </span>
+      )}
       <span className="text-muted-foreground">
-        {detail.filter(Boolean).join(" · ")}
+        {footer.filter(Boolean).join(" · ")}
       </span>
     </>
   );
@@ -287,11 +299,29 @@ function AgentBadge({
   moving: boolean;
   size: number;
 }) {
+  const { chat } = agent;
+
+  const openChat = async () => {
+    if (!chat) {
+      return;
+    }
+    try {
+      await openAgentChat(chat.target);
+    } catch (error) {
+      console.error("Failed to open agent chat:", error);
+      toast.error(`Couldn't open ${chat.app}`);
+    }
+  };
+
   return (
     <Tooltip.Root>
       <Tooltip.Trigger
         aria-label={`${AGENT_NAMES[agent.kind]}: ${agent.title ?? "Untitled chat"}`}
-        className="not-first:-ml-1 flex h-[22px] w-[18px] items-center justify-center"
+        onClick={openChat}
+        className={cn(
+          "not-first:-ml-1 flex h-[22px] w-[18px] items-center justify-center",
+          chat && "cursor-pointer",
+        )}
       >
         <AgentMark agent={agent} moving={moving} size={size} />
       </Tooltip.Trigger>
