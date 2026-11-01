@@ -3,7 +3,6 @@
 import { Tabs } from "@base-ui/react/tabs";
 import {
   ArrowSquareOutIcon,
-  CaretRightIcon,
   ChatCircleDotsIcon,
   ChatCircleIcon,
   CheckIcon,
@@ -38,6 +37,7 @@ import { getDateKey } from "@/utils/date-utils";
 const VISIBLE_ROWS = 6;
 const VISIBLE_COMMITS = 4;
 const NO_BRANCH = "no branch";
+const DEFAULT_MAIN_BRANCH = "main";
 const NO_AGENTS: RunningAgent[] = [];
 
 type RowState = "main" | "open" | "draft" | "branch" | "merged";
@@ -78,7 +78,7 @@ interface RepoGroup {
 const ROW_SIGNALS: Record<RowState, Signal> = {
   main: {
     icon: GitCommitIcon,
-    label: "Committed to main",
+    label: "Main branch",
     className: "text-muted-foreground",
   },
   open: {
@@ -159,10 +159,6 @@ function getRepoName(repoPath: string): string {
   return repoPath.split("/").pop() || repoPath;
 }
 
-function isOpen({ state }: { state: string }): boolean {
-  return state === "open" || state === "draft";
-}
-
 function needsAttention({ checks, review }: PullRequest): boolean {
   return checks === "fail" || review === "changes" || review === "requested";
 }
@@ -170,12 +166,23 @@ function needsAttention({ checks, review }: PullRequest): boolean {
 // A commit lists every branch containing it, so a merged commit is on main and
 // its feature branch. Showing it once, on the feature branch, keeps counts true.
 function getCommitBranch(commit: GitCommit): string {
-  const branches = commit.branches.map((branch) =>
-    branch.replace("origin/", ""),
-  );
+  const branches = getLocalBranches(commit);
   return (
     branches.find((branch) => !isMainBranch(branch)) ?? branches[0] ?? NO_BRANCH
   );
+}
+
+function getLocalBranches(commit: GitCommit): string[] {
+  return commit.branches.map((branch) => branch.replace("origin/", ""));
+}
+
+// The day's work is the only sign of what a repo calls its main branch
+function getMainBranch(commits: GitCommit[], agents: RunningAgent[]): string {
+  const seen = [
+    ...commits.flatMap(getLocalBranches),
+    ...agents.flatMap(({ branch }) => branch ?? []),
+  ];
+  return seen.find(isMainBranch) ?? DEFAULT_MAIN_BRANCH;
 }
 
 function getBranchState(branch: string, commits: GitCommit[]): RowState {
@@ -218,7 +225,10 @@ function buildRows(
   dateKey: string,
   todayKey: string,
 ): WorkRow[] {
-  const branches = new Map<string, GitCommit[]>();
+  // Main always heads the list, even when nothing landed on it directly
+  const branches = new Map<string, GitCommit[]>([
+    [getMainBranch(commits, agents), []],
+  ]);
   const rows = new Map<string, WorkRow>();
 
   for (const commit of commits) {
@@ -310,18 +320,6 @@ function groupWork(
       ),
     };
   });
-}
-
-function getSummary(rows: WorkRow[]): string {
-  const openCount = rows.filter(isOpen).length;
-  const commitCount = rows.reduce((sum, row) => sum + row.commits.length, 0);
-
-  return [
-    openCount > 0 && `${openCount} open`,
-    commitCount > 0 && pluralise(commitCount, "commit"),
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 function SignalIcon({ signal }: { signal: Signal | null }) {
@@ -438,6 +436,7 @@ function RowItem({
   const { agents, commits, pullRequest, state, title } = row;
   const review = pullRequest?.review;
   const checks = pullRequest?.state === "merged" ? null : pullRequest?.checks;
+  const hasDetail = commits.length > 0 || Boolean(pullRequest);
 
   return (
     <div
@@ -446,8 +445,9 @@ function RowItem({
       <button
         type="button"
         onClick={onToggle}
+        disabled={!hasDetail}
         aria-expanded={isExpanded}
-        className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left hover:bg-well-raised"
+        className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left enabled:hover:bg-well-raised"
       >
         <SignalIcon signal={ROW_SIGNALS[state]} />
         <span className="flex min-w-0 items-center gap-2">
@@ -555,7 +555,6 @@ export function CommitPanel({
   }, [agents, commits, date, pullRequests, repoFilter]);
 
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
-  const [lastRepo, setLastRepo] = useState<string | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   const repo = repos.find(({ path }) => path === activeRepo);
@@ -563,12 +562,7 @@ export function CommitPanel({
 
   const toggleRepo = (path: string) => {
     setActiveRepo(path === activeRepo ? null : path);
-    setLastRepo(path);
     setOpenRowId(null);
-  };
-
-  const togglePanel = () => {
-    setActiveRepo(isPanelOpen ? null : (lastRepo ?? repos[0]?.path ?? null));
   };
 
   const toggleRow = (rowId: string) => {
@@ -637,21 +631,6 @@ export function CommitPanel({
               ),
             )}
           </Tabs.List>
-          <button
-            type="button"
-            onClick={togglePanel}
-            aria-expanded={isPanelOpen}
-            aria-label={isPanelOpen ? "Close work" : "Open work"}
-            className="ml-auto flex shrink-0 items-center gap-2 px-2.5 text-muted-foreground hover:text-foreground"
-          >
-            <span>
-              {getSummary(repo?.rows ?? repos.flatMap(({ rows }) => rows))}
-            </span>
-            <CaretRightIcon
-              className={cn("size-3", isPanelOpen && "rotate-90")}
-              aria-hidden="true"
-            />
-          </button>
         </div>
         {repos.map(({ path, rows }) => (
           <Tabs.Panel
