@@ -1,0 +1,49 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "solid": "srgb:0.78431,0.94118,0.23529,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "srgb:0.04706,0.05490,0.05098,1.00000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name-specializations": [
+            {
+              "value": "face.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "face-dark.svg"
+            }
+          ],
+          "name": "face",
+          "glass": false
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      },
+      "specular": false
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}
