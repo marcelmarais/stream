@@ -24,7 +24,7 @@ const OVERFLOW_COUNT_WIDTH = 20;
 const FINISHED_OPACITY = 0.5;
 
 // Long enough to move the pointer from a logo onto its tooltip
-const TOOLTIP_CLOSE_DELAY_MS = 150;
+export const TOOLTIP_CLOSE_DELAY_MS = 150;
 
 // Most urgent first, so a finished agent never hides one that needs you
 const STATUS_ORDER: AgentStatus[] = ["waiting", "working", "finished"];

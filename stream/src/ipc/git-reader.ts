@@ -24,6 +24,12 @@ export interface RepoCommits {
 export type PullRequestState = "open" | "draft" | "merged";
 export type PullRequestChecks = "pass" | "fail" | "running";
 export type PullRequestReview = "requested" | "changes" | "approved";
+export type CheckRunStatus = PullRequestChecks | "skipped";
+
+export interface CheckRun {
+  name: string;
+  status: CheckRunStatus;
+}
 
 export interface PullRequest {
   repo_path: string;
@@ -36,7 +42,7 @@ export interface PullRequest {
   deletions: number;
   comments: number;
   checks: PullRequestChecks | null;
-  failed_checks: string[];
+  check_runs: CheckRun[];
   review: PullRequestReview | null;
   merged_at: string | null; // ISO 8601 timestamp
 }
@@ -45,7 +51,7 @@ export interface DefaultBranch {
   repo_path: string;
   branch: string;
   checks: PullRequestChecks | null;
-  failed_checks: string[];
+  check_runs: CheckRun[];
 }
 
 export interface PullRequestSnapshot {

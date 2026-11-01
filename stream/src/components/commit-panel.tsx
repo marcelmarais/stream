@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs } from "@base-ui/react/tabs";
+import { Tooltip } from "@base-ui/react/tooltip";
 import {
   ArrowSquareOutIcon,
   ChatCircleDotsIcon,
@@ -15,16 +16,23 @@ import {
   GitPullRequestIcon,
   type Icon,
   type IconWeight,
+  MinusIcon,
   UserCheckIcon,
   XCircleIcon,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { motion, type Transition, useReducedMotion } from "framer-motion";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { AgentStack, getAgentStackWidth } from "@/components/agent-stack";
+import {
+  AgentStack,
+  getAgentStackWidth,
+  TOOLTIP_CLOSE_DELAY_MS,
+} from "@/components/agent-stack";
 import { useDefaultBranches, usePullRequests } from "@/hooks/use-git-queries";
 import type { RunningAgent } from "@/ipc/agents";
 import type {
+  CheckRun,
+  CheckRunStatus,
   DefaultBranch,
   GitCommit,
   PullRequest,
@@ -40,6 +48,14 @@ const VISIBLE_COMMITS = 4;
 const NO_BRANCH = "no branch";
 const DEFAULT_MAIN_BRANCH = "main";
 const NO_AGENTS: RunningAgent[] = [];
+
+// Most urgent first, so a failure is never scrolled out of view
+const CHECK_RUN_ORDER: CheckRunStatus[] = [
+  "fail",
+  "running",
+  "pass",
+  "skipped",
+];
 
 // Quick to start and soft to land. Closing is a little faster than opening,
 // and the rows fade in behind the rising edge but leave before it falls.
@@ -81,7 +97,7 @@ interface WorkRow {
   agents: RunningAgent[];
   pullRequest?: PullRequest;
   checks: PullRequestChecks | null;
-  failedChecks: string[];
+  checkRuns: CheckRun[];
 }
 
 interface RepoGroup {
@@ -161,6 +177,13 @@ const CHECK_SIGNALS: Record<PullRequestChecks, Signal> = {
   },
 };
 
+const CHECK_RUN_SIGNALS: Record<CheckRunStatus, Signal> = {
+  fail: { ...CHECK_SIGNALS.fail, label: "failed" },
+  running: { ...CHECK_SIGNALS.running, label: "running" },
+  pass: { ...CHECK_SIGNALS.pass, label: "passed" },
+  skipped: { icon: MinusIcon, label: "skipped", className: "text-faint" },
+};
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
     hour: "2-digit",
@@ -171,6 +194,17 @@ function formatTime(timestamp: number): string {
 
 function pluralise(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function getFailedChecks(checkRuns: CheckRun[]): CheckRun[] {
+  return checkRuns.filter(({ status }) => status === "fail");
+}
+
+function getCheckSummary(checkRuns: CheckRun[]): string {
+  return CHECK_RUN_ORDER.flatMap((status) => {
+    const count = checkRuns.filter((run) => run.status === status).length;
+    return count > 0 ? `${count} ${CHECK_RUN_SIGNALS[status].label}` : [];
+  }).join(", ");
 }
 
 function getRepoName(repoPath: string): string {
@@ -277,7 +311,7 @@ function buildRows(
       agents: agents.filter((agent) => (agent.branch ?? NO_BRANCH) === branch),
       pullRequest,
       checks: checked?.checks ?? null,
-      failedChecks: checked?.failed_checks ?? [],
+      checkRuns: checked?.check_runs ?? [],
     });
   }
 
@@ -294,7 +328,7 @@ function buildRows(
         agents: [],
         pullRequest,
         checks: pullRequest.checks,
-        failedChecks: pullRequest.failed_checks,
+        checkRuns: pullRequest.check_runs,
       });
     }
   }
@@ -372,6 +406,74 @@ function SignalIcon({ signal }: { signal: Signal | null }) {
   );
 }
 
+function ChecksHover({
+  checks,
+  checkRuns,
+  onClick,
+}: {
+  checks: PullRequestChecks;
+  checkRuns: CheckRun[];
+  onClick?: () => void;
+}) {
+  const { icon: Glyph, label, className, weight } = CHECK_SIGNALS[checks];
+  const summary = getCheckSummary(checkRuns);
+  const byUrgency = [...checkRuns].sort(
+    (a, b) =>
+      CHECK_RUN_ORDER.indexOf(a.status) - CHECK_RUN_ORDER.indexOf(b.status),
+  );
+
+  return (
+    <Tooltip.Provider delay={150} closeDelay={TOOLTIP_CLOSE_DELAY_MS}>
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          aria-label={`${label}: ${summary}`}
+          onClick={onClick}
+          className={cn(
+            "absolute top-0 right-[52px] flex h-[27px] w-[22px] items-center justify-center",
+            className,
+          )}
+        >
+          <Glyph className="size-3.5" weight={weight} aria-hidden="true" />
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          {/* Beside the icon, so it never covers the next row's icon */}
+          <Tooltip.Positioner
+            side="left"
+            align="end"
+            sideOffset={4}
+            className="isolate z-[70]"
+          >
+            <Tooltip.Popup className="flex w-[280px] flex-col gap-1 rounded-[3px] border border-well-rule bg-popover px-[9px] py-[7px] font-mono text-[11.5px] leading-[1.4] shadow-md">
+              <span className="text-balance font-medium text-foreground">
+                {summary}
+              </span>
+              {/* Scrollbars are hidden, so a cut-off row is the sign of more */}
+              <ul className="max-h-[70px] overflow-y-auto overscroll-contain">
+                {byUrgency.map(({ name, status }, index) => (
+                  <li
+                    key={`${index}-${name}`}
+                    className={cn(
+                      "flex h-5 items-center gap-1.5",
+                      status === "fail"
+                        ? "text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    <SignalIcon signal={CHECK_RUN_SIGNALS[status]} />
+                    <span className="min-w-0 truncate" title={name}>
+                      {name}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Tooltip.Popup>
+          </Tooltip.Positioner>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  );
+}
+
 function PullRequestMeta({ pullRequest }: { pullRequest: PullRequest }) {
   const { additions, branch, comments, deletions, number, url } = pullRequest;
 
@@ -439,15 +541,15 @@ function CommitLog({ commits }: { commits: GitCommit[] }) {
 }
 
 function RowDetail({ row }: { row: WorkRow }) {
-  const { commits, failedChecks, pullRequest } = row;
+  const { checkRuns, commits, pullRequest } = row;
 
   return (
     <div className="flex flex-col gap-1.5 pt-0.5 pr-2.5 pb-2.5 pl-8 text-[11.5px] leading-[1.6]">
       {pullRequest && <PullRequestMeta pullRequest={pullRequest} />}
-      {failedChecks.map((check) => (
-        <span key={check} className="flex items-center gap-1 text-destructive">
+      {getFailedChecks(checkRuns).map(({ name }) => (
+        <span key={name} className="flex items-center gap-1 text-destructive">
           <XCircleIcon className="size-3.5" weight="fill" aria-hidden="true" />
-          {check}
+          {name}
         </span>
       ))}
       {commits.length > 0 && <CommitLog commits={commits} />}
@@ -464,22 +566,28 @@ function RowItem({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const { agents, checks, commits, failedChecks, pullRequest, state, title } =
-    row;
+  const { agents, checkRuns, checks, commits, pullRequest, state, title } = row;
   const review = pullRequest?.review;
   const hasDetail =
-    commits.length > 0 || failedChecks.length > 0 || Boolean(pullRequest);
+    commits.length > 0 ||
+    getFailedChecks(checkRuns).length > 0 ||
+    Boolean(pullRequest);
+  const hasCheckList = Boolean(checks) && checkRuns.length > 0;
 
   return (
     <div
-      className={cn("relative flex flex-col", isExpanded && "bg-well-raised")}
+      className={cn(
+        "relative flex flex-col",
+        isExpanded && "bg-well-raised",
+        hasDetail && "hover:bg-well-raised",
+      )}
     >
       <button
         type="button"
         onClick={onToggle}
         disabled={!hasDetail}
         aria-expanded={isExpanded}
-        className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left enabled:hover:bg-well-raised"
+        className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left"
       >
         <SignalIcon signal={ROW_SIGNALS[state]} />
         <span className="flex min-w-0 items-center gap-2">
@@ -500,7 +608,9 @@ function RowItem({
           )}
         </span>
         <SignalIcon signal={review ? REVIEW_SIGNALS[review] : null} />
-        <SignalIcon signal={checks ? CHECK_SIGNALS[checks] : null} />
+        <SignalIcon
+          signal={checks && !hasCheckList ? CHECK_SIGNALS[checks] : null}
+        />
         <span
           className="flex items-center justify-end gap-1 text-muted-foreground"
           title={
@@ -515,7 +625,14 @@ function RowItem({
           )}
         </span>
       </button>
-      {/* Its tooltips are buttons, so it sits over a gap left in the row */}
+      {/* Their tooltips are buttons, so they sit over gaps left in the row */}
+      {checks && hasCheckList && (
+        <ChecksHover
+          checks={checks}
+          checkRuns={checkRuns}
+          onClick={hasDetail ? onToggle : undefined}
+        />
+      )}
       {agents.length > 0 && (
         <AgentStack
           agents={agents}

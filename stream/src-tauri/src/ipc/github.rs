@@ -53,7 +53,7 @@ fragment pullRequest on PullRequest {
 }
 fragment checks on StatusCheckRollup {
   state
-  contexts(first: 30) {
+  contexts(first: 100) {
     nodes {
       ... on CheckRun { name conclusion }
       ... on StatusContext { context state }
@@ -61,6 +61,13 @@ fragment checks on StatusCheckRollup {
   }
 }
 "#;
+
+/// One check on a commit
+#[derive(Debug, Serialize, PartialEq)]
+pub struct CheckRun {
+    pub name: String,
+    pub status: &'static str,
+}
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct PullRequest {
@@ -74,7 +81,7 @@ pub struct PullRequest {
     pub deletions: u64,
     pub comments: u64,
     pub checks: Option<&'static str>,
-    pub failed_checks: Vec<String>,
+    pub check_runs: Vec<CheckRun>,
     pub review: Option<&'static str>,
     pub merged_at: Option<String>,
 }
@@ -85,7 +92,7 @@ pub struct DefaultBranch {
     pub repo_path: String,
     pub branch: String,
     pub checks: Option<&'static str>,
-    pub failed_checks: Vec<String>,
+    pub check_runs: Vec<CheckRun>,
 }
 
 #[derive(Debug, Serialize)]
@@ -242,23 +249,32 @@ fn map_checks(state: &str) -> Option<&'static str> {
     }
 }
 
-fn is_failed_check(check: &CheckNode) -> bool {
-    let result = check.conclusion.as_deref().or(check.state.as_deref());
-    matches!(
-        result,
-        Some("FAILURE" | "ERROR" | "TIMED_OUT" | "STARTUP_FAILURE")
-    )
+// A check run has no conclusion until it finishes
+fn map_check_status(check: &CheckNode) -> &'static str {
+    match check.conclusion.as_deref().or(check.state.as_deref()) {
+        Some("SUCCESS") => "pass",
+        Some("SKIPPED" | "NEUTRAL") => "skipped",
+        Some(
+            "FAILURE" | "ERROR" | "TIMED_OUT" | "STARTUP_FAILURE" | "CANCELLED" | "ACTION_REQUIRED",
+        ) => "fail",
+        _ => "running",
+    }
 }
 
-fn failed_check_names(rollup: Option<CheckRollup>) -> Vec<String> {
+fn map_check_runs(rollup: Option<CheckRollup>) -> Vec<CheckRun> {
     rollup
         .map(|rollup| {
             rollup
                 .contexts
                 .nodes
                 .into_iter()
-                .filter(is_failed_check)
-                .filter_map(|check| check.name.or(check.context))
+                .filter_map(|check| {
+                    let status = map_check_status(&check);
+                    Some(CheckRun {
+                        name: check.name.or(check.context)?,
+                        status,
+                    })
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -271,7 +287,7 @@ fn map_default_branch(repo_path: &str, node: BranchRefNode) -> DefaultBranch {
         repo_path: repo_path.to_string(),
         branch: node.name,
         checks: rollup.as_ref().and_then(|rollup| map_checks(&rollup.state)),
-        failed_checks: failed_check_names(rollup),
+        check_runs: map_check_runs(rollup),
     }
 }
 
@@ -315,7 +331,7 @@ fn map_pull_request(repo_path: &str, node: PullRequestNode) -> Option<PullReques
         deletions: node.deletions,
         comments: node.comments.total_count,
         checks: rollup.as_ref().and_then(|rollup| map_checks(&rollup.state)),
-        failed_checks: failed_check_names(rollup),
+        check_runs: map_check_runs(rollup),
         review,
         merged_at: node.merged_at,
     })
@@ -514,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_failed_checks_and_merged_state() {
+    fn reads_each_check_and_merged_state() {
         let mut failing = pull_request(1);
         failing["commits"] = json!({
             "nodes": [{
@@ -526,6 +542,10 @@ mod tests {
                                 { "name": "Lint", "conclusion": "SUCCESS" },
                                 { "name": "Build macOS App", "conclusion": "FAILURE" },
                                 { "context": "ci/legacy", "state": "ERROR" },
+                                { "name": "Deploy", "conclusion": "CANCELLED" },
+                                { "name": "Build Windows App", "conclusion": "SKIPPED" },
+                                { "name": "Test", "conclusion": null },
+                                { "context": "ci/queue", "state": "PENDING" },
                             ],
                         },
                     },
@@ -540,9 +560,22 @@ mod tests {
             parse_snapshot(&response(vec![failing], vec![merged]), &[repo("/repo")]).unwrap();
 
         assert_eq!(snapshot.pull_requests[0].checks, Some("fail"));
+        let statuses: Vec<(&str, &str)> = snapshot.pull_requests[0]
+            .check_runs
+            .iter()
+            .map(|check| (check.name.as_str(), check.status))
+            .collect();
         assert_eq!(
-            snapshot.pull_requests[0].failed_checks,
-            vec!["Build macOS App", "ci/legacy"]
+            statuses,
+            vec![
+                ("Lint", "pass"),
+                ("Build macOS App", "fail"),
+                ("ci/legacy", "fail"),
+                ("Deploy", "fail"),
+                ("Build Windows App", "skipped"),
+                ("Test", "running"),
+                ("ci/queue", "running"),
+            ]
         );
         assert_eq!(snapshot.pull_requests[1].state, "merged");
     }
@@ -582,7 +615,16 @@ mod tests {
                 repo_path: "/repo".to_string(),
                 branch: "trunk".to_string(),
                 checks: Some("fail"),
-                failed_checks: vec!["Lint".to_string()],
+                check_runs: vec![
+                    CheckRun {
+                        name: "Build".to_string(),
+                        status: "pass",
+                    },
+                    CheckRun {
+                        name: "Lint".to_string(),
+                        status: "fail",
+                    },
+                ],
             }]
         );
     }
@@ -607,7 +649,7 @@ mod tests {
         let snapshot = parse_snapshot(&stdout, &[repo("/repo")]).unwrap();
 
         assert_eq!(snapshot.default_branches[0].checks, None);
-        assert!(snapshot.default_branches[0].failed_checks.is_empty());
+        assert!(snapshot.default_branches[0].check_runs.is_empty());
     }
 
     #[test]
