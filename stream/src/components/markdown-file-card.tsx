@@ -382,12 +382,12 @@ export function FocusedFileOverlay({
       className="fixed inset-0 z-50 flex flex-col bg-background"
     >
       <div data-tauri-drag-region className="drag h-9 shrink-0" />
-      <div className="mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-auto">
-        <article className="relative min-h-full pt-1 pr-7 pb-3 pl-12">
-          <span
-            aria-hidden="true"
-            className="absolute inset-y-0 left-6 w-px bg-rail"
-          />
+      <div className="relative mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-6 w-px bg-rail"
+        />
+        <article className="min-h-0 flex-1 overflow-auto pt-1 pr-7 pb-6 pl-12">
           <DateHeader
             fileMetadata={file}
             isFocused={true}
@@ -413,14 +413,17 @@ export function FocusedFileOverlay({
             autoFocus={true}
             isEditable={true}
           />
-
-          <CommitPanel
-            commits={commits}
-            agents={agents}
-            date={file.dateFromFilename}
-            folderPath={folderPath}
-          />
         </article>
+
+        {/* Docked to the bottom edge, inside the note's margins */}
+        <CommitPanel
+          commits={commits}
+          agents={agents}
+          date={file.dateFromFilename}
+          folderPath={folderPath}
+          className="mr-7 ml-12 shrink-0"
+          docked
+        />
       </div>
       {footerComponent}
     </motion.div>

@@ -19,7 +19,8 @@ import {
   XCircleIcon,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useMemo, useState } from "react";
+import { motion, type Transition, useReducedMotion } from "framer-motion";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AgentStack, getAgentStackWidth } from "@/components/agent-stack";
 import { useDefaultBranches, usePullRequests } from "@/hooks/use-git-queries";
 import type { RunningAgent } from "@/ipc/agents";
@@ -40,6 +41,19 @@ const NO_BRANCH = "no branch";
 const DEFAULT_MAIN_BRANCH = "main";
 const NO_AGENTS: RunningAgent[] = [];
 
+// Quick to start and soft to land. Closing is a little faster than opening,
+// and the rows fade in behind the rising edge but leave before it falls.
+const DOCK_EASE: Transition["ease"] = [0.22, 1, 0.36, 1];
+const DOCK_OPEN: Transition = {
+  height: { duration: 0.22, ease: DOCK_EASE },
+  opacity: { duration: 0.15, delay: 0.055, ease: "linear" },
+};
+const DOCK_CLOSE: Transition = {
+  height: { duration: 0.18, ease: DOCK_EASE },
+  opacity: { duration: 0.07, ease: "linear" },
+};
+const NO_MOTION: Transition = { duration: 0 };
+
 type RowState = "main" | "open" | "draft" | "branch" | "merged";
 
 interface CommitPanelProps {
@@ -48,6 +62,8 @@ interface CommitPanelProps {
   date: Date;
   folderPath: string;
   className?: string;
+  /** Sits on the bottom edge of the window and grows upwards when opened */
+  docked?: boolean;
 }
 
 interface Signal {
@@ -548,12 +564,53 @@ function RepoRows({
   );
 }
 
+/** The docked panel's rows. It grows to fit them, and keeps them on screen while it closes. */
+function DockBody({ open, children }: { open: boolean; children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState(0);
+
+  // Measured rather than "auto", so switching repos or opening a row resizes smoothly
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const observer = new ResizeObserver(() =>
+      setContentHeight(content.offsetHeight),
+    );
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+
+  let transition = open ? DOCK_OPEN : DOCK_CLOSE;
+  if (reduceMotion) {
+    transition = NO_MOTION;
+  }
+
+  return (
+    <motion.div
+      initial={false}
+      animate={{ height: open ? contentHeight : 0, opacity: open ? 1 : 0 }}
+      transition={transition}
+      inert={!open}
+      className="overflow-hidden"
+    >
+      <div
+        ref={contentRef}
+        className="flex flex-col border-well-rule border-t pt-1 pb-1.5"
+      >
+        {children}
+      </div>
+    </motion.div>
+  );
+}
+
 export function CommitPanel({
   commits,
   agents = NO_AGENTS,
   date,
   folderPath,
   className,
+  docked = false,
 }: CommitPanelProps) {
   const pullRequests = usePullRequests(folderPath);
   const defaultBranches = useDefaultBranches(folderPath);
@@ -564,13 +621,21 @@ export function CommitPanel({
   );
 
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
+  // The last repo opened, which the dock keeps showing as it closes
+  const [shownRepo, setShownRepo] = useState<string | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   const repo = repos.find(({ path }) => path === activeRepo);
+  const shown = repos.find(({ path }) => path === shownRepo);
   const isPanelOpen = Boolean(repo);
 
   const toggleRepo = (path: string) => {
-    setActiveRepo(path === activeRepo ? null : path);
+    if (path === activeRepo) {
+      setActiveRepo(null);
+      return;
+    }
+    setActiveRepo(path);
+    setShownRepo(path);
     setOpenRowId(null);
   };
 
@@ -590,7 +655,10 @@ export function CommitPanel({
       />
       <Tabs.Root
         value={repo?.path ?? null}
-        className="flex flex-col overflow-hidden rounded-[3px] border border-well-rule bg-well text-xs leading-[1.4]"
+        className={cn(
+          "flex flex-col overflow-hidden border border-well-rule bg-well text-xs leading-[1.4]",
+          docked ? "rounded-t-[3px] border-b-0" : "rounded-[3px]",
+        )}
       >
         <div className="flex h-[30px] items-stretch">
           <Tabs.List
@@ -602,16 +670,27 @@ export function CommitPanel({
                 <div
                   key={path}
                   className={cn(
-                    "flex shrink-0 items-stretch border-well-rule border-r",
-                    path === activeRepo &&
+                    "relative flex shrink-0 items-stretch border-well-rule border-r",
+                    !docked &&
+                      path === activeRepo &&
                       "shadow-[inset_0_-2px_0_var(--primary)]",
                   )}
                 >
+                  {docked && (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "absolute inset-x-0 bottom-0 h-0.5 origin-left bg-primary transition-transform duration-[220ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                        path === activeRepo ? "scale-x-100" : "scale-x-0",
+                      )}
+                    />
+                  )}
                   <Tabs.Tab
                     value={path}
                     onClick={() => toggleRepo(path)}
                     className={cn(
                       "flex items-center gap-[7px] px-[11px] font-medium",
+                      docked && "transition-colors duration-150",
                       repoAgents.length > 0 && "pr-1",
                       isPanelOpen && path !== activeRepo
                         ? "text-muted-foreground"
@@ -641,19 +720,32 @@ export function CommitPanel({
             )}
           </Tabs.List>
         </div>
-        {repos.map(({ path, rows }) => (
-          <Tabs.Panel
-            key={path}
-            value={path}
-            className="flex flex-col border-well-rule border-t pt-1 pb-1.5"
-          >
-            <RepoRows
-              rows={rows}
-              openRowId={openRowId}
-              onToggleRow={toggleRow}
-            />
-          </Tabs.Panel>
-        ))}
+        {docked ? (
+          <DockBody open={isPanelOpen}>
+            {shown && (
+              <RepoRows
+                key={shown.path}
+                rows={shown.rows}
+                openRowId={openRowId}
+                onToggleRow={toggleRow}
+              />
+            )}
+          </DockBody>
+        ) : (
+          repos.map(({ path, rows }) => (
+            <Tabs.Panel
+              key={path}
+              value={path}
+              className="flex flex-col border-well-rule border-t pt-1 pb-1.5"
+            >
+              <RepoRows
+                rows={rows}
+                openRowId={openRowId}
+                onToggleRow={toggleRow}
+              />
+            </Tabs.Panel>
+          ))
+        )}
       </Tabs.Root>
     </div>
   );
