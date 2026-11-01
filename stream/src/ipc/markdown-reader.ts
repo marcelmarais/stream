@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { remove, stat } from "@tauri-apps/plugin-fs";
-import { readMeta, setFileLocation } from "@/ipc/meta";
+import {
+  getMetaKeyForFilePath,
+  isTrustedLocation,
+  readMeta,
+  setFileLocation,
+} from "@/ipc/meta";
 
 /**
  * Represents markdown file metadata without content
@@ -122,59 +127,14 @@ export async function readMarkdownFilesContentByPaths(
 
 /**
  * Writes content to a markdown file at the specified path.
- * If the file is newly created, it will automatically store the user's current location
- * (country and city) in meta.json (best effort).
  */
 export async function writeMarkdownFileContent(
   filePath: string,
   content: string,
-  options: { baseFolderPath?: string } = {},
 ): Promise<void> {
   try {
-    let fileExists = true;
-    try {
-      await stat(filePath);
-    } catch {
-      fileExists = false;
-    }
-
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     await writeTextFile(filePath, content);
-
-    if (!fileExists) {
-      const baseFolderPath =
-        options.baseFolderPath ||
-        filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
-
-      const detected = await getCurrentLocation();
-      const fallback = (await readMeta(baseFolderPath)).globals?.lastLocation;
-      const location = detected
-        ? { ...detected, source: "auto:ip" }
-        : fallback
-          ? {
-              country: fallback.country,
-              city: fallback.city,
-              source: "auto:lastLocation",
-            }
-          : undefined;
-
-      if (location) {
-        try {
-          await setFileLocationMetadata(
-            baseFolderPath,
-            filePath,
-            location.country,
-            location.city,
-            location.source,
-          );
-        } catch (error) {
-          console.warn(
-            `Could not set location metadata for ${filePath}:`,
-            error,
-          );
-        }
-      }
-    }
   } catch (error) {
     console.error(`Error writing file ${filePath}:`, error);
     throw new Error(`Failed to write markdown file: ${error}`);
@@ -216,9 +176,7 @@ export async function ensureMarkdownFileForDate(
     await stat(filePath);
     return { filePath, created: false };
   } catch {
-    await writeMarkdownFileContent(filePath, "", {
-      baseFolderPath: directoryPath,
-    });
+    await writeMarkdownFileContent(filePath, "");
     return { filePath, created: true };
   }
 }
@@ -235,81 +193,74 @@ export async function ensureTodayMarkdownFile(
 }
 
 /**
- * Gets the current user's location (country and city) via IP geolocation.
- * Uses public IP geolocation providers (no API key required).
- * Returns undefined if location cannot be determined.
+ * Gets the current user's location (country and city) from macOS location
+ * services. Returns undefined if location cannot be determined.
  */
 export async function getCurrentLocation(): Promise<
   { country: string; city: string } | undefined
 > {
   try {
-    const fetchWithTimeout = async (url: string, timeoutMs: number) => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        return await fetch(url, { signal: controller.signal });
-      } finally {
-        clearTimeout(timeout);
-      }
-    };
-
-    const providers: Array<{
-      name: string;
-      url: string;
-      parse: (data: unknown) => { country?: string; city?: string };
-    }> = [
-      {
-        name: "ipapi.co",
-        url: "https://ipapi.co/json/",
-        parse: (data) => {
-          const d = data as { country_name?: string; city?: string };
-          return { country: d.country_name, city: d.city };
-        },
-      },
-      {
-        name: "ipwho.is",
-        url: "https://ipwho.is/",
-        parse: (data) => {
-          const d = data as { country?: string; city?: string };
-          return { country: d.country, city: d.city };
-        },
-      },
-    ];
-
-    for (const provider of providers) {
-      try {
-        const response = await fetchWithTimeout(provider.url, 5000);
-        if (!response.ok) {
-          console.warn(
-            `Failed to fetch location from ${provider.name}:`,
-            response.statusText,
-          );
-          continue;
-        }
-
-        const data = await response.json();
-        const { country, city } = provider.parse(data);
-
-        if (
-          country &&
-          city &&
-          country !== "Unknown" &&
-          city !== "Unknown" &&
-          country.trim() !== "" &&
-          city.trim() !== ""
-        ) {
-          return { country, city };
-        }
-      } catch (error) {
-        console.warn(`Error getting location from ${provider.name}:`, error);
-      }
-    }
-
-    return undefined;
+    return await invoke("detect_location");
   } catch (error) {
-    console.error("Error getting current location:", error);
+    console.warn("Could not detect location:", error);
     return undefined;
   }
+}
+
+/**
+ * Gets where the user is now, falling back to their last trusted location.
+ */
+export async function resolveCurrentLocation(
+  folderPath: string,
+): Promise<{ country: string; city: string; source: string } | undefined> {
+  const detected = await getCurrentLocation();
+  if (detected) return { ...detected, source: "auto:corelocation" };
+
+  const last = (await readMeta(folderPath)).globals?.lastLocation;
+  if (!last || !isTrustedLocation(last)) return undefined;
+
+  return {
+    country: last.country,
+    city: last.city,
+    source: "auto:lastLocation",
+  };
+}
+
+/**
+ * Stores the current location for a file unless it already has one.
+ * Returns whether a location could be determined.
+ */
+export async function fillFileLocation(
+  folderPath: string,
+  filePath: string,
+): Promise<boolean> {
+  const location = await resolveCurrentLocation(folderPath);
+  if (!location) return false;
+
+  await setFileLocation(folderPath, filePath, location, { onlyIfEmpty: true });
+  return true;
+}
+
+/**
+ * Gets the location of the closest earlier note, as a suggestion for a past
+ * day. Skips IP lookups from older versions, which are often the wrong city.
+ */
+export async function getNearestEarlierLocation(
+  folderPath: string,
+  filePath: string,
+): Promise<{ country: string; city: string } | undefined> {
+  const meta = await readMeta(folderPath);
+  const fileKey = getMetaKeyForFilePath(folderPath, filePath);
+
+  const nearestKey = Object.keys(meta.files)
+    .filter((key) => {
+      const location = meta.files[key]?.location;
+      return key < fileKey && location && location.source !== "auto:ip";
+    })
+    .sort()
+    .at(-1);
+
+  return nearestKey ? meta.files[nearestKey]?.location : undefined;
 }
 
 /**

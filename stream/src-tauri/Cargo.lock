@@ -2417,6 +2417,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-core-location"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca347214e24bc973fc025fd0d36ebb179ff30536ed1f80252706db19ee452009"
+dependencies = [
+ "block2 0.6.2",
+ "objc2 0.6.3",
+ "objc2-foundation 0.3.2",
+]
+
+[[package]]
 name = "objc2-core-text"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3880,9 +3891,13 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "stream"
 version = "0.1.0"
 dependencies = [
+ "block2 0.6.2",
  "chrono",
  "git2",
  "objc",
+ "objc2 0.6.3",
+ "objc2-core-location",
+ "objc2-foundation 0.3.2",
  "rayon",
  "regex",
  "serde",
