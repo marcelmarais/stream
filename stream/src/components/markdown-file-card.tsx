@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useCommitsForDate } from "@/hooks/use-git-queries";
+import { useAgentsForDate, useCommitsForDate } from "@/hooks/use-git-queries";
 import {
   useCreateTodayFile,
   useDeleteMarkdownFile,
@@ -186,6 +186,7 @@ export function FileCard({
   );
 
   const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
+  const agents = useAgentsForDate(folderPath, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
@@ -226,6 +227,7 @@ export function FileCard({
 
           <CommitPanel
             commits={commits}
+            agents={agents}
             date={file.dateFromFilename}
             folderPath={folderPath}
           />
@@ -373,6 +375,7 @@ export function FocusedFileOverlay({
     { autoRefresh: true }, // Only auto-refresh when expanded/focused
   );
   const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
+  const agents = useAgentsForDate(folderPath, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
@@ -418,6 +421,7 @@ export function FocusedFileOverlay({
 
           <CommitPanel
             commits={commits}
+            agents={agents}
             date={file.dateFromFilename}
             folderPath={folderPath}
           />

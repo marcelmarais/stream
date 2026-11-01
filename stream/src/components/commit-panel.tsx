@@ -21,7 +21,9 @@ import {
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMemo, useState } from "react";
+import { AgentStack, getAgentStackWidth } from "@/components/agent-stack";
 import { usePullRequests } from "@/hooks/use-git-queries";
+import type { RunningAgent } from "@/ipc/agents";
 import type {
   GitCommit,
   PullRequest,
@@ -35,11 +37,14 @@ import { getDateKey } from "@/utils/date-utils";
 
 const VISIBLE_ROWS = 6;
 const VISIBLE_COMMITS = 4;
+const NO_BRANCH = "no branch";
+const NO_AGENTS: RunningAgent[] = [];
 
 type RowState = "main" | "open" | "draft" | "branch" | "merged";
 
 interface CommitPanelProps {
   commits: GitCommit[];
+  agents?: RunningAgent[];
   date: Date;
   folderPath: string;
   className?: string;
@@ -57,6 +62,7 @@ interface WorkRow {
   state: RowState;
   title: string;
   commits: GitCommit[];
+  agents: RunningAgent[];
   pullRequest?: PullRequest;
 }
 
@@ -64,6 +70,7 @@ interface RepoGroup {
   path: string;
   name: string;
   commits: GitCommit[];
+  agents: RunningAgent[];
   rows: WorkRow[];
 }
 
@@ -167,9 +174,7 @@ function getCommitBranch(commit: GitCommit): string {
     branch.replace("origin/", ""),
   );
   return (
-    branches.find((branch) => !isMainBranch(branch)) ??
-    branches[0] ??
-    "no branch"
+    branches.find((branch) => !isMainBranch(branch)) ?? branches[0] ?? NO_BRANCH
   );
 }
 
@@ -177,17 +182,17 @@ function getBranchState(branch: string, commits: GitCommit[]): RowState {
   if (isMainBranch(branch)) {
     return "main";
   }
-  const isMerged = commits.every((commit) =>
-    commit.branches.some(isMainBranch),
-  );
+  const isMerged =
+    commits.length > 0 &&
+    commits.every((commit) => commit.branches.some(isMainBranch));
   return isMerged ? "merged" : "branch";
 }
 
-function getRowRank({ state, pullRequest }: WorkRow): number {
+function getRowRank({ state, agents, pullRequest }: WorkRow): number {
   if (state === "main") {
     return 0;
   }
-  if (pullRequest && needsAttention(pullRequest)) {
+  if (agents.length > 0 || (pullRequest && needsAttention(pullRequest))) {
     return 1;
   }
   return ["open", "draft", "branch", "merged"].indexOf(state) + 2;
@@ -209,6 +214,7 @@ function belongsToDay(
 function buildRows(
   commits: GitCommit[],
   pullRequests: PullRequest[],
+  agents: RunningAgent[],
   dateKey: string,
   todayKey: string,
 ): WorkRow[] {
@@ -220,6 +226,12 @@ function buildRows(
     branches.set(branch, [...(branches.get(branch) ?? []), commit]);
   }
 
+  // An agent can be working on a branch with nothing committed yet
+  for (const agent of agents) {
+    const branch = agent.branch ?? NO_BRANCH;
+    branches.set(branch, branches.get(branch) ?? []);
+  }
+
   for (const [branch, branchCommits] of branches) {
     const pullRequest = pullRequests.find((pr) => pr.branch === branch);
     rows.set(branch, {
@@ -227,6 +239,7 @@ function buildRows(
       state: pullRequest?.state ?? getBranchState(branch, branchCommits),
       title: pullRequest?.title ?? branch,
       commits: branchCommits,
+      agents: agents.filter((agent) => (agent.branch ?? NO_BRANCH) === branch),
       pullRequest,
     });
   }
@@ -241,6 +254,7 @@ function buildRows(
         state: pullRequest.state,
         title: pullRequest.title,
         commits: [],
+        agents: [],
         pullRequest,
       });
     }
@@ -252,6 +266,7 @@ function buildRows(
 function groupWork(
   commits: GitCommit[],
   pullRequests: PullRequest[],
+  agents: RunningAgent[],
   date: Date,
 ): RepoGroup[] {
   const dateKey = getDateKey(date);
@@ -274,17 +289,27 @@ function groupWork(
     }
   }
 
-  return [...repos].map(([path, repoCommits]) => ({
-    path,
-    name: getRepoName(path),
-    commits: repoCommits,
-    rows: buildRows(
-      repoCommits,
-      pullRequests.filter((pr) => pr.repo_path === path),
-      dateKey,
-      todayKey,
-    ),
-  }));
+  for (const agent of agents) {
+    repos.set(agent.repo_path, repos.get(agent.repo_path) ?? []);
+  }
+
+  return [...repos].map(([path, repoCommits]) => {
+    const repoAgents = agents.filter((agent) => agent.repo_path === path);
+
+    return {
+      path,
+      name: getRepoName(path),
+      commits: repoCommits,
+      agents: repoAgents,
+      rows: buildRows(
+        repoCommits,
+        pullRequests.filter((pr) => pr.repo_path === path),
+        repoAgents,
+        dateKey,
+        todayKey,
+      ),
+    };
+  });
 }
 
 function getSummary(rows: WorkRow[]): string {
@@ -410,12 +435,14 @@ function RowItem({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const { commits, pullRequest, state, title } = row;
+  const { agents, commits, pullRequest, state, title } = row;
   const review = pullRequest?.review;
   const checks = pullRequest?.state === "merged" ? null : pullRequest?.checks;
 
   return (
-    <div className={cn("flex flex-col", isExpanded && "bg-well-raised")}>
+    <div
+      className={cn("relative flex flex-col", isExpanded && "bg-well-raised")}
+    >
       <button
         type="button"
         onClick={onToggle}
@@ -423,13 +450,22 @@ function RowItem({
         className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left hover:bg-well-raised"
       >
         <SignalIcon signal={ROW_SIGNALS[state]} />
-        <span
-          className={cn(
-            "min-w-0 truncate",
-            isExpanded ? "text-foreground" : "text-body",
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate",
+              isExpanded ? "text-foreground" : "text-body",
+            )}
+          >
+            {title}
+          </span>
+          {agents.length > 0 && (
+            <span
+              aria-hidden="true"
+              className="shrink-0"
+              style={{ width: getAgentStackWidth(agents.length) }}
+            />
           )}
-        >
-          {title}
         </span>
         <SignalIcon signal={review ? REVIEW_SIGNALS[review] : null} />
         <SignalIcon signal={checks ? CHECK_SIGNALS[checks] : null} />
@@ -447,6 +483,14 @@ function RowItem({
           )}
         </span>
       </button>
+      {/* Its tooltips are buttons, so it sits over a gap left in the row */}
+      {agents.length > 0 && (
+        <AgentStack
+          agents={agents}
+          size={14}
+          className="absolute top-0 right-[100px] h-[27px]"
+        />
+      )}
       {isExpanded && <RowDetail row={row} />}
     </div>
   );
@@ -490,6 +534,7 @@ function RepoRows({
 
 export function CommitPanel({
   commits,
+  agents = NO_AGENTS,
   date,
   folderPath,
   className,
@@ -498,12 +543,16 @@ export function CommitPanel({
   const repoFilter = useUserStore((state) => state.commitFilters.repos);
 
   const repos = useMemo(() => {
-    const visiblePullRequests = pullRequests.filter(
-      ({ repo_path }) =>
-        repoFilter.length === 0 || repoFilter.includes(getRepoName(repo_path)),
+    const isVisible = ({ repo_path }: { repo_path: string }) =>
+      repoFilter.length === 0 || repoFilter.includes(getRepoName(repo_path));
+
+    return groupWork(
+      commits,
+      pullRequests.filter(isVisible),
+      agents.filter(isVisible),
+      date,
     );
-    return groupWork(commits, visiblePullRequests, date);
-  }, [commits, date, pullRequests, repoFilter]);
+  }, [agents, commits, date, pullRequests, repoFilter]);
 
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [lastRepo, setLastRepo] = useState<string | null>(null);
@@ -545,28 +594,48 @@ export function CommitPanel({
             aria-label="Repositories"
             className="flex min-w-0 items-stretch overflow-x-auto"
           >
-            {repos.map(({ path, name, commits: repoCommits }) => (
-              <Tabs.Tab
-                key={path}
-                value={path}
-                onClick={() => toggleRepo(path)}
-                className={cn(
-                  "flex shrink-0 items-center gap-[7px] border-well-rule border-r px-[11px] font-medium",
-                  path === activeRepo &&
-                    "shadow-[inset_0_-2px_0_var(--primary)]",
-                  isPanelOpen && path !== activeRepo
-                    ? "text-muted-foreground"
-                    : "text-foreground",
-                )}
-              >
-                <span>{name}</span>
-                {repoCommits.length > 0 && (
-                  <span className="font-normal text-muted-foreground">
-                    {repoCommits.length}
-                  </span>
-                )}
-              </Tabs.Tab>
-            ))}
+            {repos.map(
+              ({ path, name, commits: repoCommits, agents: repoAgents }) => (
+                <div
+                  key={path}
+                  className={cn(
+                    "flex shrink-0 items-stretch border-well-rule border-r",
+                    path === activeRepo &&
+                      "shadow-[inset_0_-2px_0_var(--primary)]",
+                  )}
+                >
+                  <Tabs.Tab
+                    value={path}
+                    onClick={() => toggleRepo(path)}
+                    className={cn(
+                      "flex items-center gap-[7px] px-[11px] font-medium",
+                      repoAgents.length > 0 && "pr-1",
+                      isPanelOpen && path !== activeRepo
+                        ? "text-muted-foreground"
+                        : "text-foreground",
+                    )}
+                  >
+                    <span>{name}</span>
+                    {repoCommits.length > 0 && (
+                      <span className="font-normal text-muted-foreground">
+                        {repoCommits.length}
+                      </span>
+                    )}
+                  </Tabs.Tab>
+                  {repoAgents.length > 0 && (
+                    <AgentStack
+                      agents={repoAgents}
+                      moving={path !== activeRepo}
+                      size={15}
+                      className={cn(
+                        "pr-1.5",
+                        path === activeRepo && "opacity-60",
+                      )}
+                    />
+                  )}
+                </div>
+              ),
+            )}
           </Tabs.List>
           <button
             type="button"

@@ -10,6 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { load } from "@tauri-apps/plugin-store";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { listRunningAgents, type RunningAgent } from "@/ipc/agents";
 import {
   type CommitsByDate,
   createDateRange,
@@ -21,9 +22,12 @@ import {
   type PullRequestSnapshot,
 } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
+import { useUserStore } from "@/stores/user-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
 const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
+const AGENT_POLL_INTERVAL_MS = 3000;
+const NO_AGENTS: RunningAgent[] = [];
 
 const PULL_REQUEST_POLL_MS = 60000;
 // Checks finish within minutes, so follow them more closely while they run
@@ -51,6 +55,7 @@ export const gitKeys = {
     [...gitKeys.all, "commits", folderPath, dateKey, repos] as const,
   pullRequests: (folderPath: string) =>
     [...gitKeys.all, "pull-requests", folderPath] as const,
+  agents: (repos: string[]) => [...gitKeys.all, "agents", repos] as const,
 };
 
 function pullRequestQuery(folderPath: string, repos: string[]) {
@@ -467,6 +472,38 @@ export function usePrefetchCommitsForDates() {
       ),
     );
   };
+}
+
+/**
+ * Hook to get the agents running in connected repositories. Polling stops with
+ * the setting, and while the window is hidden.
+ */
+export function useRunningAgents(
+  folderPath: string,
+  options?: { enabled?: boolean },
+) {
+  const { enabled = true } = options || {};
+  const agentsEnabled = useUserStore((state) => state.agentsEnabled);
+  const { data: repos = [] } = useConnectedRepos(folderPath);
+  const isActive = enabled && agentsEnabled && repos.length > 0;
+
+  const { data = NO_AGENTS } = useQuery({
+    queryKey: gitKeys.agents(repos),
+    queryFn: () => listRunningAgents(repos),
+    enabled: isActive,
+    refetchInterval: AGENT_POLL_INTERVAL_MS,
+  });
+
+  return isActive ? data : NO_AGENTS;
+}
+
+/**
+ * Agents are happening now, so they only belong on today's note
+ */
+export function useAgentsForDate(folderPath: string, date: Date) {
+  return useRunningAgents(folderPath, {
+    enabled: getDateKey(date) === getDateKey(new Date()),
+  });
 }
 
 /**

@@ -10,6 +10,7 @@ use objc::{msg_send, sel, sel_impl};
 
 pub use ipc::{FetchResult, GitCommit, MarkdownFileMetadata, RepoCommits};
 
+use crate::ipc::agents::list_running_agents;
 use crate::ipc::git::{fetch_repos, get_git_commits_for_repos};
 use crate::ipc::github::get_pull_requests;
 use crate::ipc::location::detect_location;
@@ -61,6 +62,7 @@ pub fn run() {
             fetch_repos,
             get_pull_requests,
             discover_git_repos,
+            list_running_agents,
             detect_location,
             set_file_location_metadata,
             search::search_markdown_files,
