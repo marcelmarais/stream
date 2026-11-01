@@ -148,17 +148,12 @@
   }
 
   body {
-    /* Rounded corners for transparent Tauri window */
-    border-radius: 0.5rem; /* ~8px */
     overflow: hidden;
-    /* Ensure background is transparent for Tauri */
-    background: transparent;
   }
 
-  /* Main app container that respects rounded corners */
+  /* Main app container */
   #__next,
   [data-nextjs-scroll-focus-boundary] {
-    border-radius: 0.5rem;
     overflow: hidden;
     background: var(--background);
     min-height: 100vh;

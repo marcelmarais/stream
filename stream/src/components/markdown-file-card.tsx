@@ -381,8 +381,9 @@ export function FocusedFileOverlay({
       transition={commitMountTransition}
       className="fixed inset-0 z-50 flex flex-col bg-background"
     >
-      <div className="mx-auto w-full max-w-2xl flex-1 overflow-auto">
-        <article className="relative min-h-full pt-10 pr-7 pb-3 pl-12">
+      <div data-tauri-drag-region className="drag h-9 shrink-0" />
+      <div className="mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-auto">
+        <article className="relative min-h-full pt-1 pr-7 pb-3 pl-12">
           <span
             aria-hidden="true"
             className="absolute inset-y-0 left-6 w-px bg-rail"

@@ -1,9 +1,7 @@
 "use client";
 
 import { ArrowLeft } from "@phosphor-icons/react";
-import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
 import { HeaderActions, SearchButton } from "@/components/markdown-file-card";
 
 interface TitlebarProps {
@@ -31,19 +29,6 @@ export function Titlebar({
   onBack,
   backLabel,
 }: TitlebarProps) {
-  const [appWindow, setAppWindow] = useState<Window | null>(null);
-
-  useEffect(() => {
-    // Only initialize the window reference in the browser
-    if (typeof window !== "undefined") {
-      setAppWindow(getCurrentWindow());
-    }
-  }, []);
-
-  const handleClose = () => appWindow?.close();
-  const handleMinimize = () => appWindow?.minimize();
-  const handleMaximize = () => appWindow?.toggleMaximize();
-
   return (
     <div
       data-tauri-drag-region
@@ -51,32 +36,12 @@ export function Titlebar({
     >
       <div
         data-tauri-drag-region
-        className="drag flex w-[clamp(6rem,24vw,10rem)] shrink-0 items-center gap-2"
+        className="drag flex w-[clamp(6rem,24vw,10rem)] shrink-0 items-center gap-2 pl-18"
       >
-        <div className="group flex items-center gap-[7px]">
-          <button
-            type="button"
-            aria-label="Close window"
-            className="no-drag size-[9px] rounded-[2px] bg-rail group-hover:bg-red-500"
-            onClick={handleClose}
-          />
-          <button
-            type="button"
-            aria-label="Minimize window"
-            className="no-drag size-[9px] rounded-[2px] bg-rail group-hover:bg-yellow-500"
-            onClick={handleMinimize}
-          />
-          <button
-            type="button"
-            aria-label="Maximize window"
-            className="no-drag size-[9px] rounded-[2px] bg-rail group-hover:bg-green-500"
-            onClick={handleMaximize}
-          />
-        </div>
         {onBack && (
           <button
             type="button"
-            className="no-drag ml-2 flex h-6 items-center gap-1.5 whitespace-nowrap text-muted-foreground hover:text-foreground"
+            className="no-drag flex h-6 items-center gap-1.5 whitespace-nowrap text-muted-foreground hover:text-foreground"
             onClick={onBack}
           >
             <ArrowLeft className="size-3" />

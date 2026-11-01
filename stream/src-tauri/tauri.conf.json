@@ -10,15 +10,16 @@
     "frontendDist": "../out"
   },
   "app": {
-    "macOSPrivateApi": true,
     "windows": [
       {
+        "backgroundColor": "#0c0e0d",
         "fullscreen": false,
         "height": 800,
+        "hiddenTitle": true,
         "resizable": true,
-        "width": 600,
-        "decorations": false,
-        "transparent": true
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 12, "y": 20 },
+        "width": 600
       }
     ],
     "security": {
