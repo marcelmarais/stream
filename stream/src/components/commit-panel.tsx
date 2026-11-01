@@ -48,6 +48,8 @@ const VISIBLE_COMMITS = 4;
 const NO_BRANCH = "no branch";
 const DEFAULT_MAIN_BRANCH = "main";
 const NO_AGENTS: RunningAgent[] = [];
+// Larger than any rank, so other people's work sorts below all of mine
+const OTHER_PEOPLES_RANK = 6;
 
 // Most urgent first, so a failure is never scrolled out of view
 const CHECK_RUN_ORDER: CheckRunStatus[] = [
@@ -96,6 +98,7 @@ interface WorkRow {
   commits: GitCommit[];
   agents: RunningAgent[];
   pullRequest?: PullRequest;
+  isMine: boolean;
   checks: PullRequestChecks | null;
   checkRuns: CheckRun[];
 }
@@ -247,14 +250,28 @@ function getBranchState(branch: string, commits: GitCommit[]): RowState {
   return isMerged ? "merged" : "branch";
 }
 
-function getRowRank({ state, agents, pullRequest }: WorkRow): number {
+// A pull request has one author. A branch has none, so it's mine if I committed
+// to it. Either way, an agent on this Mac means I'm working on it now.
+function isMyWork(
+  commits: GitCommit[],
+  agents: RunningAgent[],
+  pullRequest: PullRequest | undefined,
+): boolean {
+  return (
+    agents.length > 0 ||
+    (pullRequest?.is_mine ?? commits.some(({ is_mine }) => is_mine))
+  );
+}
+
+function getRowRank({ state, agents, pullRequest, isMine }: WorkRow): number {
   if (state === "main") {
     return 0;
   }
-  if (agents.length > 0 || (pullRequest && needsAttention(pullRequest))) {
-    return 1;
-  }
-  return ["open", "draft", "branch", "merged"].indexOf(state) + 2;
+  const rank =
+    agents.length > 0 || (pullRequest && needsAttention(pullRequest))
+      ? 1
+      : ["open", "draft", "branch", "merged"].indexOf(state) + 2;
+  return isMine ? rank : rank + OTHER_PEOPLES_RANK;
 }
 
 // Open pull requests are live state, so they sit on today even with no commits.
@@ -301,6 +318,9 @@ function buildRows(
     const pullRequest = pullRequests.find((pr) => pr.branch === branch);
     const isMain = branch === mainBranch;
     const checked = isMain ? mainChecks : pullRequest;
+    const branchAgents = agents.filter(
+      (agent) => (agent.branch ?? NO_BRANCH) === branch,
+    );
     rows.set(branch, {
       id: branch,
       state: isMain
@@ -308,8 +328,9 @@ function buildRows(
         : (pullRequest?.state ?? getBranchState(branch, branchCommits)),
       title: pullRequest?.title ?? branch,
       commits: branchCommits,
-      agents: agents.filter((agent) => (agent.branch ?? NO_BRANCH) === branch),
+      agents: branchAgents,
       pullRequest,
+      isMine: isMyWork(branchCommits, branchAgents, pullRequest),
       checks: checked?.checks ?? null,
       checkRuns: checked?.check_runs ?? [],
     });
@@ -327,6 +348,7 @@ function buildRows(
         commits: [],
         agents: [],
         pullRequest,
+        isMine: pullRequest.is_mine,
         checks: pullRequest.checks,
         checkRuns: pullRequest.check_runs,
       });

@@ -90,6 +90,7 @@ pub struct PullRequest {
     pub check_runs: Vec<CheckRun>,
     pub review: Option<&'static str>,
     pub merged_at: Option<String>,
+    pub is_mine: bool,
 }
 
 /// A repo's default branch and the checks on its latest commit
@@ -425,6 +426,7 @@ fn map_pull_request(repo_path: &str, node: PullRequestNode) -> Option<PullReques
         check_runs: map_check_runs(rollup),
         review,
         merged_at: node.merged_at,
+        is_mine: node.viewer_did_author,
     })
 }
 
@@ -1052,6 +1054,8 @@ mod tests {
         let numbers: Vec<u64> = snapshot.pull_requests.iter().map(|pr| pr.number).collect();
         assert_eq!(numbers, vec![1, 3]);
         assert_eq!(snapshot.pull_requests[1].review, Some("requested"));
+        assert!(snapshot.pull_requests[0].is_mine);
+        assert!(!snapshot.pull_requests[1].is_mine);
         assert_eq!(snapshot.rate_remaining, Some(4200));
     }
 

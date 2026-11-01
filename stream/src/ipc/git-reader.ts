@@ -13,6 +13,7 @@ export interface GitCommit {
   repo_path: string;
   branches: string[]; // Branches that contain this commit
   url?: string; // URL to commit on remote (if available)
+  is_mine: boolean; // Authored by the repo's git user or one of their agents
 }
 
 export interface RepoCommits {
@@ -45,6 +46,7 @@ export interface PullRequest {
   check_runs: CheckRun[];
   review: PullRequestReview | null;
   merged_at: string | null; // ISO 8601 timestamp
+  is_mine: boolean; // False when it's only here because my review was requested
 }
 
 export interface DefaultBranch {

@@ -11,6 +11,9 @@ const MAX_COMMITS_PER_REPO: usize = 200;
 /// Limit the number of branch tips used for non-tip commit matching (performance guard)
 const MAX_BRANCH_TIPS_FOR_MATCH: usize = 50;
 
+/// Agents commit under their own name for you, in cloud sessions for example.
+const AGENT_AUTHOR_EMAILS: [&str; 2] = ["noreply@anthropic.com", "cursoragent@cursor.com"];
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitCommit {
     pub id: String,
@@ -22,6 +25,7 @@ pub struct GitCommit {
     pub repo_path: String,
     pub branches: Vec<String>,
     pub url: Option<String>,
+    pub is_mine: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -446,6 +450,20 @@ fn build_commit_url(remote_url: &str, commit_id: &str) -> Option<String> {
     }
 }
 
+fn get_user_email(repo: &Repository) -> Option<String> {
+    repo.config()
+        .ok()?
+        .get_string("user.email")
+        .ok()
+        .filter(|email| !email.is_empty())
+}
+
+// Names vary between machines, so the email is what identifies an author
+fn is_my_commit(author_email: &str, user_email: Option<&str>) -> bool {
+    AGENT_AUTHOR_EMAILS.contains(&author_email)
+        || user_email.is_some_and(|email| email.eq_ignore_ascii_case(author_email))
+}
+
 fn get_repo_commits(
     repo_path: &str,
     start_seconds: i64,
@@ -459,6 +477,7 @@ fn get_repo_commits(
     revwalk.set_sorting(git2::Sort::TIME)?;
 
     let remote_url = get_remote_url(&repo);
+    let user_email = get_user_email(&repo);
     
     // Build branch tip map once upfront (much faster than per-commit checks)
     let branch_tip_map = build_branch_tip_map(&repo).unwrap_or_default();
@@ -570,6 +589,7 @@ fn get_repo_commits(
             repo_path: repo_path.to_string(),
             branches,
             url,
+            is_mine: is_my_commit(author.email().unwrap_or(""), user_email.as_deref()),
         };
 
         commits.push(git_commit);
@@ -583,6 +603,17 @@ fn get_repo_commits(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn my_commits_match_the_git_user_or_an_agent() {
+        let me = Some("marcel@example.com");
+
+        assert!(is_my_commit("Marcel@Example.com", me));
+        assert!(is_my_commit("noreply@anthropic.com", me));
+        assert!(is_my_commit("cursoragent@cursor.com", None));
+        assert!(!is_my_commit("49699333+dependabot[bot]@users.noreply.github.com", me));
+        assert!(!is_my_commit("", None));
+    }
     use git2::{Oid, Signature};
     use std::path::PathBuf;
 
