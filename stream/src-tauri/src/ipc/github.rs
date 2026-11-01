@@ -21,6 +21,12 @@ const GH_INSTALL_PATHS: [&str; 4] = [
     "/usr/bin/gh",
 ];
 
+/// A slow shell profile must not stall the search for gh.
+const SHELL_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// `gh` exits with this when it has no account to use.
+const GH_EXIT_LOGGED_OUT: i32 = 4;
+
 /// One request covers every repo, so a refresh costs one call however many
 /// repos are connected.
 const PULL_REQUESTS_FRAGMENT: &str = r#"
@@ -102,6 +108,39 @@ pub struct PullRequestSnapshot {
     pub rate_remaining: Option<u64>,
 }
 
+/// A connected repo that GitHub wouldn't return to this account
+#[derive(Debug, Serialize, PartialEq)]
+pub struct UnreadableRepo {
+    pub name: String,
+    pub message: String,
+}
+
+/// The result of asking GitHub, through gh, what this Mac can see
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum GitHubStatus {
+    Connected {
+        login: String,
+        repo_count: usize,
+        unreadable_repos: Vec<UnreadableRepo>,
+        needs_repo_scope: bool,
+    },
+    GhMissing,
+    LoggedOut,
+    TokenRejected {
+        detail: String,
+    },
+    RateLimited {
+        detail: String,
+    },
+    Unreachable {
+        detail: String,
+    },
+    Failed {
+        detail: String,
+    },
+}
+
 #[derive(Debug, Deserialize)]
 struct Nodes<T> {
     nodes: Vec<T>,
@@ -170,11 +209,28 @@ struct CheckNode {
     state: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct GraphQlError {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    #[serde(default)]
+    path: Vec<Value>,
+    message: String,
+}
+
 #[derive(Debug)]
 struct GitHubRepo {
     path: String,
     owner: String,
     name: String,
+}
+
+/// What `gh api --include` printed: the status line and headers, then the body
+#[derive(Debug, PartialEq)]
+struct GhResponse<'a> {
+    http_status: Option<u16>,
+    scopes: Option<Vec<String>>,
+    body: &'a [u8],
 }
 
 fn parse_github_remote(remote_url: &str) -> Option<(String, String)> {
@@ -196,16 +252,47 @@ fn parse_github_remote(remote_url: &str) -> Option<(String, String)> {
     Some((owner.to_string(), name.to_string()))
 }
 
-fn find_gh() -> Option<PathBuf> {
+async fn find_gh() -> Option<PathBuf> {
     let on_path = std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
         .unwrap_or_default()
         .into_iter()
         .map(|dir| dir.join("gh"));
 
-    on_path
+    match on_path
         .chain(GH_INSTALL_PATHS.iter().map(PathBuf::from))
         .find(|candidate| candidate.is_file())
+    {
+        Some(gh) => Some(gh),
+        None => find_gh_in_shell().await,
+    }
+}
+
+/// Version managers such as mise or asdf only put gh on the PATH of a real
+/// shell, so ask one before saying gh isn't installed.
+async fn find_gh_in_shell() -> Option<PathBuf> {
+    let mut command = Command::new(std::env::var_os("SHELL")?);
+    command
+        .args(["-ilc", "command -v gh"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+
+    let output = tokio::time::timeout(SHELL_TIMEOUT, command.output())
+        .await
+        .ok()?
+        .ok()?;
+
+    parse_shell_path(&output.stdout)
+}
+
+// Shell profiles can print anything before the command runs
+fn parse_shell_path(stdout: &[u8]) -> Option<PathBuf> {
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .last()
+        .map(|line| PathBuf::from(line.trim()))
+        .filter(|path| path.is_file())
 }
 
 fn github_repos(repo_paths: &[String]) -> Vec<GitHubRepo> {
@@ -224,6 +311,10 @@ fn github_repos(repo_paths: &[String]) -> Vec<GitHubRepo> {
 }
 
 fn build_query(repo_count: usize) -> String {
+    if repo_count == 0 {
+        return "query {\n  viewer { login }\n  rateLimit { remaining }\n}".to_string();
+    }
+
     let variables = (0..repo_count)
         .map(|index| format!("$owner{index}: String!, $name{index}: String!"))
         .collect::<Vec<_>>()
@@ -236,7 +327,7 @@ fn build_query(repo_count: usize) -> String {
         .join("\n");
 
     format!(
-        "query({variables}) {{\n  rateLimit {{ remaining }}\n{repositories}\n}}\n{PULL_REQUESTS_FRAGMENT}"
+        "query({variables}) {{\n  viewer {{ login }}\n  rateLimit {{ remaining }}\n{repositories}\n}}\n{PULL_REQUESTS_FRAGMENT}"
     )
 }
 
@@ -389,21 +480,129 @@ fn parse_snapshot(stdout: &[u8], repos: &[GitHubRepo]) -> Result<PullRequestSnap
     })
 }
 
-#[tauri::command]
-pub(crate) async fn get_pull_requests(
-    repo_paths: Vec<String>,
-) -> Result<PullRequestSnapshot, String> {
-    let repos = github_repos(&repo_paths);
-    if repos.is_empty() {
-        return Ok(PullRequestSnapshot {
-            pull_requests: Vec::new(),
-            default_branches: Vec::new(),
-            rate_remaining: None,
-        });
+fn parse_gh_response(stdout: &[u8]) -> GhResponse<'_> {
+    // gh ends the status line with a bare \n and each header with \r\n
+    let (head, body) = match stdout.windows(3).position(|bytes| bytes == b"\n\r\n") {
+        Some(index) => (&stdout[..index], &stdout[index + 3..]),
+        None => (stdout, &[][..]),
+    };
+    let head = String::from_utf8_lossy(head);
+    let mut lines = head.lines();
+
+    let http_status = lines
+        .next()
+        .filter(|line| line.starts_with("HTTP/"))
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|status| status.parse().ok());
+
+    // Only classic and OAuth tokens have scopes; fine-grained ones omit the header.
+    let scopes = lines.find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("x-oauth-scopes").then(|| {
+            value
+                .split(',')
+                .map(|scope| scope.trim().to_string())
+                .filter(|scope| !scope.is_empty())
+                .collect()
+        })
+    });
+
+    GhResponse {
+        http_status,
+        scopes,
+        body,
+    }
+}
+
+fn map_unreadable_repos(
+    data: &Value,
+    errors: &[GraphQlError],
+    repos: &[GitHubRepo],
+) -> Vec<UnreadableRepo> {
+    repos
+        .iter()
+        .enumerate()
+        .filter_map(|(index, repo)| {
+            let alias = format!("r{index}");
+            let error = errors
+                .iter()
+                .find(|error| error.path.first().and_then(Value::as_str) == Some(alias.as_str()));
+            let is_missing = data.get(&alias).is_none_or(Value::is_null);
+
+            (is_missing || error.is_some()).then(|| UnreadableRepo {
+                name: format!("{}/{}", repo.owner, repo.name),
+                message: error
+                    .map(|error| error.message.clone())
+                    .unwrap_or_else(|| "GitHub didn't return this repository.".to_string()),
+            })
+        })
+        .collect()
+}
+
+fn map_github_status(
+    exit_code: Option<i32>,
+    stdout: &[u8],
+    stderr: &str,
+    repos: &[GitHubRepo],
+) -> GitHubStatus {
+    let detail = stderr.trim().to_string();
+
+    if exit_code == Some(GH_EXIT_LOGGED_OUT) {
+        return GitHubStatus::LoggedOut;
     }
 
-    let gh = find_gh().ok_or_else(|| "GitHub CLI (gh) is not installed".to_string())?;
+    let response = parse_gh_response(stdout);
+    let Some(http_status) = response.http_status else {
+        return GitHubStatus::Unreachable { detail };
+    };
+    if http_status == 401 {
+        return GitHubStatus::TokenRejected { detail };
+    }
 
+    let body: Value = serde_json::from_slice(response.body).unwrap_or(Value::Null);
+    let errors: Vec<GraphQlError> = body
+        .get("errors")
+        .cloned()
+        .and_then(|errors| serde_json::from_value(errors).ok())
+        .unwrap_or_default();
+
+    let has_error = |kind: &str| {
+        errors
+            .iter()
+            .any(|error| error.kind.as_deref() == Some(kind))
+    };
+
+    if has_error("RATE_LIMITED")
+        || http_status == 429
+        || detail.to_lowercase().contains("rate limit")
+    {
+        return GitHubStatus::RateLimited { detail };
+    }
+
+    let data = body.get("data").unwrap_or(&Value::Null);
+    let Some(login) = data
+        .get("viewer")
+        .and_then(|viewer| viewer.get("login"))
+        .and_then(Value::as_str)
+    else {
+        return GitHubStatus::Failed { detail };
+    };
+
+    let unreadable_repos = map_unreadable_repos(data, &errors, repos);
+    let lacks_repo_scope = response
+        .scopes
+        .is_some_and(|scopes| !scopes.iter().any(|scope| scope == "repo"));
+
+    GitHubStatus::Connected {
+        login: login.to_string(),
+        repo_count: repos.len(),
+        needs_repo_scope: has_error("INSUFFICIENT_SCOPES")
+            || (lacks_repo_scope && !unreadable_repos.is_empty()),
+        unreadable_repos,
+    }
+}
+
+fn graphql_command(gh: PathBuf, repos: &[GitHubRepo]) -> Command {
     let mut command = Command::new(gh);
     command
         .args(["api", "graphql", "-f"])
@@ -421,7 +620,55 @@ pub(crate) async fn get_pull_requests(
             .arg(format!("name{index}={}", repo.name));
     }
 
-    let output = tokio::time::timeout(GH_TIMEOUT, command.output())
+    command
+}
+
+/// Runs the same query as the pull request refresh, so a working status means
+/// that refresh works too.
+#[tauri::command]
+pub(crate) async fn get_github_status(repo_paths: Vec<String>) -> GitHubStatus {
+    let Some(gh) = find_gh().await else {
+        return GitHubStatus::GhMissing;
+    };
+
+    let repos = github_repos(&repo_paths);
+    let mut command = graphql_command(gh, &repos);
+    command.arg("--include");
+
+    match tokio::time::timeout(GH_TIMEOUT, command.output()).await {
+        Ok(Ok(output)) => map_github_status(
+            output.status.code(),
+            &output.stdout,
+            &String::from_utf8_lossy(&output.stderr),
+            &repos,
+        ),
+        Ok(Err(error)) => GitHubStatus::Failed {
+            detail: format!("Failed to run gh: {}", error),
+        },
+        Err(_) => GitHubStatus::Unreachable {
+            detail: "Timed out waiting for gh".to_string(),
+        },
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn get_pull_requests(
+    repo_paths: Vec<String>,
+) -> Result<PullRequestSnapshot, String> {
+    let repos = github_repos(&repo_paths);
+    if repos.is_empty() {
+        return Ok(PullRequestSnapshot {
+            pull_requests: Vec::new(),
+            default_branches: Vec::new(),
+            rate_remaining: None,
+        });
+    }
+
+    let gh = find_gh()
+        .await
+        .ok_or_else(|| "GitHub CLI (gh) is not installed".to_string())?;
+
+    let output = tokio::time::timeout(GH_TIMEOUT, graphql_command(gh, &repos).output())
         .await
         .map_err(|_| "Timed out waiting for gh".to_string())?
         .map_err(|e| format!("Failed to run gh: {}", e))?;
@@ -477,6 +724,23 @@ mod tests {
         .into_bytes()
     }
 
+    fn included(status_line: &str, headers: &[&str], body: Value) -> Vec<u8> {
+        let headers: String = headers
+            .iter()
+            .map(|header| format!("{header}\r\n"))
+            .collect();
+
+        format!("{status_line}\n{headers}\r\n{body}").into_bytes()
+    }
+
+    fn viewer(extra: Value) -> Value {
+        let mut data = json!({ "viewer": { "login": "marcelmarais" } });
+        data.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        json!({ "data": data })
+    }
+
     #[test]
     fn parses_github_remotes_only() {
         let expected = Some(("marcelmarais".to_string(), "stream".to_string()));
@@ -506,6 +770,268 @@ mod tests {
         assert!(query.contains("r0: repository(owner: $owner0, name: $name0)"));
         assert!(query.contains("r1: repository(owner: $owner1, name: $name1)"));
         assert!(query.contains("$name1: String!"));
+    }
+
+    #[test]
+    fn query_without_repos_only_asks_who_is_signed_in() {
+        let query = build_query(0);
+
+        assert!(query.contains("viewer { login }"));
+        assert!(!query.contains("fragment"));
+        assert!(!query.contains("query("));
+    }
+
+    #[test]
+    fn reads_the_status_and_scopes_from_included_headers() {
+        let stdout = included(
+            "HTTP/2.0 200 OK",
+            &["Server: GitHub.com", "X-Oauth-Scopes: gist, read:org, repo"],
+            json!({ "data": {} }),
+        );
+
+        let response = parse_gh_response(&stdout);
+
+        assert_eq!(response.http_status, Some(200));
+        assert_eq!(
+            response.scopes,
+            Some(vec![
+                "gist".to_string(),
+                "read:org".to_string(),
+                "repo".to_string(),
+            ])
+        );
+        assert_eq!(response.body, br#"{"data":{}}"#);
+    }
+
+    #[test]
+    fn fine_grained_tokens_have_no_scopes_to_read() {
+        let stdout = included(
+            "HTTP/2.0 200 OK",
+            &["Server: GitHub.com"],
+            json!({ "data": {} }),
+        );
+
+        assert_eq!(parse_gh_response(&stdout).scopes, None);
+    }
+
+    #[test]
+    fn empty_output_has_no_http_status() {
+        assert_eq!(parse_gh_response(b"").http_status, None);
+    }
+
+    #[test]
+    fn a_working_account_is_connected() {
+        let stdout = included(
+            "HTTP/2.0 200 OK",
+            &["X-Oauth-Scopes: repo"],
+            viewer(json!({ "r0": { "open": { "nodes": [] } } })),
+        );
+
+        assert_eq!(
+            map_github_status(Some(0), &stdout, "", &[repo("/repo")]),
+            GitHubStatus::Connected {
+                login: "marcelmarais".to_string(),
+                repo_count: 1,
+                unreadable_repos: Vec::new(),
+                needs_repo_scope: false,
+            }
+        );
+    }
+
+    #[test]
+    fn exit_code_four_means_logged_out() {
+        assert_eq!(
+            map_github_status(Some(4), b"", "please run: gh auth login", &[]),
+            GitHubStatus::LoggedOut
+        );
+    }
+
+    #[test]
+    fn a_401_means_the_token_was_rejected() {
+        let stdout = included(
+            "HTTP/2.0 401 Unauthorized",
+            &[],
+            json!({ "message": "Bad credentials" }),
+        );
+
+        assert_eq!(
+            map_github_status(Some(1), &stdout, "gh: Bad credentials (HTTP 401)\n", &[]),
+            GitHubStatus::TokenRejected {
+                detail: "gh: Bad credentials (HTTP 401)".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn no_response_means_github_is_unreachable() {
+        let stderr = "Post \"https://api.github.com/graphql\": dial tcp: connection refused";
+
+        assert_eq!(
+            map_github_status(Some(1), b"", stderr, &[]),
+            GitHubStatus::Unreachable {
+                detail: stderr.to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn rate_limits_show_up_in_graphql_and_rest_responses() {
+        let graphql = included(
+            "HTTP/2.0 200 OK",
+            &[],
+            json!({ "errors": [{ "type": "RATE_LIMITED", "message": "API rate limit exceeded" }] }),
+        );
+        let rest = included("HTTP/2.0 403 Forbidden", &[], json!({ "message": "nope" }));
+
+        assert!(matches!(
+            map_github_status(Some(1), &graphql, "", &[]),
+            GitHubStatus::RateLimited { .. }
+        ));
+        assert!(matches!(
+            map_github_status(
+                Some(1),
+                &rest,
+                "gh: API rate limit exceeded (HTTP 403)",
+                &[]
+            ),
+            GitHubStatus::RateLimited { .. }
+        ));
+    }
+
+    #[test]
+    fn other_http_failures_keep_what_gh_said() {
+        let stdout = included(
+            "HTTP/2.0 502 Bad Gateway",
+            &[],
+            json!({ "message": "oops" }),
+        );
+
+        assert_eq!(
+            map_github_status(Some(1), &stdout, "gh: oops (HTTP 502)", &[]),
+            GitHubStatus::Failed {
+                detail: "gh: oops (HTTP 502)".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_repo_github_wont_return_is_named_with_its_error() {
+        let stdout = included(
+            "HTTP/2.0 200 OK",
+            &["X-Oauth-Scopes: repo"],
+            json!({
+                "data": { "viewer": { "login": "marcelmarais" }, "r0": null },
+                "errors": [{
+                    "type": "NOT_FOUND",
+                    "path": ["r0"],
+                    "message": "Could not resolve to a Repository",
+                }],
+            }),
+        );
+
+        assert_eq!(
+            map_github_status(Some(1), &stdout, "", &[repo("/repo")]),
+            GitHubStatus::Connected {
+                login: "marcelmarais".to_string(),
+                repo_count: 1,
+                unreadable_repos: vec![UnreadableRepo {
+                    name: "marcelmarais/stream".to_string(),
+                    message: "Could not resolve to a Repository".to_string(),
+                }],
+                needs_repo_scope: false,
+            }
+        );
+    }
+
+    #[test]
+    fn a_missing_repo_on_a_token_without_repo_scope_needs_that_scope() {
+        let stdout = included(
+            "HTTP/2.0 200 OK",
+            &["X-Oauth-Scopes: read:org"],
+            viewer(json!({ "r0": null })),
+        );
+
+        let status = map_github_status(Some(1), &stdout, "", &[repo("/repo")]);
+
+        assert!(matches!(
+            status,
+            GitHubStatus::Connected {
+                needs_repo_scope: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn no_repo_scope_is_fine_when_every_repo_came_back() {
+        let stdout = included(
+            "HTTP/2.0 200 OK",
+            &["X-Oauth-Scopes: read:org"],
+            viewer(json!({ "r0": { "open": { "nodes": [] } } })),
+        );
+
+        let status = map_github_status(Some(0), &stdout, "", &[repo("/repo")]);
+
+        assert!(matches!(
+            status,
+            GitHubStatus::Connected {
+                needs_repo_scope: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn insufficient_scopes_inside_a_repo_flags_it_and_asks_for_the_scope() {
+        let stdout = included(
+            "HTTP/2.0 200 OK",
+            &[],
+            json!({
+                "data": { "viewer": { "login": "marcelmarais" }, "r0": { "open": null } },
+                "errors": [{
+                    "type": "INSUFFICIENT_SCOPES",
+                    "path": ["r0", "open"],
+                    "message": "Your token has not been granted the required scopes",
+                }],
+            }),
+        );
+
+        let GitHubStatus::Connected {
+            unreadable_repos,
+            needs_repo_scope,
+            ..
+        } = map_github_status(Some(1), &stdout, "", &[repo("/repo")])
+        else {
+            panic!("expected a connected status");
+        };
+
+        assert_eq!(unreadable_repos.len(), 1);
+        assert!(needs_repo_scope);
+    }
+
+    #[test]
+    fn serializes_the_state_as_a_tag() {
+        assert_eq!(
+            serde_json::to_value(GitHubStatus::GhMissing).unwrap(),
+            json!({ "state": "gh_missing" })
+        );
+        assert_eq!(
+            serde_json::to_value(GitHubStatus::Unreachable {
+                detail: "offline".to_string(),
+            })
+            .unwrap(),
+            json!({ "state": "unreachable", "detail": "offline" })
+        );
+    }
+
+    #[test]
+    fn takes_the_path_from_the_last_line_of_a_noisy_shell() {
+        let gh = std::env::current_exe().unwrap();
+        let stdout = format!("Welcome back!\n{}\n", gh.display());
+
+        assert_eq!(parse_shell_path(stdout.as_bytes()), Some(gh));
+        assert_eq!(parse_shell_path(b"gh: aliased to hub\n"), None);
+        assert_eq!(parse_shell_path(b""), None);
     }
 
     #[test]

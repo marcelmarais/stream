@@ -33,7 +33,7 @@ https://github.com/user-attachments/assets/9f320143-e342-481f-a886-acdeadb86e85
 2. Pick a folder for your notes.
 3. Open **settings** and connect your repos.
 
-Pull requests and checks come through the [GitHub CLI](https://cli.github.com), so install it and run `gh auth login` to see them.
+Pull requests and checks come through the [GitHub CLI](https://cli.github.com), so install it and run `gh auth login` to see them. Settings shows whether the connection is working.
 
 ## Shortcuts
 

@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   queryOptions,
   useMutation,
   useQueries,
@@ -16,7 +17,9 @@ import {
   createDateRange,
   type DefaultBranch,
   discoverGitRepos,
+  type GitHubStatus,
   getGitCommitsForRepos,
+  getGitHubStatus,
   getPullRequests,
   groupCommitsByDate,
   type PullRequest,
@@ -58,6 +61,8 @@ export const gitKeys = {
     [...gitKeys.all, "commits", folderPath, dateKey, repos] as const,
   pullRequests: (folderPath: string) =>
     [...gitKeys.all, "pull-requests", folderPath] as const,
+  githubStatus: (folderPath: string) =>
+    [...gitKeys.all, "github-status", folderPath] as const,
   agents: (repos: string[]) => [...gitKeys.all, "agents", repos] as const,
 };
 
@@ -301,6 +306,11 @@ export function usePullRequestPolling(folderPath: string) {
               queryKey: gitKeys.pullRequests(folderPath),
               stale: true,
             });
+            // Settings may be open while gh is fixed in a terminal
+            queryClient.refetchQueries({
+              queryKey: gitKeys.githubStatus(folderPath),
+              type: "active",
+            });
           }
         },
       );
@@ -350,6 +360,36 @@ export function useDefaultBranches(folderPath: string): DefaultBranch[] {
   });
 
   return data?.default_branches ?? NO_DEFAULT_BRANCHES;
+}
+
+/**
+ * Hook to check the GitHub connection for as long as it's mounted. Rechecking
+ * refreshes pull requests too, which back off for minutes after a failure.
+ */
+export function useGitHubStatus(folderPath: string) {
+  const queryClient = useQueryClient();
+  const { data: repos } = useConnectedRepos(folderPath);
+
+  const { data, error, isFetching, refetch } = useQuery({
+    queryKey: [...gitKeys.githubStatus(folderPath), repos] as const,
+    queryFn: () => getGitHubStatus(repos ?? []),
+    enabled: repos !== undefined,
+    staleTime: 0,
+    retry: false,
+    placeholderData: keepPreviousData,
+  });
+
+  const status: GitHubStatus | undefined =
+    data ?? (error ? { state: "failed", detail: String(error) } : undefined);
+
+  const recheck = () => {
+    refetch();
+    queryClient.invalidateQueries({
+      queryKey: gitKeys.pullRequests(folderPath),
+    });
+  };
+
+  return { status, isChecking: isFetching, recheck };
 }
 
 /**

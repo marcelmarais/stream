@@ -1,11 +1,20 @@
 "use client";
 
 import { Switch } from "@base-ui/react/switch";
+import {
+  ArrowSquareOutIcon,
+  CircleNotchIcon,
+  CopyIcon,
+  GithubLogoIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { AgentLogo } from "@/components/agent-stack";
 import RepoConnector from "@/components/repo-connector";
 import { Titlebar } from "@/components/titlebar-header";
@@ -13,17 +22,267 @@ import { Button } from "@/components/ui/button";
 import {
   useConnectedRepos,
   useFetchRepos,
+  useGitHubStatus,
   useRunningAgents,
 } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import { useSetSelectedFolder } from "@/hooks/use-user-data";
 import type { AgentKind } from "@/ipc/agents";
+import type { GitHubStatus, UnreadableRepo } from "@/ipc/git-reader";
+import { cn } from "@/lib/utils";
 import { useUserStore } from "@/stores/user-store";
 
 const AGENT_ROWS: { kind: AgentKind; name: string }[] = [
   { kind: "claude", name: "Claude Code" },
   { kind: "codex", name: "Codex" },
 ];
+
+const GH_INSTALL_URL = "https://cli.github.com";
+
+interface GitHubProblem {
+  title: string;
+  hint: string;
+  command?: string;
+  detail?: string;
+  needsYou: boolean; // Outages and rate limits pass without you doing anything
+}
+
+function getGitHubProblem(
+  status: Exclude<GitHubStatus, { state: "connected" }>,
+): GitHubProblem {
+  switch (status.state) {
+    case "gh_missing":
+      return {
+        title: "GitHub CLI not found",
+        hint: "Stream reads GitHub through gh. Install it, then recheck.",
+        command: "brew install gh",
+        needsYou: true,
+      };
+    case "logged_out":
+      return {
+        title: "Not signed in",
+        hint: "gh has no GitHub account on this Mac. Sign in, then recheck.",
+        command: "gh auth login",
+        needsYou: true,
+      };
+    case "token_rejected":
+      return {
+        title: "Sign-in expired",
+        hint: "GitHub rejected the token gh is using. Sign in again, then recheck.",
+        command: "gh auth login",
+        detail: status.detail,
+        needsYou: true,
+      };
+    case "rate_limited":
+      return {
+        title: "Rate limit reached",
+        hint: "GitHub has paused this account's requests. They resume within the hour.",
+        detail: status.detail,
+        needsYou: false,
+      };
+    case "unreachable":
+      return {
+        title: "Can't reach GitHub",
+        hint: "Check your connection. Stream keeps trying in the background.",
+        detail: status.detail,
+        needsYou: false,
+      };
+    case "failed":
+      return {
+        title: "gh ran into a problem",
+        hint: "This command shows what gh thinks is wrong.",
+        command: "gh auth status",
+        detail: status.detail,
+        needsYou: true,
+      };
+  }
+}
+
+function getUnreadableReposProblem(
+  unreadableRepos: UnreadableRepo[],
+  needsRepoScope: boolean,
+): GitHubProblem {
+  if (needsRepoScope) {
+    return {
+      title: "Missing the repo scope",
+      hint: "gh needs it to read private repositories. Add it, then recheck.",
+      command: "gh auth refresh -s repo",
+      needsYou: true,
+    };
+  }
+
+  if (unreadableRepos.length === 1) {
+    return {
+      title: "Can't read 1 repository",
+      hint: "Check that it still exists and that this account can see it.",
+      needsYou: true,
+    };
+  }
+
+  return {
+    title: `Can't read ${unreadableRepos.length} repositories`,
+    hint: "Check that they still exist and that this account can see them.",
+    needsYou: true,
+  };
+}
+
+function describeGitHubRepos(repoCount: number, connectedCount: number) {
+  if (connectedCount === 0) {
+    return "No repositories connected";
+  }
+
+  if (repoCount === connectedCount) {
+    return repoCount === 1 ? "1 repository" : `${repoCount} repositories`;
+  }
+
+  return `${repoCount} of ${connectedCount} repositories on GitHub`;
+}
+
+function CopyableCommand({ command }: { command: string }) {
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(command);
+    toast.success("Command copied to clipboard");
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-sm border border-well-rule bg-well px-2.5 py-1.5">
+      <code className="truncate text-foreground text-xs">{command}</code>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+        title="Copy command"
+        aria-label={`Copy ${command}`}
+      >
+        <CopyIcon className="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function GitHubProblemRow({
+  problem,
+  children,
+}: {
+  problem: GitHubProblem;
+  children?: React.ReactNode;
+}) {
+  const { title, hint, command, detail, needsYou } = problem;
+
+  return (
+    <div className="flex flex-col gap-2 border-border border-b py-2">
+      <div className="flex items-center gap-2.5">
+        <WarningCircleIcon
+          className={cn(
+            "size-4 shrink-0",
+            needsYou ? "text-destructive" : "text-muted-foreground",
+          )}
+          weight="fill"
+          aria-hidden="true"
+        />
+        <span className="text-foreground">{title}</span>
+      </div>
+      <div className="flex flex-col gap-2 pl-[26px]">
+        <p className="text-muted-foreground text-xs">{hint}</p>
+        {command && <CopyableCommand command={command} />}
+        {children}
+        {detail && (
+          <code className="block break-words text-muted-foreground text-xs">
+            {detail}
+          </code>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GitHubSection({ folderPath }: { folderPath: string }) {
+  const { status, isChecking, recheck } = useGitHubStatus(folderPath);
+  const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
+
+  return (
+    <section className="mt-7 flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
+          GitHub
+        </h2>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+          onClick={recheck}
+          disabled={isChecking}
+        >
+          {isChecking ? "Checking..." : "Recheck"}
+        </button>
+      </div>
+      <p className="text-muted-foreground text-xs">
+        Pull requests and checks come through the GitHub CLI on this Mac, using
+        whichever account gh is signed in to.
+      </p>
+      <div className="flex flex-col">
+        {!status && (
+          <div className="flex items-center gap-2.5 border-border border-b py-2 text-muted-foreground">
+            <CircleNotchIcon
+              className="size-4 shrink-0 motion-safe:animate-spin"
+              aria-hidden="true"
+            />
+            Checking...
+          </div>
+        )}
+        {status?.state === "connected" && (
+          <>
+            <div className="flex items-center gap-2.5 border-border border-b py-2">
+              <GithubLogoIcon
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <span className="truncate text-foreground">
+                Connected as {status.login}
+              </span>
+              <span className="ml-auto shrink-0 text-muted-foreground text-xs">
+                {describeGitHubRepos(status.repo_count, connectedRepos.length)}
+              </span>
+            </div>
+            {(status.unreadable_repos.length > 0 ||
+              status.needs_repo_scope) && (
+              <GitHubProblemRow
+                problem={getUnreadableReposProblem(
+                  status.unreadable_repos,
+                  status.needs_repo_scope,
+                )}
+              >
+                {status.unreadable_repos.map(({ name, message }) => (
+                  <div key={name} className="flex flex-col gap-0.5">
+                    <span className="truncate text-foreground text-xs">
+                      {name}
+                    </span>
+                    <span className="break-words text-muted-foreground text-xs">
+                      {message}
+                    </span>
+                  </div>
+                ))}
+              </GitHubProblemRow>
+            )}
+          </>
+        )}
+        {status && status.state !== "connected" && (
+          <GitHubProblemRow problem={getGitHubProblem(status)}>
+            {status.state === "gh_missing" && (
+              <button
+                type="button"
+                onClick={() => openUrl(GH_INSTALL_URL)}
+                className="flex items-center gap-1 self-start text-muted-foreground text-xs hover:text-foreground"
+              >
+                Other ways to install
+                <ArrowSquareOutIcon className="size-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </GitHubProblemRow>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function AgentsSection({ folderPath }: { folderPath: string }) {
   const agentsEnabled = useUserStore((state) => state.agentsEnabled);
@@ -171,6 +430,8 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
           </div>
           <RepoConnector key={folderPath} markdownDirectory={folderPath} />
         </section>
+
+        <GitHubSection folderPath={folderPath} />
 
         <AgentsSection folderPath={folderPath} />
 

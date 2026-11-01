@@ -60,6 +60,26 @@ export interface PullRequestSnapshot {
   rate_remaining: number | null; // GitHub API points left this hour
 }
 
+export interface UnreadableRepo {
+  name: string; // owner/name
+  message: string;
+}
+
+export type GitHubStatus =
+  | {
+      state: "connected";
+      login: string;
+      repo_count: number; // Connected repositories hosted on GitHub
+      unreadable_repos: UnreadableRepo[];
+      needs_repo_scope: boolean;
+    }
+  | { state: "gh_missing" }
+  | { state: "logged_out" }
+  | { state: "token_rejected"; detail: string }
+  | { state: "rate_limited"; detail: string }
+  | { state: "unreachable"; detail: string }
+  | { state: "failed"; detail: string };
+
 export interface DiscoveredRepo {
   path: string;
   display_path: string;
@@ -127,6 +147,16 @@ export async function getPullRequests(
   repoPaths: string[],
 ): Promise<PullRequestSnapshot> {
   return invoke("get_pull_requests", { repoPaths });
+}
+
+/**
+ * Ask GitHub, through the gh CLI, who is signed in and which repositories
+ * that account can read. Never rejects: failures come back as a status.
+ */
+export async function getGitHubStatus(
+  repoPaths: string[],
+): Promise<GitHubStatus> {
+  return invoke("get_github_status", { repoPaths });
 }
 
 /**
