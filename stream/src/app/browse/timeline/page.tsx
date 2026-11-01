@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import {
   useConnectedRepos,
   usePrefetchCommitsForDates,
+  usePullRequestPolling,
 } from "@/hooks/use-git-queries";
 import {
   useSearchShortcut,
@@ -87,6 +88,7 @@ export default function TimelinePage() {
 
 function TimelineView({ folderPath }: { folderPath: string }) {
   useConnectedRepos(folderPath);
+  usePullRequestPolling(folderPath);
   const [showLoading, setShowLoading] = useState(true);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,

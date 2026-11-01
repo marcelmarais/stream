@@ -1,15 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
-use git2::{self, DiffOptions, Repository, Time};
+use git2::{self, Repository, Time};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Maximum number of commits to return per repository to prevent memory issues
 const MAX_COMMITS_PER_REPO: usize = 200;
-
-/// Maximum number of files changed to return per commit
-const MAX_FILES_PER_COMMIT: usize = 50;
 
 /// Limit the number of branch tips used for non-tip commit matching (performance guard)
 const MAX_BRANCH_TIPS_FOR_MATCH: usize = 50;
@@ -23,7 +20,6 @@ pub struct GitCommit {
     pub timestamp: u64,
     pub date: String,
     pub repo_path: String,
-    pub files_changed: Vec<String>,
     pub branches: Vec<String>,
     pub url: Option<String>,
 }
@@ -228,7 +224,8 @@ fn get_branch_for_commit_fast(
     let mut branches = Vec::new();
     let mut is_on_remote = false;
 
-    for tip in branch_tips {
+    // Oldest tip first: the branch closest to a commit is the one it was made on.
+    for tip in branch_tips.iter().rev() {
         let is_ancestor = tip.oid == commit_oid
             || repo
                 .graph_descendant_of(tip.oid, commit_oid)
@@ -248,14 +245,88 @@ fn get_branch_for_commit_fast(
         return (vec!["unknown".to_string()], false);
     }
 
-    branches.sort_by(|a, b| {
-        let a_main = is_main_branch(a);
-        let b_main = is_main_branch(b);
-        b_main.cmp(&a_main).then_with(|| a.cmp(b))
-    });
+    branches.sort_by_key(|branch| !is_main_branch(branch));
     branches.truncate(3);
 
     (branches, is_on_remote)
+}
+
+/// What main's history says about where commits were made.
+struct MainLine {
+    name: String,
+    oid: git2::Oid,
+    /// Commits made on main itself, found by following first parents.
+    commits: HashSet<git2::Oid>,
+    /// Branches holding all of main, such as a new worktree. They contain its
+    /// commits but say nothing about where those commits came from.
+    followers: HashSet<String>,
+}
+
+fn build_main_line(
+    repo: &Repository,
+    branch_tips: &[BranchTip],
+    start_seconds: i64,
+) -> Option<MainLine> {
+    let tip = ["main", "master", "develop"]
+        .iter()
+        .find_map(|name| branch_tips.iter().find(|tip| tip.name == *name))?;
+
+    let mut commits = HashSet::new();
+    let mut next = repo.find_commit(tip.oid).ok();
+
+    while let Some(commit) = next {
+        if commit.time().seconds() < start_seconds {
+            break;
+        }
+        commits.insert(commit.id());
+        next = commit.parent(0).ok();
+    }
+
+    let followers = branch_tips
+        .iter()
+        .filter(|other| {
+            other.name != tip.name
+                && (other.oid == tip.oid
+                    || repo.graph_descendant_of(other.oid, tip.oid).unwrap_or(false))
+        })
+        .map(|other| other.name.clone())
+        .collect();
+
+    Some(MainLine {
+        name: tip.name.clone(),
+        oid: tip.oid,
+        commits,
+        followers,
+    })
+}
+
+/// A commit made on main belongs to main alone, and one merged into it keeps
+/// only the branch it came from.
+fn attribute_to_main(
+    repo: &Repository,
+    main_line: &MainLine,
+    commit_oid: git2::Oid,
+    branches: Vec<String>,
+) -> Vec<String> {
+    if main_line.commits.contains(&commit_oid) {
+        return vec![main_line.name.clone()];
+    }
+
+    let is_merged = repo
+        .graph_descendant_of(main_line.oid, commit_oid)
+        .unwrap_or(false);
+
+    if !is_merged {
+        return branches;
+    }
+
+    let source_branches = branches
+        .into_iter()
+        .filter(|branch| *branch != main_line.name && !main_line.followers.contains(branch));
+
+    std::iter::once(main_line.name.clone())
+        .chain(source_branches)
+        .collect()
 }
 
 fn normalize_branch_name(branch_name: &str) -> String {
@@ -327,7 +398,7 @@ async fn fetch_repo(repo_path: &str) -> Result<String, Box<dyn std::error::Error
     }
 }
 
-fn get_remote_url(repo: &Repository) -> Option<String> {
+pub(crate) fn get_remote_url(repo: &Repository) -> Option<String> {
     if let Ok(remote) = repo.find_remote("origin") {
         if let Some(url) = remote.url() {
             return Some(url.to_string());
@@ -373,51 +444,6 @@ fn build_commit_url(remote_url: &str, commit_id: &str) -> Option<String> {
     } else {
         Some(format!("{}/commit/{}", url, commit_id))
     }
-}
-
-/// Get files changed for a commit using optimized diff options (no content, just file names)
-fn get_files_changed_fast(
-    repo: &Repository,
-    commit: &git2::Commit,
-) -> Vec<String> {
-    let mut files_changed = Vec::new();
-
-    let parent = match commit.parent(0) {
-        Ok(p) => p,
-        Err(_) => return files_changed, // Initial commit or error
-    };
-
-    let tree = match commit.tree() {
-        Ok(t) => t,
-        Err(_) => return files_changed,
-    };
-
-    let parent_tree = match parent.tree() {
-        Ok(t) => t,
-        Err(_) => return files_changed,
-    };
-
-    // Configure diff to skip content computation entirely
-    let mut diff_opts = DiffOptions::new();
-    diff_opts.skip_binary_check(true); // Don't check if files are binary
-    diff_opts.ignore_submodules(true); // Skip submodule processing
-    diff_opts.context_lines(0); // No context lines needed
-
-    let diff = match repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut diff_opts)) {
-        Ok(d) => d,
-        Err(_) => return files_changed,
-    };
-
-    // Use deltas() iterator - much faster than foreach, no callbacks
-    for delta in diff.deltas().take(MAX_FILES_PER_COMMIT) {
-        if let Some(path) = delta.new_file().path() {
-            if let Some(path_str) = path.to_str() {
-                files_changed.push(path_str.to_string());
-            }
-        }
-    }
-
-    files_changed
 }
 
 fn get_repo_commits(
@@ -476,6 +502,8 @@ fn get_repo_commits(
         }
     }
 
+    let main_line = build_main_line(&repo, &limited, start_seconds);
+
     let mut commits = Vec::new();
     let mut seen_commits = HashSet::new();
 
@@ -515,12 +543,13 @@ fn get_repo_commits(
         let author = commit.author();
         let message = commit.message().unwrap_or("").to_string();
 
-        // Get files changed using optimized method (no diff content)
-        let files_changed = get_files_changed_fast(&repo, &commit);
-
         // Use the fast branch detection
         let (branches, is_on_remote) =
             get_branch_for_commit_fast(&repo, oid, &branch_tip_map, &limited);
+        let branches = match &main_line {
+            Some(main_line) => attribute_to_main(&repo, main_line, oid, branches),
+            None => branches,
+        };
 
         let commit_id = format!("{}", oid);
         let url = if is_on_remote {
@@ -539,7 +568,6 @@ fn get_repo_commits(
             timestamp: time_to_timestamp_ms(commit_time),
             date: time_to_iso_date(commit_time),
             repo_path: repo_path.to_string(),
-            files_changed,
             branches,
             url,
         };
@@ -550,4 +578,112 @@ fn get_repo_commits(
     commits.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
     Ok(commits)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use git2::{Oid, Signature};
+    use std::path::PathBuf;
+
+    struct TestRepo {
+        path: PathBuf,
+        repo: Repository,
+    }
+
+    impl TestRepo {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "stream-git-{}-{}",
+                name,
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            let repo = Repository::init_opts(
+                &path,
+                git2::RepositoryInitOptions::new().initial_head("main"),
+            )
+            .unwrap();
+
+            Self { path, repo }
+        }
+
+        fn commit(&self, branch: &str, message: &str, time: i64, parents: &[Oid]) -> Oid {
+            let signature =
+                Signature::new("Test", "test@example.com", &Time::new(time, 0)).unwrap();
+            let tree = self.repo.treebuilder(None).unwrap().write().unwrap();
+            let tree = self.repo.find_tree(tree).unwrap();
+            let parents: Vec<git2::Commit> = parents
+                .iter()
+                .map(|oid| self.repo.find_commit(*oid).unwrap())
+                .collect();
+            let parents: Vec<&git2::Commit> = parents.iter().collect();
+
+            self.repo
+                .commit(
+                    Some(&format!("refs/heads/{}", branch)),
+                    &signature,
+                    &signature,
+                    message,
+                    &tree,
+                    &parents,
+                )
+                .unwrap()
+        }
+
+        fn branches_of(&self, message: &str) -> Vec<String> {
+            get_repo_commits(self.path.to_str().unwrap(), 0, i64::MAX / 2)
+                .unwrap()
+                .into_iter()
+                .find(|commit| commit.message == message)
+                .unwrap()
+                .branches
+        }
+    }
+
+    impl Drop for TestRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn create_branch(test: &TestRepo, name: &str, oid: Oid) {
+        let commit = test.repo.find_commit(oid).unwrap();
+        test.repo.branch(name, &commit, false).unwrap();
+    }
+
+    #[test]
+    fn commits_on_main_stay_on_main_when_a_branch_points_at_it() {
+        let test = TestRepo::new("follower");
+        let first = test.commit("main", "first", 100, &[]);
+        let release = test.commit("main", "release", 200, &[first]);
+        create_branch(&test, "worktree", release);
+
+        assert_eq!(test.branches_of("first"), vec!["main"]);
+        assert_eq!(test.branches_of("release"), vec!["main"]);
+    }
+
+    #[test]
+    fn merged_commits_keep_their_branch_but_not_a_follower() {
+        let test = TestRepo::new("merged");
+        let first = test.commit("main", "first", 100, &[]);
+        create_branch(&test, "feature", first);
+        let feature = test.commit("feature", "feature work", 200, &[first]);
+        let older = test.commit("feature", "feature tip", 250, &[feature]);
+        let merge = test.commit("main", "merge feature", 300, &[first, older]);
+        create_branch(&test, "worktree", merge);
+
+        assert_eq!(test.branches_of("merge feature"), vec!["main"]);
+        assert_eq!(test.branches_of("feature work"), vec!["main", "feature"]);
+    }
+
+    #[test]
+    fn unmerged_commits_stay_on_their_branch() {
+        let test = TestRepo::new("unmerged");
+        let first = test.commit("main", "first", 100, &[]);
+        create_branch(&test, "feature", first);
+        test.commit("feature", "feature work", 200, &[first]);
+
+        assert_eq!(test.branches_of("feature work"), vec!["feature"]);
+    }
 }

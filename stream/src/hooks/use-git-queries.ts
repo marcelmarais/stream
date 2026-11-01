@@ -1,24 +1,40 @@
 import {
+  queryOptions,
   useMutation,
   useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { load } from "@tauri-apps/plugin-store";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   type CommitsByDate,
   createDateRange,
   discoverGitRepos,
   getGitCommitsForRepos,
+  getPullRequests,
   groupCommitsByDate,
+  type PullRequest,
+  type PullRequestSnapshot,
 } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
 const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
+
+const PULL_REQUEST_POLL_MS = 60000;
+// Checks finish within minutes, so follow them more closely while they run
+const PULL_REQUEST_ACTIVE_POLL_MS = 20000;
+// While the window is in the background, gh is failing or the rate limit is low
+const PULL_REQUEST_IDLE_POLL_MS = 300000;
+// Coming back to the window refreshes anything older than this
+const PULL_REQUEST_STALE_MS = 15000;
+const LOW_RATE_LIMIT = 500;
+
+const NO_PULL_REQUESTS: PullRequest[] = [];
 
 export interface FetchResult {
   repo_path: string;
@@ -33,7 +49,36 @@ export const gitKeys = {
     [...gitKeys.all, "discovered", folderPath] as const,
   commits: (folderPath: string, dateKey: string, repos: string[]) =>
     [...gitKeys.all, "commits", folderPath, dateKey, repos] as const,
+  pullRequests: (folderPath: string) =>
+    [...gitKeys.all, "pull-requests", folderPath] as const,
 };
+
+function pullRequestQuery(folderPath: string, repos: string[]) {
+  return queryOptions({
+    queryKey: [...gitKeys.pullRequests(folderPath), repos] as const,
+    queryFn: () => getPullRequests(repos),
+    staleTime: PULL_REQUEST_STALE_MS,
+    retry: false,
+  });
+}
+
+function getPullRequestPollInterval(
+  snapshot: PullRequestSnapshot | undefined,
+  hasFailed: boolean,
+  isWindowFocused: boolean,
+): number {
+  const isRateLimitLow =
+    snapshot?.rate_remaining != null &&
+    snapshot.rate_remaining < LOW_RATE_LIMIT;
+
+  if (!isWindowFocused || hasFailed || isRateLimitLow) {
+    return PULL_REQUEST_IDLE_POLL_MS;
+  }
+
+  return snapshot?.pull_requests.some(({ checks }) => checks === "running")
+    ? PULL_REQUEST_ACTIVE_POLL_MS
+    : PULL_REQUEST_POLL_MS;
+}
 
 /**
  * Helper function to get connected repos from store
@@ -198,12 +243,87 @@ export function useFetchRepos(folderPath: string) {
           );
         },
       });
+      queryClient.invalidateQueries({
+        queryKey: gitKeys.pullRequests(folderPath),
+      });
     },
     onError: (error) => {
       console.error("Error fetching repositories:", error);
       toast.error(`Failed to fetch repositories: ${error}`);
     },
   });
+}
+
+/**
+ * Hook that keeps pull requests fresh. Mount it once: every refetchInterval runs
+ * its own timer, so one per day card would multiply the calls to GitHub.
+ */
+export function usePullRequestPolling(folderPath: string) {
+  const queryClient = useQueryClient();
+  const { data: repos = [] } = useConnectedRepos(folderPath);
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
+
+  useQuery({
+    ...pullRequestQuery(folderPath, repos),
+    enabled: repos.length > 0,
+    refetchInterval: (query) =>
+      getPullRequestPollInterval(
+        query.state.data,
+        query.state.status === "error",
+        isWindowFocused,
+      ),
+  });
+
+  useEffect(() => {
+    let stopListening: (() => void) | undefined;
+    let isCancelled = false;
+
+    const startListening = async () => {
+      const unlisten = await getCurrentWindow().onFocusChanged(
+        ({ payload: isFocused }) => {
+          setIsWindowFocused(isFocused);
+
+          if (isFocused) {
+            queryClient.refetchQueries({
+              queryKey: gitKeys.pullRequests(folderPath),
+              stale: true,
+            });
+          }
+        },
+      );
+
+      if (isCancelled) {
+        unlisten();
+      } else {
+        stopListening = unlisten;
+      }
+    };
+
+    try {
+      void startListening().catch(() => {});
+    } catch {
+      // Browser previews do not expose the Tauri window API.
+    }
+
+    return () => {
+      isCancelled = true;
+      stopListening?.();
+    };
+  }, [folderPath, queryClient]);
+}
+
+/**
+ * Hook to read pull requests from the cache. It never fetches, so mounting one
+ * per day card costs nothing: usePullRequestPolling does the fetching.
+ */
+export function usePullRequests(folderPath: string): PullRequest[] {
+  const { data: repos = [] } = useConnectedRepos(folderPath);
+  const { data } = useQuery({
+    ...pullRequestQuery(folderPath, repos),
+    enabled: false,
+  });
+
+  return data?.pull_requests ?? NO_PULL_REQUESTS;
 }
 
 /**
