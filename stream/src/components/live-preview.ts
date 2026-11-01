@@ -23,7 +23,7 @@ import {
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { tags } from "@lezer/highlight";
-import { LinkChipWidget, linkHref, linkLabel } from "@/components/link-chip";
+import { LinkChipWidget, linkHref, linkLabel } from "./link-chip";
 
 const HEADING_NODE = /^ATXHeading([1-6])$/;
 // Nodes whose URL child belongs to them rather than being a bare link
