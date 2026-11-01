@@ -3,7 +3,6 @@
 import { CheckIcon } from "@phosphor-icons/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { formatDistanceToNowStrict } from "date-fns";
-import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Command,
@@ -21,8 +20,6 @@ import {
 } from "@/hooks/use-git-queries";
 import type { DiscoveredRepo } from "@/ipc/git-reader";
 import { cn } from "@/lib/utils";
-
-const VISIBLE_SUGGESTIONS = 8;
 
 interface RepoConnectorProps {
   markdownDirectory: string;
@@ -76,33 +73,15 @@ function RepoRow({
 }
 
 export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
-  const [search, setSearch] = useState("");
-  const [showAll, setShowAll] = useState(false);
-
-  const { data: connectedRepos = [], isSuccess: hasConnectedRepos } =
-    useConnectedRepos(markdownDirectory);
+  const { data: connectedRepos = [] } = useConnectedRepos(markdownDirectory);
   const { data: repos = [], isLoading } = useDiscoveredRepos(markdownDirectory);
   const addRepo = useAddRepo(markdownDirectory);
   const removeRepo = useRemoveRepo(markdownDirectory);
 
-  // Set once, so ticking a repo doesn't move it out from under the cursor
-  const connectedOnOpen = useRef<Set<string> | null>(null);
-  if (hasConnectedRepos && !connectedOnOpen.current) {
-    connectedOnOpen.current = new Set(connectedRepos);
-  }
-
-  const connected = repos.filter((repo) =>
-    connectedOnOpen.current?.has(repo.path),
-  );
+  const connected = repos.filter((repo) => connectedRepos.includes(repo.path));
   const suggestions = repos.filter(
-    (repo) => !connectedOnOpen.current?.has(repo.path),
+    (repo) => !connectedRepos.includes(repo.path),
   );
-  const isFiltering = search.trim().length > 0;
-  const visibleSuggestions =
-    showAll || isFiltering
-      ? suggestions
-      : suggestions.slice(0, VISIBLE_SUGGESTIONS);
-  const hiddenCount = suggestions.length - visibleSuggestions.length;
 
   const toggleRepo = async (repoPath: string) => {
     try {
@@ -125,7 +104,6 @@ export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
     });
 
     if (typeof folderPath === "string") {
-      connectedOnOpen.current?.add(folderPath);
       await addRepo.mutateAsync(folderPath);
     }
   };
@@ -145,13 +123,8 @@ export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
         filter={filterRepos}
         className="rounded-sm border border-well-rule bg-well"
       >
-        <CommandInput
-          autoFocus
-          placeholder="Filter repositories"
-          value={search}
-          onValueChange={setSearch}
-        />
-        <CommandList className="max-h-none">
+        <CommandInput autoFocus placeholder="Filter repositories" />
+        <CommandList className="max-h-[22rem]">
           {isLoading && (
             <div className="px-2.5 py-3 text-muted-foreground">
               Looking for repositories...
@@ -163,32 +136,21 @@ export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
               {connected.map(renderRow)}
             </CommandGroup>
           )}
-          {visibleSuggestions.length > 0 && (
+          {suggestions.length > 0 && (
             <CommandGroup heading="On this Mac">
-              {visibleSuggestions.map(renderRow)}
+              {suggestions.map(renderRow)}
             </CommandGroup>
           )}
         </CommandList>
       </Command>
 
-      <div className="flex items-center justify-between gap-3 text-muted-foreground">
-        <button
-          type="button"
-          className="hover:text-foreground"
-          onClick={handleChooseFolder}
-        >
-          Choose a folder
-        </button>
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            className="hover:text-foreground"
-            onClick={() => setShowAll(true)}
-          >
-            Show {hiddenCount} more
-          </button>
-        )}
-      </div>
+      <button
+        type="button"
+        className="self-start text-muted-foreground hover:text-foreground"
+        onClick={handleChooseFolder}
+      >
+        Choose a folder
+      </button>
     </div>
   );
 }
