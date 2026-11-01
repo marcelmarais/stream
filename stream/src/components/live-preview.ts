@@ -23,8 +23,11 @@ import {
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { tags } from "@lezer/highlight";
+import { LinkChipWidget, linkHref, linkLabel } from "./link-chip";
 
 const HEADING_NODE = /^ATXHeading([1-6])$/;
+// Nodes whose URL child belongs to them rather than being a bare link
+const LINK_NODES = new Set(["Link", "Autolink", "Image", "LinkReference"]);
 const LIST_LINE_PREFIX = /^\s*(?:[-*+]|\d+[.)])\s+/;
 const TASK_PREFIX = /^\[[ xX]\]\s*/;
 const STRIKE_PREFIX =
@@ -122,6 +125,35 @@ function includeTrailingSpace(state: EditorState, pos: number) {
   return state.doc.sliceString(pos, pos + 1) === " " ? pos + 1 : pos;
 }
 
+/**
+ * Collapses a `[label](url)`, `<url>` or bare URL into a chip, unless the
+ * caret is on it or it can't be opened.
+ */
+function linkChip(state: EditorState, node: SyntaxNode, reveal: boolean) {
+  const url = node.name === "URL" ? node : node.getChild("URL");
+  const href = url && linkHref(state.sliceDoc(url.from, url.to));
+
+  if (
+    !href ||
+    (reveal && selectionTouches(state, node.from, node.to)) ||
+    // Plugins can't replace line breaks
+    state.doc.lineAt(node.from).to < node.to
+  ) {
+    return null;
+  }
+
+  let label = linkLabel(href);
+
+  if (node.name === "Link") {
+    const [open, close] = node.getChildren("LinkMark");
+    label = state.sliceDoc(open.to, close.from).trim() || label;
+  }
+
+  return Decoration.replace({
+    widget: new LinkChipWidget(href, label),
+  }).range(node.from, node.to);
+}
+
 function buildDecorations(view: EditorView) {
   const { state } = view;
   const reveal = view.hasFocus;
@@ -198,7 +230,18 @@ function buildDecorations(view: EditorView) {
             break;
 
           case "Link":
-            if (node.node.getChild("URL") || node.node.getChild("LinkLabel")) {
+          case "Autolink": {
+            const chip = linkChip(state, node.node, reveal);
+
+            if (chip) {
+              decorations.push(chip);
+              return false;
+            }
+
+            if (
+              node.name === "Link" &&
+              (node.node.getChild("URL") || node.node.getChild("LinkLabel"))
+            ) {
               decorations.push(
                 Decoration.mark({ class: "cm-note-link" }).range(
                   node.from,
@@ -207,12 +250,19 @@ function buildDecorations(view: EditorView) {
               );
             }
             break;
+          }
 
           case "LinkMark":
           case "URL":
           case "LinkTitle":
           case "LinkLabel":
-            if (
+            if (node.name === "URL" && parent && !LINK_NODES.has(parent.name)) {
+              const chip = linkChip(state, node.node, reveal);
+
+              if (chip) {
+                decorations.push(chip);
+              }
+            } else if (
               parent?.name === "Link" &&
               (parent.getChild("URL") || parent.getChild("LinkLabel")) &&
               !(reveal && selectionTouches(state, parent.from, parent.to))
@@ -804,6 +854,27 @@ const noteTheme = EditorView.theme({
     width: "100%",
   },
   ".cm-note-link": { textDecoration: "underline" },
+  ".cm-note-link-chip": {
+    cursor: "pointer",
+    display: "inline-block",
+    maxWidth: "min(100%, 22em)",
+    overflow: "hidden",
+    textDecoration: "underline",
+    textOverflow: "ellipsis",
+    verticalAlign: "bottom",
+    whiteSpace: "nowrap",
+  },
+  ".cm-note-link-chip:hover": { color: "var(--heading)" },
+  ".cm-note-link-icon": {
+    borderRadius: "2px",
+    color: "var(--muted-foreground)",
+    display: "inline-block",
+    fill: "currentColor",
+    height: "1em",
+    marginRight: "0.35em",
+    verticalAlign: "-0.15em",
+    width: "1em",
+  },
   ".cm-note-strike": { textDecoration: "line-through" },
   ...headingStyles,
 });

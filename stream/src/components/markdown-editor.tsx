@@ -5,14 +5,17 @@ import {
   history,
   historyKeymap,
   indentWithTab,
+  isolateHistory,
 } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { diff } from "@codemirror/merge";
 import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { livePreview } from "@/components/live-preview";
 import { cn } from "@/lib/utils";
+import { formatMarkdown } from "@/utils/markdown-formatter";
 
 const externalChange = Annotation.define<boolean>();
 
@@ -52,6 +55,39 @@ function diffChange(current: string, next: string) {
   };
 }
 
+/**
+ * Formats the note as the smallest set of edits, so the caret stays put and
+ * one undo reverts it. Returns the text to save.
+ */
+async function formatDocument(view: EditorView) {
+  const original = view.state.doc.toString();
+  let formatted: string;
+
+  try {
+    formatted = await formatMarkdown(original);
+  } catch (error) {
+    console.error("Failed to format note:", error);
+    toast.error("Couldn't format note");
+    return view.state.doc.toString();
+  }
+
+  // Typing that landed while Prettier ran wins over formatting
+  if (formatted === original || view.state.doc.toString() !== original) {
+    return view.state.doc.toString();
+  }
+
+  view.dispatch({
+    changes: diff(original, formatted).map((change) => ({
+      from: change.fromA,
+      to: change.toA,
+      insert: formatted.slice(change.fromB, change.toB),
+    })),
+    annotations: isolateHistory.of("full"),
+  });
+
+  return formatted;
+}
+
 export function MarkdownEditor({
   value,
   onChange,
@@ -89,11 +125,11 @@ export function MarkdownEditor({
               key: "Mod-s",
               preventDefault: true,
               run: (target) => {
-                void Promise.resolve(
-                  callbacksRef.current.onSave(target.state.doc.toString()),
-                ).then(() => {
-                  toast.success("Saved successfully", { duration: 1000 });
-                });
+                void formatDocument(target)
+                  .then((doc) => callbacksRef.current.onSave(doc))
+                  .then(() => {
+                    toast.success("Saved successfully", { duration: 1000 });
+                  });
                 return true;
               },
             },

@@ -5,17 +5,19 @@ alwaysApply: false
 
 ## Markdown Editor - CodeMirror 6
 
-The editor follows Obsidian's Live Preview model: the document is the raw markdown text, and formatting is only decoration on top of it. The file on disk is never regenerated from a parsed tree, so anything the editor doesn't render stays intact.
+The editor follows Obsidian's Live Preview model: the document is the raw markdown text, and formatting is only decoration on top of it. The only rewrite is an explicit Cmd+S, which runs Prettier's markdown formatter; it keeps syntax the editor doesn't render (frontmatter, wikilinks, HTML comments, `~~` lines).
 
 ### Files
 
-- `markdown-editor.tsx` - React wrapper: `value`/`onChange`/`onSave`, Cmd+S, the `/todos` command and its slash menu
+- `markdown-editor.tsx` - React wrapper: `value`/`onChange`/`onSave`, Cmd+S (format, then save), the `/todos` command and its slash menu
 - `live-preview.ts` - Everything inside the editor: decorations, list behaviour, formatting shortcuts, theme and slash menu detection. It imports nothing from `@/` so it can be bundled and tested on its own
+- `link-chip.ts` - The widget links collapse into: favicon, truncated label, opens in the default browser
+- `src/utils/markdown-formatter.ts` - Prettier's markdown formatter, loaded on first use
 - `slash-command.tsx` - Slash menu UI and the data the commands read
 
 ### Rules
 
-- **Don't transform the document on load or save.** Only user edits may change text.
+- **Don't transform the document on load or autosave.** Only user edits and an explicit Cmd+S may change text. Cmd+S applies Prettier's output as a minimal diff in one transaction, so the caret stays put and one undo reverts it.
 - **Use the native caret and selection.** Don't add `drawSelection()`.
 - **No vertical margins on lines.** CodeMirror measures line heights, so space lines with padding.
 - **Don't use `text-indent` for hanging lists.** Markers are absolutely positioned inside a padded line.

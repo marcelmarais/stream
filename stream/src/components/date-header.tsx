@@ -1,5 +1,6 @@
 import { CheckIcon, EyeIcon, EyeSlashIcon, XIcon } from "@phosphor-icons/react";
 import {
+  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -27,13 +28,14 @@ export function DateHeader({
   onToggleFocus,
   fileMetadata,
   folderPath,
-  fileName,
+  renderTitle,
 }: {
   isFocused: boolean;
   onToggleFocus: () => void;
   fileMetadata: MarkdownFileMetadata;
   folderPath: string;
-  fileName: ReactNode;
+  /** Wraps the day title, e.g. in the note's context menu */
+  renderTitle: (title: ReactElement) => ReactNode;
 }) {
   const dayTitle = formatDayTitle(fileMetadata.dateFromFilename);
   const isToday =
@@ -181,23 +183,23 @@ export function DateHeader({
             : "border border-muted-foreground bg-background",
         )}
       />
-      <button
-        type="button"
-        className="group flex w-full items-center gap-3 text-left"
-        onClick={onToggleFocus}
-      >
-        <h1 className="line-clamp-1 min-w-0 font-serif text-[32px] text-heading leading-[1.1] tracking-[-0.01em]">
-          {dayTitle}
-        </h1>
-        {isFocused ? (
-          <EyeSlashIcon className="size-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <EyeIcon className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-        )}
-      </button>
+      {renderTitle(
+        <button
+          type="button"
+          className="group flex w-full items-center gap-3 text-left"
+          onClick={onToggleFocus}
+        >
+          <h1 className="line-clamp-1 min-w-0 font-serif text-[32px] text-heading leading-[1.1] tracking-[-0.01em]">
+            {dayTitle}
+          </h1>
+          {isFocused ? (
+            <EyeSlashIcon className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <EyeIcon className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+          )}
+        </button>,
+      )}
       <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-        {fileName}
-        <span aria-hidden="true">·</span>
         <div className="relative flex items-center">
           <span
             ref={cityMirrorRef}
