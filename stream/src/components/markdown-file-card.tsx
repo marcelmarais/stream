@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useCommitsForDate } from "@/hooks/use-git-queries";
+import { useAgentsForDate, useCommitsForDate } from "@/hooks/use-git-queries";
 import {
   useCreateTodayFile,
   useDeleteMarkdownFile,
@@ -36,6 +36,7 @@ import { filterCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
+import { getDateKey } from "@/utils/date-utils";
 
 const commitMountTransition = { duration: 0.18, ease: "easeOut" } as const;
 
@@ -179,10 +180,13 @@ export function FileCard({
   const { data: commitsByDate = {} } = useCommitsForDate(
     folderPath,
     file.dateFromFilename,
+    {
+      autoRefresh: getDateKey(file.dateFromFilename) === getDateKey(new Date()),
+    },
   );
 
   const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
-  const hasCommits = commits.length > 0;
+  const agents = useAgentsForDate(folderPath, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
@@ -221,7 +225,12 @@ export function FileCard({
             isEditable={!isFocused}
           />
 
-          {hasCommits && <CommitPanel commits={commits} />}
+          <CommitPanel
+            commits={commits}
+            agents={agents}
+            date={file.dateFromFilename}
+            folderPath={folderPath}
+          />
         </>
       )}
     </article>
@@ -366,6 +375,7 @@ export function FocusedFileOverlay({
     { autoRefresh: true }, // Only auto-refresh when expanded/focused
   );
   const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
+  const agents = useAgentsForDate(folderPath, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
     updateContentOptimistically(newContent);
@@ -409,7 +419,12 @@ export function FocusedFileOverlay({
             isEditable={true}
           />
 
-          {commits.length > 0 && <CommitPanel commits={commits} />}
+          <CommitPanel
+            commits={commits}
+            agents={agents}
+            date={file.dateFromFilename}
+            folderPath={folderPath}
+          />
         </article>
       </div>
       {footerComponent}

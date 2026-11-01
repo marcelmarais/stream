@@ -12,7 +12,6 @@ export interface GitCommit {
   timestamp: number; // Unix timestamp in milliseconds
   date: string; // ISO 8601 date string (YYYY-MM-DD)
   repo_path: string;
-  files_changed: string[];
   branches: string[]; // Branches that contain this commit
   url?: string; // URL to commit on remote (if available)
 }
@@ -21,6 +20,31 @@ export interface RepoCommits {
   repo_path: string;
   commits: GitCommit[];
   error?: string;
+}
+
+export type PullRequestState = "open" | "draft" | "merged";
+export type PullRequestChecks = "pass" | "fail" | "running";
+export type PullRequestReview = "requested" | "changes" | "approved";
+
+export interface PullRequest {
+  repo_path: string;
+  number: number;
+  title: string;
+  url: string;
+  state: PullRequestState;
+  branch: string;
+  additions: number;
+  deletions: number;
+  comments: number;
+  checks: PullRequestChecks | null;
+  failed_checks: string[];
+  review: PullRequestReview | null;
+  merged_at: string | null; // ISO 8601 timestamp
+}
+
+export interface PullRequestSnapshot {
+  pull_requests: PullRequest[];
+  rate_remaining: number | null; // GitHub API points left this hour
 }
 
 export interface DiscoveredRepo {
@@ -80,6 +104,16 @@ export async function getGitCommitsForRepos(
     console.error("Error fetching git commits:", error);
     throw new Error(`Failed to fetch git commits: ${error}`);
   }
+}
+
+/**
+ * Get my pull requests and review requests for repositories hosted on GitHub.
+ * Goes through the gh CLI, so it uses whatever account gh is signed in to.
+ */
+export async function getPullRequests(
+  repoPaths: string[],
+): Promise<PullRequestSnapshot> {
+  return invoke("get_pull_requests", { repoPaths });
 }
 
 /**
@@ -192,13 +226,6 @@ export function formatCommitMessage(
  */
 export function formatCommitAuthor(commit: GitCommit): string {
   return commit.author_name || commit.author_email || "Unknown";
-}
-
-/**
- * Get short commit ID (first 7 characters)
- */
-export function getShortCommitId(commitId: string): string {
-  return commitId.substring(0, 7);
 }
 
 const MAIN_BRANCH_NAMES = [

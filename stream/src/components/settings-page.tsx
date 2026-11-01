@@ -1,17 +1,82 @@
 "use client";
 
+import { Switch } from "@base-ui/react/switch";
 import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { AgentLogo } from "@/components/agent-stack";
 import RepoConnector from "@/components/repo-connector";
 import { Titlebar } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
-import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
+import {
+  useConnectedRepos,
+  useFetchRepos,
+  useRunningAgents,
+} from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
 import { useSetSelectedFolder } from "@/hooks/use-user-data";
+import type { AgentKind } from "@/ipc/agents";
 import { useUserStore } from "@/stores/user-store";
+
+const AGENT_ROWS: { kind: AgentKind; name: string }[] = [
+  { kind: "claude", name: "Claude Code" },
+  { kind: "codex", name: "Codex" },
+];
+
+function AgentsSection({ folderPath }: { folderPath: string }) {
+  const agentsEnabled = useUserStore((state) => state.agentsEnabled);
+  const setAgentsEnabled = useUserStore((state) => state.setAgentsEnabled);
+  const agents = useRunningAgents(folderPath);
+
+  const getStatus = (kind: AgentKind) => {
+    const running = agents.filter((agent) => agent.kind === kind).length;
+    return running > 0 ? `${running} running` : "None running";
+  };
+
+  return (
+    <section className="mt-7 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
+          Agents
+        </h2>
+        <Switch.Root
+          checked={agentsEnabled}
+          onCheckedChange={setAgentsEnabled}
+          aria-label="Show running agents"
+          className="flex h-4 w-[30px] shrink-0 items-center rounded-[2px] bg-rail px-0.5 data-checked:bg-primary"
+        >
+          <Switch.Thumb className="size-3 rounded-[1px] bg-muted-foreground transition-transform data-checked:translate-x-3.5 data-checked:bg-background" />
+        </Switch.Root>
+      </div>
+      <p className="text-muted-foreground text-xs">
+        Show agents running in your repositories on today's note. Stream only
+        reads session files on this Mac.
+      </p>
+      {agentsEnabled && (
+        <div className="flex flex-col">
+          {AGENT_ROWS.map(({ kind, name }) => (
+            <div
+              key={kind}
+              className="flex items-center gap-2.5 border-border border-b py-2"
+            >
+              <AgentLogo
+                kind={kind}
+                size={16}
+                cutoutClassName="stroke-background"
+              />
+              <span className="text-foreground">{name}</span>
+              <span className="ml-auto text-muted-foreground text-xs">
+                {getStatus(kind)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function SettingsPage({ folderPath }: { folderPath: string }) {
   const router = useRouter();
@@ -104,6 +169,8 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
           </div>
           <RepoConnector key={folderPath} markdownDirectory={folderPath} />
         </section>
+
+        <AgentsSection folderPath={folderPath} />
 
         {appVersion && (
           <p className="mt-7 text-muted-foreground text-xs">

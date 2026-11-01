@@ -13,6 +13,8 @@
   --color-well: var(--well);
   --color-well-raised: var(--well-raised);
   --color-well-rule: var(--well-rule);
+  --color-agent-claude: var(--agent-claude);
+  --color-agent-codex: var(--agent-codex);
   --font-sans:
     var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, Menlo, Consolas, monospace;
@@ -50,6 +52,8 @@
   --well: #ebede6;
   --well-raised: #dcdfd6;
   --well-rule: #d3d6ce;
+  --agent-claude: #b3532f;
+  --agent-codex: #3f49d8;
   --card: #ffffff;
   --card-foreground: #111311;
   --popover: #ffffff;
@@ -96,6 +100,8 @@
   --well: #151917;
   --well-raised: #1f2522;
   --well-rule: #2b302d;
+  --agent-claude: #e08a68;
+  --agent-codex: #8b97ff;
   --card: #141716;
   --card-foreground: #eef1ec;
   --popover: #141716;
