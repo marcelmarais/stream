@@ -1,32 +1,63 @@
-<h1 align="center">
-  stream
-</h1>
 <p align="center">
-  Minimal note taking for engineers.
+  <img src="stream/src-tauri/icons/128x128@2x.png" width="96" alt="" />
 </p>
 
+<h1 align="center">stream</h1>
 
 <p align="center">
-  <a href="https://github.com/marcelmarais/stream/releases/latest/download/stream-latest-macos-arm64.dmg">Download</a>.
-</p>
-</div>
-
-<p align="middle">
-<img width="723" height="727" alt="Screenshot 2025-11-16 at 13 06 02" src="https://github.com/user-attachments/assets/0b9c11e4-f172-4ab5-8324-89aa0708ba20" />
+  Daily notes for engineers. Your commits, pull requests and agents show up under each day.
 </p>
 
-## Features
+<p align="center">
+  <a href="https://github.com/marcelmarais/stream/releases/latest/download/stream-latest-macos-arm64.dmg"><strong>Download for Mac</strong></a>
+  ·
+  <a href="https://www.differentiated.io/stream">Website</a>
+</p>
 
-### Core Notetaking
-- **Daily Markdown Notes**: Date-based note taking using `YYYY-MM-DD.md` format with WYSIWYG editor Markdown editor and automatic location (city, country) detection.
-- **Infinite Scroll**: Every day's notes in an endless scroll.
-- **Auto-Save & Format**: Press `Cmd+S` (Mac) or `Ctrl+S` (Windows/Linux) to save and auto-format / lint the currently selected Markdown file.
-- **Focus Mode**: Press `Cmd+I` to focus on a single note in full-screen overlay.
-- **Calendar Navigation**: Jump to any date with the calendar picker
+https://github.com/user-attachments/assets/9f320143-e342-481f-a886-acdeadb86e85
 
-### Git Integration
-- **Connect Repositories**: Link multiple Git repositories to your notes folder
-- **Commit Timeline**: View all commits from connected repos alongside your daily notes
-- **Filtering**: Filter commits by author, repository, or search term
-- **Commit Details**: See commit messages, authors, timestamps, branches, and files changed
-- **Fetch from Remote**: One-click fetch latest changes from all connected repos
+## What it does
+
+- **Your commits under your notes.** Stream finds the git repos on your Mac. Connect the ones you care about and each day lists what you committed, grouped by repo and branch.
+- **Pull requests and checks.** Your open pull requests sit on today's note with their checks and reviews. Colour only appears when something needs you.
+- **Your agents.** Claude Code and Codex sessions appear next to the branch they're working on. Hover to see what each one is doing, click to open its chat, and look for the lime dot when one is waiting for you. Stream only reads session files on your Mac.
+- **One note a day.** Every day gets its own markdown file, all in one long timeline. Jump to any date from the calendar.
+- **Markdown that formats as you type.** The symbols disappear as you write and come back when your cursor reaches them. Links collapse into a small chip with the site's icon.
+- **Search.** ⌘F searches every note as you type.
+- **Plain files.** Notes are `YYYY-MM-DD.md` files in a folder you choose, so anything that reads markdown can read them.
+
+## Getting started
+
+1. [Download the app](https://github.com/marcelmarais/stream/releases/latest/download/stream-latest-macos-arm64.dmg), open the DMG and drag Stream to Applications. It needs an Apple silicon Mac and updates itself.
+2. Pick a folder for your notes.
+3. Open **settings** and connect your repos.
+
+Pull requests and checks come through the [GitHub CLI](https://cli.github.com), so install it and run `gh auth login` to see them.
+
+## Shortcuts
+
+| Shortcut | Action                        |
+| -------- | ----------------------------- |
+| ⌘F       | Search your notes             |
+| ⌘S       | Save and format with Prettier |
+| ⌘O       | Focus on the current note     |
+
+## Development
+
+Stream is a [Tauri 2](https://tauri.app) app with a Next.js frontend and a Rust backend. You'll need Node, pnpm and Rust. The app lives in `stream/`.
+
+```bash
+cd stream
+pnpm install
+pnpm tauri dev
+```
+
+Before you push:
+
+```bash
+pnpm check
+pnpm type-check
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+To release, see [AGENTS.md](AGENTS.md).
