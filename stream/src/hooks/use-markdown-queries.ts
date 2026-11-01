@@ -5,6 +5,7 @@ import {
   deleteMarkdownFile,
   ensureMarkdownFileForDate,
   ensureTodayMarkdownFile,
+  fillFileLocation,
   readAllMarkdownFilesMetadata,
   readMarkdownFilesContentByPaths,
   setFileLocationMetadata,
@@ -268,6 +269,36 @@ export function useUpdateFileLocation(folderPath: string) {
       });
     },
   });
+}
+
+const autoFilledFiles = new Set<string>();
+
+/**
+ * Fills in a missing location in the background. Tries once per file per run,
+ * so a denied permission or an offline Mac doesn't retry on every render.
+ */
+export function useAutoFillLocation(
+  folderPath: string,
+  filePath: string,
+  enabled: boolean,
+) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled || autoFilledFiles.has(filePath)) return;
+    autoFilledFiles.add(filePath);
+
+    fillFileLocation(folderPath, filePath)
+      .then((filled) => {
+        if (!filled) return;
+        queryClient.invalidateQueries({
+          queryKey: markdownKeys.metadata(folderPath),
+        });
+      })
+      .catch((error) => {
+        console.warn(`Could not fill location for ${filePath}:`, error);
+      });
+  }, [enabled, filePath, folderPath, queryClient]);
 }
 
 export function useDeleteMarkdownFile(folderPath: string) {

@@ -5,7 +5,9 @@ export interface LocationMeta {
   city: string;
   /**
    * Where this value came from, e.g.:
-   * - "auto:ipapi"
+   * - "auto:corelocation"
+   * - "auto:lastLocation"
+   * - "auto:ip" (older notes)
    * - "manual"
    */
   source?: string;
@@ -37,6 +39,16 @@ export interface StreamMeta {
 }
 
 const META_FILENAME = "meta.json";
+
+const TRUSTED_LOCATION_SOURCES = new Set(["manual", "auto:corelocation"]);
+
+/**
+ * Only trusted locations can become `lastLocation`, so a bad guess can't spread
+ * to later notes.
+ */
+export function isTrustedLocation(location: LocationMeta): boolean {
+  return TRUSTED_LOCATION_SOURCES.has(location.source ?? "");
+}
 
 function nowMs(): number {
   return Date.now();
@@ -159,10 +171,13 @@ export async function setFileLocation(
   folderPath: string,
   filePath: string,
   location: { country: string; city: string; source?: string },
+  options: { onlyIfEmpty?: boolean } = {},
 ): Promise<void> {
   const key = getMetaKeyForFilePath(folderPath, filePath);
   await updateMeta(folderPath, (current) => {
     const existing = current.files[key] || {};
+    if (options.onlyIfEmpty && existing.location) return current;
+
     const nextLocation: LocationMeta = {
       country: location.country,
       city: location.city,
@@ -171,7 +186,9 @@ export async function setFileLocation(
     };
     return {
       ...current,
-      globals: { ...current.globals, lastLocation: nextLocation },
+      globals: isTrustedLocation(nextLocation)
+        ? { ...current.globals, lastLocation: nextLocation }
+        : current.globals,
       files: {
         ...current.files,
         [key]: {

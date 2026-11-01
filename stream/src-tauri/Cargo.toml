@@ -39,6 +39,10 @@ regex = "1"
 rayon = "1.10"
 
 [target."cfg(target_os = \"macos\")".dependencies]
+block2 = "0.6"
 objc = "0.2"
+objc2 = "0.6"
+objc2-core-location = { version = "0.3", default-features = false, features = ["std", "block2", "CLError", "CLGeocoder", "CLLocation", "CLLocationManager", "CLLocationManagerDelegate", "CLPlacemark"] }
+objc2-foundation = "0.3"
 
 

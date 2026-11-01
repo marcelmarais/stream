@@ -11,6 +11,7 @@ use objc::{msg_send, sel, sel_impl};
 pub use ipc::{FetchResult, GitCommit, MarkdownFileMetadata, RepoCommits};
 
 use crate::ipc::git::{fetch_repos, get_git_commits_for_repos};
+use crate::ipc::location::detect_location;
 use crate::ipc::markdown::{
     read_markdown_files_content, read_markdown_files_metadata, set_file_location_metadata,
 };
@@ -58,6 +59,7 @@ pub fn run() {
             get_git_commits_for_repos,
             fetch_repos,
             discover_git_repos,
+            detect_location,
             set_file_location_metadata,
             search::search_markdown_files,
             search::rebuild_search_index
