@@ -14,6 +14,7 @@ import { listRunningAgents, type RunningAgent } from "@/ipc/agents";
 import {
   type CommitsByDate,
   createDateRange,
+  type DefaultBranch,
   discoverGitRepos,
   getGitCommitsForRepos,
   getPullRequests,
@@ -27,6 +28,7 @@ import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
 
 const REPO_MAPPINGS_STORE_FILE = "repo-mappings.json";
 const AGENT_POLL_INTERVAL_MS = 3000;
+const FINISHED_AGENT_LINGER_MS = 5 * 60 * 1000;
 const NO_AGENTS: RunningAgent[] = [];
 
 const PULL_REQUEST_POLL_MS = 60000;
@@ -39,6 +41,7 @@ const PULL_REQUEST_STALE_MS = 15000;
 const LOW_RATE_LIMIT = 500;
 
 const NO_PULL_REQUESTS: PullRequest[] = [];
+const NO_DEFAULT_BRANCHES: DefaultBranch[] = [];
 
 export interface FetchResult {
   repo_path: string;
@@ -80,7 +83,12 @@ function getPullRequestPollInterval(
     return PULL_REQUEST_IDLE_POLL_MS;
   }
 
-  return snapshot?.pull_requests.some(({ checks }) => checks === "running")
+  const checked = [
+    ...(snapshot?.pull_requests ?? []),
+    ...(snapshot?.default_branches ?? []),
+  ];
+
+  return checked.some(({ checks }) => checks === "running")
     ? PULL_REQUEST_ACTIVE_POLL_MS
     : PULL_REQUEST_POLL_MS;
 }
@@ -332,6 +340,19 @@ export function usePullRequests(folderPath: string): PullRequest[] {
 }
 
 /**
+ * Hook to read each repo's default branch and its checks from the same cache
+ */
+export function useDefaultBranches(folderPath: string): DefaultBranch[] {
+  const { data: repos = [] } = useConnectedRepos(folderPath);
+  const { data } = useQuery({
+    ...pullRequestQuery(folderPath, repos),
+    enabled: false,
+  });
+
+  return data?.default_branches ?? NO_DEFAULT_BRANCHES;
+}
+
+/**
  * Hook to get commits for a specific date
  * Uses longer staleTime to avoid refetching during scroll
  * Set autoRefresh for focused/expanded cards only
@@ -475,21 +496,52 @@ export function usePrefetchCommitsForDates() {
 }
 
 /**
- * Hook to get the agents running in connected repositories. Polling stops with
- * the setting, and while the window is hidden.
+ * An agent leaves the running list the moment it finishes, so hold on to it for
+ * a while to keep its chat a click away. Polling pauses while the window is
+ * hidden, so the wait runs from when the app noticed, not when the agent stopped.
+ */
+export function keepFinishedAgents(
+  running: RunningAgent[],
+  previous: RunningAgent[],
+  now: number,
+): RunningAgent[] {
+  const runningIds = new Set(running.map(({ id }) => id));
+  const finished = previous
+    .filter(({ id }) => !runningIds.has(id))
+    .map((agent) => ({
+      ...agent,
+      status: "finished" as const,
+      finished_at: agent.finished_at ?? now,
+    }))
+    .filter(({ finished_at }) => now - finished_at < FINISHED_AGENT_LINGER_MS);
+
+  return [...running, ...finished];
+}
+
+/**
+ * Hook to get the agents running in connected repositories, plus any that
+ * finished in the last few minutes. Polling stops with the setting, and while
+ * the window is hidden.
  */
 export function useRunningAgents(
   folderPath: string,
   options?: { enabled?: boolean },
 ) {
   const { enabled = true } = options || {};
+  const queryClient = useQueryClient();
   const agentsEnabled = useUserStore((state) => state.agentsEnabled);
   const { data: repos = [] } = useConnectedRepos(folderPath);
   const isActive = enabled && agentsEnabled && repos.length > 0;
+  const queryKey = gitKeys.agents(repos);
 
   const { data = NO_AGENTS } = useQuery({
-    queryKey: gitKeys.agents(repos),
-    queryFn: () => listRunningAgents(repos),
+    queryKey,
+    queryFn: async () =>
+      keepFinishedAgents(
+        await listRunningAgents(repos),
+        queryClient.getQueryData<RunningAgent[]>(queryKey) ?? NO_AGENTS,
+        Date.now(),
+      ),
     enabled: isActive,
     refetchInterval: AGENT_POLL_INTERVAL_MS,
   });

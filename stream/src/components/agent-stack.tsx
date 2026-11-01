@@ -9,13 +9,25 @@ import {
 } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { type AgentKind, openAgentChat, type RunningAgent } from "@/ipc/agents";
+import {
+  type AgentKind,
+  type AgentStatus,
+  openAgentChat,
+  type RunningAgent,
+} from "@/ipc/agents";
 import { cn } from "@/lib/utils";
 
 const VISIBLE_AGENTS = 3;
 const BADGE_WIDTH = 18;
 const BADGE_OVERLAP = 4;
 const OVERFLOW_COUNT_WIDTH = 20;
+const FINISHED_OPACITY = 0.5;
+
+// Long enough to move the pointer from a logo onto its tooltip
+const TOOLTIP_CLOSE_DELAY_MS = 150;
+
+// Most urgent first, so a finished agent never hides one that needs you
+const STATUS_ORDER: AgentStatus[] = ["waiting", "working", "finished"];
 
 // A running logo stops after this many gestures and rests until the next turn
 const GESTURES_PER_TURN = 5;
@@ -198,7 +210,7 @@ function AgentMark({
   }, [turnKey]);
 
   useEffect(() => {
-    if (!moving || prefersReducedMotion) {
+    if (!moving || prefersReducedMotion || status === "finished") {
       return;
     }
 
@@ -231,7 +243,11 @@ function AgentMark({
       ref={scope}
       onPointerEnter={playGesture}
       initial={isNew ? { opacity: 0, scale: 0.5, y: 3 } : false}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
+      animate={{
+        opacity: status === "finished" ? FINISHED_OPACITY : 1,
+        scale: 1,
+        y: 0,
+      }}
       exit={{ opacity: 0, scale: 0.7 }}
       transition={{ type: "spring", stiffness: 380, damping: 20 }}
       className="relative block"
@@ -254,7 +270,7 @@ function formatElapsed(since: number): string {
   const minutes = Math.floor((Date.now() - since) / 60000);
 
   if (minutes < 1) {
-    return "just started";
+    return "<1m";
   }
   if (minutes < 60) {
     return `${minutes}m`;
@@ -266,27 +282,25 @@ function getWaitingLabel(activity: string | null): string {
   return activity ? `Waiting for you: ${activity}` : "Waiting for you";
 }
 
-function AgentDetail({ agent }: { agent: RunningAgent }) {
-  const { activity, chat, since, status, title } = agent;
-  const isWaiting = status === "waiting";
-  const summary = isWaiting ? getWaitingLabel(activity) : activity;
-  const footer = [
-    !isWaiting && since ? formatElapsed(since) : null,
-    chat ? `Click to open in ${chat.app}` : null,
-  ];
+function AgentProgress({ agent }: { agent: RunningAgent }) {
+  const { activity, since, status } = agent;
+
+  if (status === "finished") {
+    return <span className="text-muted-foreground">Finished</span>;
+  }
+  if (status === "waiting") {
+    return <span className="text-primary">{getWaitingLabel(activity)}</span>;
+  }
 
   return (
-    <>
-      <span className="text-foreground">{title ?? "Untitled chat"}</span>
-      {summary && (
-        <span className={isWaiting ? "text-primary" : "text-body"}>
-          {summary}
-        </span>
-      )}
-      <span className="text-muted-foreground">
-        {footer.filter(Boolean).join(" · ")}
+    <span className="flex items-baseline justify-between gap-4">
+      <span className="min-w-0 truncate text-shimmer">
+        {activity ?? "Working"}
       </span>
-    </>
+      {since && (
+        <span className="shrink-0 text-faint">{formatElapsed(since)}</span>
+      )}
+    </span>
   );
 }
 
@@ -332,8 +346,17 @@ function AgentBadge({
           sideOffset={4}
           className="isolate z-[70]"
         >
-          <Tooltip.Popup className="flex max-w-[310px] flex-col gap-0.5 rounded-[3px] border border-well-rule bg-popover px-[9px] py-[7px] font-mono text-[11.5px] leading-[1.4] shadow-md">
-            <AgentDetail agent={agent} />
+          <Tooltip.Popup
+            onClick={openChat}
+            className={cn(
+              "flex w-[280px] flex-col gap-1 rounded-[3px] border border-well-rule bg-popover px-[9px] py-[7px] font-mono text-[11.5px] leading-[1.4] shadow-md",
+              chat && "cursor-pointer",
+            )}
+          >
+            <span className="font-medium text-foreground">
+              {agent.title ?? "Untitled chat"}
+            </span>
+            <AgentProgress agent={agent} />
           </Tooltip.Popup>
         </Tooltip.Positioner>
       </Tooltip.Portal>
@@ -362,16 +385,16 @@ export function AgentStack({
   size: number;
   className?: string;
 }) {
-  const waitingFirst = [...agents].sort(
-    (a, b) => Number(b.status === "waiting") - Number(a.status === "waiting"),
+  const byUrgency = [...agents].sort(
+    (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status),
   );
   const hidden = agents.length - VISIBLE_AGENTS;
 
   return (
-    <Tooltip.Provider delay={150} closeDelay={0}>
+    <Tooltip.Provider delay={150} closeDelay={TOOLTIP_CLOSE_DELAY_MS}>
       <span className={cn("inline-flex items-center", className)}>
         <AnimatePresence>
-          {waitingFirst.slice(0, VISIBLE_AGENTS).map((agent) => (
+          {byUrgency.slice(0, VISIBLE_AGENTS).map((agent) => (
             <AgentBadge
               key={agent.id}
               agent={agent}

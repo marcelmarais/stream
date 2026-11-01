@@ -42,8 +42,16 @@ export interface PullRequest {
   merged_at: string | null; // ISO 8601 timestamp
 }
 
+export interface DefaultBranch {
+  repo_path: string;
+  branch: string;
+  checks: PullRequestChecks | null;
+  failed_checks: string[];
+}
+
 export interface PullRequestSnapshot {
   pull_requests: PullRequest[];
+  default_branches: DefaultBranch[];
   rate_remaining: number | null; // GitHub API points left this hour
 }
 

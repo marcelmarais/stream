@@ -31,7 +31,9 @@ function AgentsSection({ folderPath }: { folderPath: string }) {
   const agents = useRunningAgents(folderPath);
 
   const getStatus = (kind: AgentKind) => {
-    const running = agents.filter((agent) => agent.kind === kind).length;
+    const running = agents.filter(
+      (agent) => agent.kind === kind && agent.status !== "finished",
+    ).length;
     return running > 0 ? `${running} running` : "None running";
   };
 

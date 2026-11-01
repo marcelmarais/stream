@@ -25,22 +25,18 @@ const GH_INSTALL_PATHS: [&str; 4] = [
 /// repos are connected.
 const PULL_REQUESTS_FRAGMENT: &str = r#"
 fragment repo on Repository {
+  defaultBranchRef {
+    name
+    target {
+      ... on Commit { statusCheckRollup { ...checks } }
+    }
+  }
   open: pullRequests(states: OPEN, first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) {
     nodes {
       ...pullRequest
       commits(last: 1) {
         nodes {
-          commit {
-            statusCheckRollup {
-              state
-              contexts(first: 30) {
-                nodes {
-                  ... on CheckRun { name conclusion }
-                  ... on StatusContext { context state }
-                }
-              }
-            }
-          }
+          commit { statusCheckRollup { ...checks } }
         }
       }
     }
@@ -54,6 +50,15 @@ fragment pullRequest on PullRequest {
   reviewDecision viewerDidAuthor
   comments { totalCount }
   viewerLatestReviewRequest { id }
+}
+fragment checks on StatusCheckRollup {
+  state
+  contexts(first: 30) {
+    nodes {
+      ... on CheckRun { name conclusion }
+      ... on StatusContext { context state }
+    }
+  }
 }
 "#;
 
@@ -74,9 +79,19 @@ pub struct PullRequest {
     pub merged_at: Option<String>,
 }
 
+/// A repo's default branch and the checks on its latest commit
+#[derive(Debug, Serialize, PartialEq)]
+pub struct DefaultBranch {
+    pub repo_path: String,
+    pub branch: String,
+    pub checks: Option<&'static str>,
+    pub failed_checks: Vec<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct PullRequestSnapshot {
     pub pull_requests: Vec<PullRequest>,
+    pub default_branches: Vec<DefaultBranch>,
     pub rate_remaining: Option<u64>,
 }
 
@@ -86,9 +101,17 @@ struct Nodes<T> {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RepoNode {
+    default_branch_ref: Option<BranchRefNode>,
     open: Nodes<PullRequestNode>,
     merged: Nodes<PullRequestNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BranchRefNode {
+    name: String,
+    target: Option<Commit>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,6 +250,31 @@ fn is_failed_check(check: &CheckNode) -> bool {
     )
 }
 
+fn failed_check_names(rollup: Option<CheckRollup>) -> Vec<String> {
+    rollup
+        .map(|rollup| {
+            rollup
+                .contexts
+                .nodes
+                .into_iter()
+                .filter(is_failed_check)
+                .filter_map(|check| check.name.or(check.context))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn map_default_branch(repo_path: &str, node: BranchRefNode) -> DefaultBranch {
+    let rollup = node.target.and_then(|commit| commit.status_check_rollup);
+
+    DefaultBranch {
+        repo_path: repo_path.to_string(),
+        branch: node.name,
+        checks: rollup.as_ref().and_then(|rollup| map_checks(&rollup.state)),
+        failed_checks: failed_check_names(rollup),
+    }
+}
+
 fn map_pull_request(repo_path: &str, node: PullRequestNode) -> Option<PullRequest> {
     let is_requested = node.viewer_latest_review_request.is_some() && !node.viewer_did_author;
     if !node.viewer_did_author && !is_requested {
@@ -267,17 +315,7 @@ fn map_pull_request(repo_path: &str, node: PullRequestNode) -> Option<PullReques
         deletions: node.deletions,
         comments: node.comments.total_count,
         checks: rollup.as_ref().and_then(|rollup| map_checks(&rollup.state)),
-        failed_checks: rollup
-            .map(|rollup| {
-                rollup
-                    .contexts
-                    .nodes
-                    .into_iter()
-                    .filter(is_failed_check)
-                    .filter_map(|check| check.name.or(check.context))
-                    .collect()
-            })
-            .unwrap_or_default(),
+        failed_checks: failed_check_names(rollup),
         review,
         merged_at: node.merged_at,
     })
@@ -302,6 +340,7 @@ fn parse_snapshot(stdout: &[u8], repos: &[GitHubRepo]) -> Result<PullRequestSnap
         .and_then(Value::as_u64);
 
     let mut pull_requests = Vec::new();
+    let mut default_branches = Vec::new();
 
     for (index, repo) in repos.iter().enumerate() {
         // A deleted or inaccessible repo comes back null without failing the others.
@@ -314,6 +353,10 @@ fn parse_snapshot(stdout: &[u8], repos: &[GitHubRepo]) -> Result<PullRequestSnap
         let node: RepoNode = serde_json::from_value(node.clone())
             .map_err(|e| format!("Unexpected gh output: {}", e))?;
 
+        default_branches.extend(
+            node.default_branch_ref
+                .map(|branch| map_default_branch(&repo.path, branch)),
+        );
         pull_requests.extend(
             node.open
                 .nodes
@@ -325,6 +368,7 @@ fn parse_snapshot(stdout: &[u8], repos: &[GitHubRepo]) -> Result<PullRequestSnap
 
     Ok(PullRequestSnapshot {
         pull_requests,
+        default_branches,
         rate_remaining,
     })
 }
@@ -337,6 +381,7 @@ pub(crate) async fn get_pull_requests(
     if repos.is_empty() {
         return Ok(PullRequestSnapshot {
             pull_requests: Vec::new(),
+            default_branches: Vec::new(),
             rate_remaining: None,
         });
     }
@@ -500,6 +545,76 @@ mod tests {
             vec!["Build macOS App", "ci/legacy"]
         );
         assert_eq!(snapshot.pull_requests[1].state, "merged");
+    }
+
+    #[test]
+    fn reads_checks_on_the_default_branch() {
+        let stdout = json!({
+            "data": {
+                "r0": {
+                    "defaultBranchRef": {
+                        "name": "trunk",
+                        "target": {
+                            "statusCheckRollup": {
+                                "state": "FAILURE",
+                                "contexts": {
+                                    "nodes": [
+                                        { "name": "Build", "conclusion": "SUCCESS" },
+                                        { "name": "Lint", "conclusion": "FAILURE" },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                    "open": { "nodes": [] },
+                    "merged": { "nodes": [] },
+                },
+            }
+        })
+        .to_string()
+        .into_bytes();
+
+        let snapshot = parse_snapshot(&stdout, &[repo("/repo")]).unwrap();
+
+        assert_eq!(
+            snapshot.default_branches,
+            vec![DefaultBranch {
+                repo_path: "/repo".to_string(),
+                branch: "trunk".to_string(),
+                checks: Some("fail"),
+                failed_checks: vec!["Lint".to_string()],
+            }]
+        );
+    }
+
+    #[test]
+    fn a_default_branch_without_ci_has_no_checks() {
+        let stdout = json!({
+            "data": {
+                "r0": {
+                    "defaultBranchRef": {
+                        "name": "main",
+                        "target": { "statusCheckRollup": null },
+                    },
+                    "open": { "nodes": [] },
+                    "merged": { "nodes": [] },
+                },
+            }
+        })
+        .to_string()
+        .into_bytes();
+
+        let snapshot = parse_snapshot(&stdout, &[repo("/repo")]).unwrap();
+
+        assert_eq!(snapshot.default_branches[0].checks, None);
+        assert!(snapshot.default_branches[0].failed_checks.is_empty());
+    }
+
+    #[test]
+    fn an_empty_repo_has_no_default_branch() {
+        let snapshot = parse_snapshot(&response(vec![], vec![]), &[repo("/repo")]).unwrap();
+
+        assert!(snapshot.default_branches.is_empty());
     }
 
     #[test]

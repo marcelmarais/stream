@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type AgentKind = "claude" | "codex";
 
-export type AgentStatus = "working" | "waiting";
+export type AgentStatus = "working" | "waiting" | "finished";
 
 /**
  * TypeScript interface matching the Rust struct
@@ -17,6 +17,7 @@ export interface RunningAgent {
   since: number | null; // Unix timestamp in milliseconds
   activity: string | null; // What it's doing now, or what it's waiting for
   chat: ChatLink | null;
+  finished_at?: number; // Set by the app, when an agent leaves the running list
 }
 
 export interface ChatLink {

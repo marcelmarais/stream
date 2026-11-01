@@ -21,9 +21,10 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMemo, useState } from "react";
 import { AgentStack, getAgentStackWidth } from "@/components/agent-stack";
-import { usePullRequests } from "@/hooks/use-git-queries";
+import { useDefaultBranches, usePullRequests } from "@/hooks/use-git-queries";
 import type { RunningAgent } from "@/ipc/agents";
 import type {
+  DefaultBranch,
   GitCommit,
   PullRequest,
   PullRequestChecks,
@@ -64,6 +65,8 @@ interface WorkRow {
   commits: GitCommit[];
   agents: RunningAgent[];
   pullRequest?: PullRequest;
+  checks: PullRequestChecks | null;
+  failedChecks: string[];
 }
 
 interface RepoGroup {
@@ -222,13 +225,16 @@ function buildRows(
   commits: GitCommit[],
   pullRequests: PullRequest[],
   agents: RunningAgent[],
+  defaultBranch: DefaultBranch | undefined,
   dateKey: string,
   todayKey: string,
 ): WorkRow[] {
+  const mainBranch = defaultBranch?.branch ?? getMainBranch(commits, agents);
+  // These are the checks on main right now, which say nothing about past days
+  const mainChecks = dateKey === todayKey ? defaultBranch : undefined;
+
   // Main always heads the list, even when nothing landed on it directly
-  const branches = new Map<string, GitCommit[]>([
-    [getMainBranch(commits, agents), []],
-  ]);
+  const branches = new Map<string, GitCommit[]>([[mainBranch, []]]);
   const rows = new Map<string, WorkRow>();
 
   for (const commit of commits) {
@@ -244,13 +250,19 @@ function buildRows(
 
   for (const [branch, branchCommits] of branches) {
     const pullRequest = pullRequests.find((pr) => pr.branch === branch);
+    const isMain = branch === mainBranch;
+    const checked = isMain ? mainChecks : pullRequest;
     rows.set(branch, {
       id: branch,
-      state: pullRequest?.state ?? getBranchState(branch, branchCommits),
+      state: isMain
+        ? "main"
+        : (pullRequest?.state ?? getBranchState(branch, branchCommits)),
       title: pullRequest?.title ?? branch,
       commits: branchCommits,
       agents: agents.filter((agent) => (agent.branch ?? NO_BRANCH) === branch),
       pullRequest,
+      checks: checked?.checks ?? null,
+      failedChecks: checked?.failed_checks ?? [],
     });
   }
 
@@ -266,6 +278,8 @@ function buildRows(
         commits: [],
         agents: [],
         pullRequest,
+        checks: pullRequest.checks,
+        failedChecks: pullRequest.failed_checks,
       });
     }
   }
@@ -277,6 +291,7 @@ function groupWork(
   commits: GitCommit[],
   pullRequests: PullRequest[],
   agents: RunningAgent[],
+  defaultBranches: DefaultBranch[],
   date: Date,
 ): RepoGroup[] {
   const dateKey = getDateKey(date);
@@ -315,6 +330,7 @@ function groupWork(
         repoCommits,
         pullRequests.filter((pr) => pr.repo_path === path),
         repoAgents,
+        defaultBranches.find((branch) => branch.repo_path === path),
         dateKey,
         todayKey,
       ),
@@ -408,12 +424,12 @@ function CommitLog({ commits }: { commits: GitCommit[] }) {
 }
 
 function RowDetail({ row }: { row: WorkRow }) {
-  const { commits, pullRequest } = row;
+  const { commits, failedChecks, pullRequest } = row;
 
   return (
     <div className="flex flex-col gap-1.5 pt-0.5 pr-2.5 pb-2.5 pl-8 text-[11.5px] leading-[1.6]">
       {pullRequest && <PullRequestMeta pullRequest={pullRequest} />}
-      {pullRequest?.failed_checks.map((check) => (
+      {failedChecks.map((check) => (
         <span key={check} className="flex items-center gap-1 text-destructive">
           <XCircleIcon className="size-3.5" weight="fill" aria-hidden="true" />
           {check}
@@ -433,10 +449,11 @@ function RowItem({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const { agents, commits, pullRequest, state, title } = row;
+  const { agents, checks, commits, failedChecks, pullRequest, state, title } =
+    row;
   const review = pullRequest?.review;
-  const checks = pullRequest?.state === "merged" ? null : pullRequest?.checks;
-  const hasDetail = commits.length > 0 || Boolean(pullRequest);
+  const hasDetail =
+    commits.length > 0 || failedChecks.length > 0 || Boolean(pullRequest);
 
   return (
     <div
@@ -540,6 +557,7 @@ export function CommitPanel({
   className,
 }: CommitPanelProps) {
   const pullRequests = usePullRequests(folderPath);
+  const defaultBranches = useDefaultBranches(folderPath);
   const repoFilter = useUserStore((state) => state.commitFilters.repos);
 
   const repos = useMemo(() => {
@@ -550,9 +568,10 @@ export function CommitPanel({
       commits,
       pullRequests.filter(isVisible),
       agents.filter(isVisible),
+      defaultBranches,
       date,
     );
-  }, [agents, commits, date, pullRequests, repoFilter]);
+  }, [agents, commits, date, defaultBranches, pullRequests, repoFilter]);
 
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
