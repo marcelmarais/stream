@@ -111,7 +111,8 @@ interface RepoGroup {
   rows: WorkRow[];
 }
 
-// Colour and a filled glyph mean it needs you. Everything else stays quiet.
+// Colour and a filled glyph mean it needs you. Everything else stays quiet,
+// apart from the green check on passing checks.
 const ROW_SIGNALS: Record<RowState, Signal> = {
   main: {
     icon: GitCommitIcon,
@@ -176,7 +177,7 @@ const CHECK_SIGNALS: Record<PullRequestChecks, Signal> = {
   pass: {
     icon: CheckIcon,
     label: "Checks passed",
-    className: "text-muted-foreground",
+    className: "text-primary",
   },
 };
 
