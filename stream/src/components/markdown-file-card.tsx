@@ -3,7 +3,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion } from "framer-motion";
 import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
-import CommitFilter from "@/components/commit-filter";
 import CommitPanel from "@/components/commit-panel";
 import { DateHeader } from "@/components/date-header";
 import { FileCalendar } from "@/components/file-calendar";
@@ -32,7 +31,7 @@ import {
   useFileContentManager,
   useMarkdownMetadata,
 } from "@/hooks/use-markdown-queries";
-import { filterCommitsForDate } from "@/ipc/git-reader";
+import { getCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
@@ -177,7 +176,7 @@ export function FileCard({
     },
   );
 
-  const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
+  const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
   const agents = useAgentsForDate(folderPath, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {
@@ -335,7 +334,6 @@ export function HeaderActions({
           today
         </button>
       )}
-      <CommitFilter showBadges={false} />
       <FileCalendar folderPath={folderPath} onScrollToDate={onScrollToDate} />
     </div>
   );
@@ -368,7 +366,7 @@ export function FocusedFileOverlay({
     file.dateFromFilename,
     { autoRefresh: true }, // Only auto-refresh when expanded/focused
   );
-  const commits = filterCommitsForDate(commitsByDate, file.dateFromFilename);
+  const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
   const agents = useAgentsForDate(folderPath, file.dateFromFilename);
 
   const handleContentChange = (newContent: string) => {

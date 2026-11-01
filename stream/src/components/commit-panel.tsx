@@ -32,7 +32,6 @@ import type {
 } from "@/ipc/git-reader";
 import { isMainBranch } from "@/ipc/git-reader";
 import { cn } from "@/lib/utils";
-import { useUserStore } from "@/stores/user-store";
 import { getDateKey } from "@/utils/date-utils";
 
 const VISIBLE_ROWS = 6;
@@ -558,20 +557,11 @@ export function CommitPanel({
 }: CommitPanelProps) {
   const pullRequests = usePullRequests(folderPath);
   const defaultBranches = useDefaultBranches(folderPath);
-  const repoFilter = useUserStore((state) => state.commitFilters.repos);
 
-  const repos = useMemo(() => {
-    const isVisible = ({ repo_path }: { repo_path: string }) =>
-      repoFilter.length === 0 || repoFilter.includes(getRepoName(repo_path));
-
-    return groupWork(
-      commits,
-      pullRequests.filter(isVisible),
-      agents.filter(isVisible),
-      defaultBranches,
-      date,
-    );
-  }, [agents, commits, date, defaultBranches, pullRequests, repoFilter]);
+  const repos = useMemo(
+    () => groupWork(commits, pullRequests, agents, defaultBranches, date),
+    [agents, commits, date, defaultBranches, pullRequests],
+  );
 
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);

@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useUserStore } from "@/stores/user-store";
 
 /**
  * TypeScript interfaces matching Rust structs
@@ -168,15 +167,14 @@ export function groupCommitsByDate(repoCommits: RepoCommits[]): CommitsByDate {
 }
 
 /**
- * Get commits for a specific date and apply filters
+ * Get commits for a specific date
  */
-export function filterCommitsForDate(
+export function getCommitsForDate(
   commitsByDate: CommitsByDate,
   date: Date,
 ): GitCommit[] {
-  const commitFilters = useUserStore((state) => state.commitFilters);
   const dateKey = date.toISOString().split("T")[0]; // YYYY-MM-DD format
-  return filterCommits(commitsByDate[dateKey]?.commits || [], commitFilters);
+  return commitsByDate[dateKey]?.commits || [];
 }
 
 /**
@@ -229,13 +227,6 @@ export function formatCommitMessage(
   return `${message.substring(0, maxLength - 3)}...`;
 }
 
-/**
- * Format commit author for display
- */
-export function formatCommitAuthor(commit: GitCommit): string {
-  return commit.author_name || commit.author_email || "Unknown";
-}
-
 const MAIN_BRANCH_NAMES = [
   "main",
   "master",
@@ -247,97 +238,6 @@ const MAIN_BRANCH_NAMES = [
 
 export function isMainBranch(branchName: string): boolean {
   return MAIN_BRANCH_NAMES.includes(branchName);
-}
-
-/**
- * Filter commits based on author, repository, and search criteria
- */
-export interface CommitFilters {
-  authors: string[];
-  repos: string[];
-  searchTerm: string;
-}
-
-function filterCommits(
-  commits: GitCommit[],
-  filters: CommitFilters,
-): GitCommit[] {
-  if (
-    filters.authors.length === 0 &&
-    filters.repos.length === 0 &&
-    filters.searchTerm.length === 0
-  ) {
-    return commits;
-  }
-
-  return commits.filter((commit) => {
-    // Author filter
-    if (filters.authors.length > 0) {
-      const author = formatCommitAuthor(commit);
-      if (!filters.authors.includes(author)) {
-        return false;
-      }
-    }
-
-    // Repo filter
-    if (filters.repos.length > 0) {
-      const repoName = commit.repo_path.split("/").pop() || commit.repo_path;
-      if (!filters.repos.includes(repoName)) {
-        return false;
-      }
-    }
-
-    // Search term filter
-    if (filters.searchTerm) {
-      const searchLower = filters.searchTerm.toLowerCase();
-      const messageMatch = commit.message.toLowerCase().includes(searchLower);
-      const authorMatch = formatCommitAuthor(commit)
-        .toLowerCase()
-        .includes(searchLower);
-      const repoMatch = commit.repo_path.toLowerCase().includes(searchLower);
-
-      if (!messageMatch && !authorMatch && !repoMatch) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-}
-
-/**
- * Apply filters to commitsByDate structure
- */
-export function filterCommitsByDate(
-  commitsByDate: CommitsByDate,
-  filters: CommitFilters,
-): CommitsByDate {
-  if (
-    filters.authors.length === 0 &&
-    filters.repos.length === 0 &&
-    filters.searchTerm.length === 0
-  ) {
-    return commitsByDate;
-  }
-
-  const filtered: CommitsByDate = {};
-
-  Object.entries(commitsByDate).forEach(([dateKey, dateData]) => {
-    const filteredCommits = filterCommits(dateData.commits, filters);
-
-    if (filteredCommits.length > 0) {
-      // Recalculate repo count for filtered commits
-      const reposForDate = new Set(filteredCommits.map((c) => c.repo_path));
-
-      filtered[dateKey] = {
-        date: dateData.date,
-        commits: filteredCommits,
-        repoCount: reposForDate.size,
-      };
-    }
-  });
-
-  return filtered;
 }
 
 /**

@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { CommitFilters } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 
 /**
@@ -16,15 +15,11 @@ interface UserState {
   settingsOpen: boolean;
   agentsEnabled: boolean;
 
-  // Filters
-  commitFilters: CommitFilters;
-
   // Actions
   setFolderPath: (path: string | null) => void;
   setActiveEditingFile: (file: MarkdownFileMetadata | null) => void;
   setSettingsOpen: (open: boolean) => void;
   setAgentsEnabled: (enabled: boolean) => void;
-  setCommitFilters: (filters: CommitFilters) => void;
   reset: () => void;
 }
 
@@ -33,11 +28,6 @@ const initialState = {
   activeEditingFile: null,
   settingsOpen: false,
   agentsEnabled: true,
-  commitFilters: {
-    authors: [],
-    repos: [],
-    searchTerm: "",
-  },
 };
 
 export const useUserStore = create<UserState>()(
@@ -52,8 +42,6 @@ export const useUserStore = create<UserState>()(
       setSettingsOpen: (open) => set({ settingsOpen: open }),
 
       setAgentsEnabled: (enabled) => set({ agentsEnabled: enabled }),
-
-      setCommitFilters: (filters) => set({ commitFilters: filters }),
 
       reset: () => set(initialState),
     }),

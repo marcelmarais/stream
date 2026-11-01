@@ -557,35 +557,3 @@ export function useAgentsForDate(folderPath: string, date: Date) {
     enabled: getDateKey(date) === getDateKey(new Date()),
   });
 }
-
-/**
- * Hook to get all loaded commits across all dates from the cache
- * Useful for building filters and aggregations
- */
-export function useAllLoadedCommits(folderPath: string): CommitsByDate {
-  const queryClient = useQueryClient();
-  const queryCache = queryClient.getQueryCache();
-
-  const allCommitQueries = queryCache.findAll({
-    predicate: (query) => {
-      const key = query.queryKey;
-      return (
-        Array.isArray(key) &&
-        key.length >= 4 &&
-        key[0] === "git" &&
-        key[1] === "commits" &&
-        key[2] === folderPath
-      );
-    },
-  });
-
-  const merged: CommitsByDate = {};
-  for (const query of allCommitQueries) {
-    const data = query.state.data as CommitsByDate | undefined;
-    if (data) {
-      Object.assign(merged, data);
-    }
-  }
-
-  return merged;
-}
