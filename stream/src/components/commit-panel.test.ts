@@ -2,7 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { buildRows, CommitPanel, groupWork } from "@/components/commit-panel";
+import {
+  buildRows,
+  ChecksHover,
+  CommitPanel,
+  formatRowTime,
+  getCheckTarget,
+  getReviewVerdicts,
+  groupWork,
+  quietenColleagueFailure,
+} from "@/components/commit-panel";
 import { gitKeys, repoFetchQuery } from "@/hooks/use-git-queries";
 import type {
   CheckRun,
@@ -16,6 +25,9 @@ const TODAY = "2026-11-02";
 const YESTERDAY = "2026-11-01";
 const BRANCH = "feature";
 const CHECK_RUNS: CheckRun[] = [{ name: "Lint", status: "pass", url: null }];
+const MINUTE = 60000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 function commit(
   id: string,
@@ -241,6 +253,213 @@ describe("other people's pull requests", () => {
 
     expect(row.title).toBe("main");
     expect(row.pullRequest).toBeUndefined();
+  });
+});
+
+describe("the time on a row", () => {
+  const NOW = new Date(2026, 10, 2, 15, 30).getTime();
+
+  it("counts up from under a minute today", () => {
+    const ago = (duration: number) => formatRowTime(NOW - duration, NOW, true);
+
+    expect(ago(59 * 1000)).toBe("<1m");
+    expect(ago(MINUTE)).toBe("1m");
+    expect(ago(59 * MINUTE)).toBe("59m");
+    expect(ago(HOUR)).toBe("1h");
+    expect(ago(23 * HOUR)).toBe("23h");
+    expect(ago(DAY)).toBe("1d");
+    expect(ago(5 * DAY)).toBe("5d");
+  });
+
+  it("doesn't go negative when a commit's clock ran ahead", () => {
+    expect(formatRowTime(NOW + HOUR, NOW, true)).toBe("<1m");
+  });
+
+  it("shows the clock on a past day", () => {
+    const morning = new Date(2026, 10, 1, 9, 5).getTime();
+
+    expect(formatRowTime(morning, NOW, false)).toBe("09:05");
+  });
+
+  it("comes from the row's newest commit", () => {
+    const commits = [commit("old", 1000), commit("tip", 3000, ["old"])];
+    const row = rowFor(commits, [
+      pullRequest({ last_commit_at: "2026-10-01T10:00:00Z" }),
+    ]);
+
+    expect(row.lastCommitTime).toBe(3000);
+  });
+
+  it("falls back on the pull request with no commits today", () => {
+    const lastCommitAt = "2026-10-30T10:00:00Z";
+    const row = rowFor([], [pullRequest({ last_commit_at: lastCommitAt })]);
+
+    expect(row.lastCommitTime).toBe(Date.parse(lastCommitAt));
+  });
+
+  it("falls back on the default branch with no commits today", () => {
+    const lastCommitAt = "2026-10-30T10:00:00Z";
+    const main = { ...defaultBranch(null), last_commit_at: lastCommitAt };
+
+    expect(rowFor([], [], TODAY, "main", main).lastCommitTime).toBe(
+      Date.parse(lastCommitAt),
+    );
+  });
+
+  it("doesn't pass another day's commit off as a past day's clock time", () => {
+    const main = {
+      ...defaultBranch(null),
+      last_commit_at: new Date(2026, 10, 2, 10).toISOString(),
+    };
+
+    expect(rowFor([], [], YESTERDAY, "main", main).lastCommitTime).toBeNull();
+  });
+
+  it("keeps the fallback on the past day it happened", () => {
+    const landed = new Date(2026, 10, 1, 10).toISOString();
+    const main = { ...defaultBranch(null), last_commit_at: landed };
+
+    expect(rowFor([], [], YESTERDAY, "main", main).lastCommitTime).toBe(
+      Date.parse(landed),
+    );
+  });
+
+  it("is empty when nothing says when", () => {
+    expect(rowFor([], [pullRequest()]).lastCommitTime).toBeNull();
+  });
+});
+
+describe("where the check icon goes", () => {
+  const failed = (name: string, url: string | null): CheckRun => ({
+    name,
+    status: "fail",
+    url,
+  });
+  const passed: CheckRun = { name: "Lint", status: "pass", url: "lint-url" };
+
+  it("prefers the first failure's own logs", () => {
+    const runs = [passed, failed("Test", "test-url"), failed("Build", "b-url")];
+
+    expect(getCheckTarget(runs, pullRequest())).toBe("test-url");
+  });
+
+  it("skips a failure with no logs", () => {
+    const runs = [failed("Test", null), failed("Build", "build-url")];
+
+    expect(getCheckTarget(runs, pullRequest())).toBe("build-url");
+  });
+
+  it("goes to the pull request's checks page next", () => {
+    const runs = [failed("Test", null), passed];
+
+    expect(getCheckTarget(runs, pullRequest())).toBe(
+      "https://github.com/marcelmarais/stream/pull/1/checks",
+    );
+  });
+
+  it("falls back on any run with a url when there's no pull request", () => {
+    expect(getCheckTarget([failed("Test", null), passed], undefined)).toBe(
+      "lint-url",
+    );
+  });
+
+  it("is empty when nothing can be opened", () => {
+    expect(getCheckTarget([failed("Test", null)], undefined)).toBeNull();
+    expect(getCheckTarget(CHECK_RUNS, undefined)).toBeNull();
+  });
+});
+
+describe("the check signal", () => {
+  const signal = {
+    icon: () => null,
+    label: "Checks failed",
+    className: "text-destructive",
+    weight: "fill",
+  } as unknown as Parameters<typeof quietenColleagueFailure>[0];
+  const theirs = pullRequest({ is_mine: false });
+
+  it("stays red on my pull request and my branches", () => {
+    expect(quietenColleagueFailure(signal, "fail", pullRequest())).toBe(signal);
+    expect(quietenColleagueFailure(signal, "fail", undefined)).toBe(signal);
+  });
+
+  it("stays red when my review is requested", () => {
+    const requested = pullRequest({ is_mine: false, review: "requested" });
+
+    expect(quietenColleagueFailure(signal, "fail", requested)).toBe(signal);
+  });
+
+  it("goes muted and unfilled on a colleague's failure", () => {
+    expect(quietenColleagueFailure(signal, "fail", theirs)).toMatchObject({
+      className: "text-muted-foreground",
+      weight: "regular",
+      label: "Checks failed",
+    });
+  });
+
+  it("leaves a colleague's other checks alone", () => {
+    expect(quietenColleagueFailure(signal, "pass", theirs)).toBe(signal);
+  });
+
+  it("is a button only when clicking it does something", () => {
+    const hover = (onClick?: () => void) =>
+      renderToStaticMarkup(
+        createElement(ChecksHover, {
+          checks: "pass",
+          checkRuns: CHECK_RUNS,
+          onClick,
+        }),
+      );
+
+    expect(hover(() => {})).toContain("<button");
+    expect(hover()).not.toContain("<button");
+    expect(hover()).toContain('role="img"');
+  });
+});
+
+describe("the review line", () => {
+  const review = (login: string, state: string) => ({ login, state });
+
+  it("names everyone who approved", () => {
+    const reviews = [review("alex", "APPROVED"), review("sam", "APPROVED")];
+
+    expect(getReviewVerdicts(pullRequest({ reviews }))).toEqual([
+      { text: "Approved by alex, sam", needsMe: false },
+    ]);
+  });
+
+  it("flags changes requested on my pull request", () => {
+    const reviews = [review("alex", "CHANGES_REQUESTED")];
+
+    expect(getReviewVerdicts(pullRequest({ reviews }))).toEqual([
+      { text: "Changes requested by alex", needsMe: true },
+    ]);
+  });
+
+  it("stays muted on someone else's pull request", () => {
+    const reviews = [review("alex", "CHANGES_REQUESTED")];
+
+    expect(getReviewVerdicts(pullRequest({ is_mine: false, reviews }))).toEqual(
+      [{ text: "Changes requested by alex", needsMe: false }],
+    );
+  });
+
+  it("puts what's blocking before approvals", () => {
+    const reviews = [
+      review("sam", "APPROVED"),
+      review("alex", "CHANGES_REQUESTED"),
+    ];
+
+    expect(
+      getReviewVerdicts(pullRequest({ reviews })).map(({ text }) => text),
+    ).toEqual(["Changes requested by alex", "Approved by sam"]);
+  });
+
+  it("is empty without a verdict", () => {
+    expect(getReviewVerdicts(pullRequest())).toEqual([]);
+    expect(
+      getReviewVerdicts(pullRequest({ reviews: [review("sam", "DISMISSED")] })),
+    ).toEqual([]);
   });
 });
 

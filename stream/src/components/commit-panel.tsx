@@ -4,6 +4,7 @@ import { Tabs } from "@base-ui/react/tabs";
 import { Tooltip } from "@base-ui/react/tooltip";
 import {
   ArrowSquareOutIcon,
+  CaretRightIcon,
   ChatCircleDotsIcon,
   ChatCircleIcon,
   CheckIcon,
@@ -22,7 +23,14 @@ import {
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { motion, type Transition, useReducedMotion } from "framer-motion";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AgentStack,
   getAgentStackWidth,
@@ -54,6 +62,9 @@ const DEFAULT_MAIN_BRANCH = "main";
 const NO_AGENTS: RunningAgent[] = [];
 // Larger than any rank, so other people's work sorts below all of mine
 const OTHER_PEOPLES_RANK = 6;
+// Relative times only change by the minute, so this keeps them close enough
+const TIME_TICK_MS = 30000;
+const CHANGES_REQUESTED = "CHANGES_REQUESTED";
 
 // Most urgent first, so a failure is never scrolled out of view
 const CHECK_RUN_ORDER: CheckRunStatus[] = [
@@ -61,6 +72,12 @@ const CHECK_RUN_ORDER: CheckRunStatus[] = [
   "running",
   "pass",
   "skipped",
+];
+
+// What's blocking comes first
+const REVIEW_VERDICTS = [
+  { state: CHANGES_REQUESTED, label: "Changes requested by" },
+  { state: "APPROVED", label: "Approved by" },
 ];
 
 // Quick to start and soft to land. Closing is a little faster than opening,
@@ -105,6 +122,7 @@ interface WorkRow {
   isMine: boolean;
   checks: PullRequestChecks | null;
   checkRuns: CheckRun[];
+  lastCommitTime: number | null;
 }
 
 interface RepoGroup {
@@ -116,7 +134,8 @@ interface RepoGroup {
 }
 
 // Colour and a filled glyph mean it needs you. Everything else stays quiet,
-// apart from the green check on passing checks.
+// apart from two deliberate exceptions that say work is done: the green check
+// on passing checks and the purple icon on merged work.
 const ROW_SIGNALS: Record<RowState, Signal> = {
   main: {
     icon: GitCommitIcon,
@@ -141,7 +160,7 @@ const ROW_SIGNALS: Record<RowState, Signal> = {
   merged: {
     icon: GitMergeIcon,
     label: "Merged",
-    className: "text-muted-foreground",
+    className: "text-merged",
     weight: "fill",
   },
 };
@@ -192,12 +211,41 @@ const CHECK_RUN_SIGNALS: Record<CheckRunStatus, Signal> = {
   skipped: { icon: MinusIcon, label: "skipped", className: "text-faint" },
 };
 
+// Someone else's failure is worth seeing, but it isn't mine to fix
+const QUIET_FAILURE: Pick<Signal, "className" | "weight"> = {
+  className: "text-muted-foreground",
+  weight: "regular",
+};
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   });
+}
+
+// Today's rows say how long ago, because that's what changes. On a past day
+// that would only grow, so they say when.
+export function formatRowTime(
+  timestamp: number,
+  now: number,
+  isToday: boolean,
+): string {
+  if (!isToday) {
+    return formatTime(timestamp);
+  }
+
+  const minutes = Math.floor((now - timestamp) / 60000);
+  const hours = Math.floor(minutes / 60);
+
+  if (minutes < 1) {
+    return "<1m";
+  }
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
 }
 
 function pluralise(count: number, noun: string): string {
@@ -213,6 +261,49 @@ function getCheckSummary(checkRuns: CheckRun[]): string {
     const count = checkRuns.filter((run) => run.status === status).length;
     return count > 0 ? `${count} ${CHECK_RUN_SIGNALS[status].label}` : [];
   }).join(", ");
+}
+
+// Where a click on the check icon goes. A failure's own logs beat the list of
+// checks, which beats a check that didn't fail.
+export function getCheckTarget(
+  checkRuns: CheckRun[],
+  pullRequest: PullRequest | undefined,
+): string | null {
+  return (
+    getFailedChecks(checkRuns).find(({ url }) => url)?.url ??
+    (pullRequest && `${pullRequest.url}/checks`) ??
+    checkRuns.find(({ url }) => url)?.url ??
+    null
+  );
+}
+
+export function quietenColleagueFailure(
+  signal: Signal,
+  status: CheckRunStatus,
+  pullRequest: PullRequest | undefined,
+): Signal {
+  return status === "fail" && pullRequest && !isMineOrRequested(pullRequest)
+    ? { ...signal, ...QUIET_FAILURE }
+    : signal;
+}
+
+// Requested changes only need me on my own pull request
+export function getReviewVerdicts({ is_mine, reviews }: PullRequest): {
+  text: string;
+  needsMe: boolean;
+}[] {
+  return REVIEW_VERDICTS.flatMap(({ state, label }) => {
+    const logins = reviews
+      .filter((review) => review.state === state)
+      .map(({ login }) => login);
+
+    return logins.length > 0
+      ? {
+          text: `${label} ${logins.join(", ")}`,
+          needsMe: is_mine && state === CHANGES_REQUESTED,
+        }
+      : [];
+  });
 }
 
 function getRepoName(repoPath: string): string {
@@ -325,6 +416,27 @@ function getRowChecks(
     : { checks: null, checkRuns: [] };
 }
 
+// A row with no commits has only GitHub's word for it, which on a past day must
+// come from that day, because a clock time reads as one.
+function getLastCommitTime(
+  checked: PullRequest | DefaultBranch | undefined,
+  commits: GitCommit[],
+  dateKey: string,
+  todayKey: string,
+): number | null {
+  if (commits.length > 0) {
+    return Math.max(...commits.map(({ timestamp }) => timestamp));
+  }
+  if (!checked?.last_commit_at) {
+    return null;
+  }
+
+  const lastCommit = new Date(checked.last_commit_at);
+  return dateKey === todayKey || getDateKey(lastCommit) === dateKey
+    ? lastCommit.getTime()
+    : null;
+}
+
 export function buildRows(
   commits: GitCommit[],
   pullRequests: PullRequest[],
@@ -358,6 +470,7 @@ export function buildRows(
     const branchAgents = agents.filter(
       (agent) => (agent.branch ?? NO_BRANCH) === branch,
     );
+    const checked = isMain ? defaultBranch : pullRequest;
     rows.set(branch, {
       id: branch,
       state: isMain
@@ -368,8 +481,9 @@ export function buildRows(
       agents: branchAgents,
       pullRequest,
       isMine: isMyWork(branchCommits, branchAgents, pullRequest),
-      ...getRowChecks(
-        isMain ? defaultBranch : pullRequest,
+      ...getRowChecks(checked, branchCommits, dateKey, todayKey),
+      lastCommitTime: getLastCommitTime(
+        checked,
         branchCommits,
         dateKey,
         todayKey,
@@ -391,6 +505,7 @@ export function buildRows(
         pullRequest,
         isMine: pullRequest.is_mine,
         ...getRowChecks(pullRequest, [], dateKey, todayKey),
+        lastCommitTime: getLastCommitTime(pullRequest, [], dateKey, todayKey),
       });
     }
   }
@@ -468,16 +583,61 @@ function SignalIcon({ signal }: { signal: Signal | null }) {
   );
 }
 
-function ChecksHover({
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const timer = setInterval(tick, TIME_TICK_MS);
+    // Timers stall behind a hidden window, so catch up on coming back
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+
+  return now;
+}
+
+function CheckName({ name, url }: Pick<CheckRun, "name" | "url">) {
+  if (!url) {
+    return (
+      <span className="min-w-0 truncate" title={name}>
+        {name}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => openUrl(url)}
+      className="min-w-0 truncate text-left underline-offset-2 hover:underline"
+      title={name}
+    >
+      {name}
+    </button>
+  );
+}
+
+export function ChecksHover({
   checks,
   checkRuns,
+  pullRequest,
   onClick,
 }: {
   checks: PullRequestChecks;
   checkRuns: CheckRun[];
+  pullRequest?: PullRequest;
   onClick?: () => void;
 }) {
-  const { icon: Glyph, label, className, weight } = CHECK_SIGNALS[checks];
+  const {
+    icon: Glyph,
+    label,
+    className,
+    weight,
+  } = quietenColleagueFailure(CHECK_SIGNALS[checks], checks, pullRequest);
   const summary = getCheckSummary(checkRuns);
   const byUrgency = [...checkRuns].sort(
     (a, b) =>
@@ -487,7 +647,9 @@ function ChecksHover({
   return (
     <Tooltip.Provider delay={150} closeDelay={TOOLTIP_CLOSE_DELAY_MS}>
       <Tooltip.Root>
+        {/* With nowhere to go it's a signal, not a button that does nothing */}
         <Tooltip.Trigger
+          render={onClick ? undefined : <span role="img" />}
           aria-label={`${label}: ${summary}`}
           onClick={onClick}
           className={cn(
@@ -511,28 +673,51 @@ function ChecksHover({
               </span>
               {/* Scrollbars are hidden, so a cut-off row is the sign of more */}
               <ul className="max-h-[70px] overflow-y-auto overscroll-contain">
-                {byUrgency.map(({ name, status }, index) => (
-                  <li
-                    key={`${index}-${name}`}
-                    className={cn(
-                      "flex h-5 items-center gap-1.5",
-                      status === "fail"
-                        ? "text-destructive"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    <SignalIcon signal={CHECK_RUN_SIGNALS[status]} />
-                    <span className="min-w-0 truncate" title={name}>
-                      {name}
-                    </span>
-                  </li>
-                ))}
+                {byUrgency.map(({ name, status, url }, index) => {
+                  const signal = quietenColleagueFailure(
+                    CHECK_RUN_SIGNALS[status],
+                    status,
+                    pullRequest,
+                  );
+
+                  return (
+                    <li
+                      key={`${index}-${name}`}
+                      className={cn(
+                        "flex h-5 items-center gap-1.5",
+                        status === "fail"
+                          ? signal.className
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      <SignalIcon signal={signal} />
+                      <CheckName name={name} url={url} />
+                    </li>
+                  );
+                })}
               </ul>
             </Tooltip.Popup>
           </Tooltip.Positioner>
         </Tooltip.Portal>
       </Tooltip.Root>
     </Tooltip.Provider>
+  );
+}
+
+/** Fades in over the time on a row, so showing it moves nothing. */
+function OpenPullRequest({ number, url }: Pick<PullRequest, "number" | "url">) {
+  const label = `View pull request #${number} on GitHub`;
+
+  return (
+    <button
+      type="button"
+      onClick={() => openUrl(url)}
+      aria-label={label}
+      title={label}
+      className="absolute top-0 right-0 flex h-[27px] w-12 items-center justify-end pr-2.5 text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-foreground group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 motion-reduce:transition-none"
+    >
+      <ArrowSquareOutIcon className="size-3.5" aria-hidden="true" />
+    </button>
   );
 }
 
@@ -559,11 +744,10 @@ function PullRequestMeta({ pullRequest }: { pullRequest: PullRequest }) {
       <button
         type="button"
         onClick={() => openUrl(url)}
-        className="flex shrink-0 items-center gap-1 text-foreground hover:text-primary"
+        className="shrink-0 text-foreground hover:text-primary"
         title="View pull request on GitHub"
       >
         #{number}
-        <ArrowSquareOutIcon className="size-3.5" aria-hidden="true" />
       </button>
     </div>
   );
@@ -602,29 +786,109 @@ function CommitLog({ commits }: { commits: GitCommit[] }) {
   );
 }
 
+function ReviewLine({ pullRequest }: { pullRequest: PullRequest }) {
+  const verdicts = getReviewVerdicts(pullRequest);
+
+  if (verdicts.length === 0) {
+    return null;
+  }
+
+  return (
+    <p className="text-muted-foreground">
+      {verdicts.map(({ text, needsMe }, index) => (
+        <Fragment key={text}>
+          {index > 0 && " · "}
+          <span className={cn(needsMe && "text-destructive")}>{text}</span>
+        </Fragment>
+      ))}
+    </p>
+  );
+}
+
+function FailedChecks({
+  checkRuns,
+  pullRequest,
+}: {
+  checkRuns: CheckRun[];
+  pullRequest?: PullRequest;
+}) {
+  const { className, weight } = quietenColleagueFailure(
+    CHECK_RUN_SIGNALS.fail,
+    "fail",
+    pullRequest,
+  );
+
+  return (
+    <div className="flex flex-col">
+      {getFailedChecks(checkRuns).map(({ name, url }, index) => (
+        <span
+          key={`${index}-${name}`}
+          className={cn("flex items-center gap-1", className)}
+        >
+          <XCircleIcon
+            className="size-3.5 shrink-0"
+            weight={weight}
+            aria-hidden="true"
+          />
+          <CheckName name={name} url={url} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CommitDisclosure({ commits }: { commits: GitCommit[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        className="flex w-fit items-center gap-1 text-muted-foreground hover:text-foreground"
+      >
+        <CaretRightIcon
+          className={cn("size-3", isOpen && "rotate-90")}
+          aria-hidden="true"
+        />
+        {pluralise(commits.length, "commit")}
+      </button>
+      {isOpen && <CommitLog commits={commits} />}
+    </div>
+  );
+}
+
 function RowDetail({ row }: { row: WorkRow }) {
   const { checkRuns, commits, pullRequest } = row;
+  const hasFailedChecks = getFailedChecks(checkRuns).length > 0;
 
   return (
     <div className="flex flex-col gap-1.5 pt-0.5 pr-2.5 pb-2.5 pl-8 text-[11.5px] leading-[1.6]">
       {pullRequest && <PullRequestMeta pullRequest={pullRequest} />}
-      {getFailedChecks(checkRuns).map(({ name }) => (
-        <span key={name} className="flex items-center gap-1 text-destructive">
-          <XCircleIcon className="size-3.5" weight="fill" aria-hidden="true" />
-          {name}
-        </span>
-      ))}
-      {commits.length > 0 && <CommitLog commits={commits} />}
+      {pullRequest && <ReviewLine pullRequest={pullRequest} />}
+      {hasFailedChecks && (
+        <FailedChecks checkRuns={checkRuns} pullRequest={pullRequest} />
+      )}
+      {/* On its own a disclosure would be one more click to reach the only thing here */}
+      {commits.length > 0 &&
+        (pullRequest || hasFailedChecks ? (
+          <CommitDisclosure commits={commits} />
+        ) : (
+          <CommitLog commits={commits} />
+        ))}
     </div>
   );
 }
 
 function RowItem({
   row,
+  time,
   isExpanded,
   onToggle,
 }: {
   row: WorkRow;
+  time: string | null;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
@@ -635,73 +899,90 @@ function RowItem({
     getFailedChecks(checkRuns).length > 0 ||
     Boolean(pullRequest);
   const hasCheckList = Boolean(checks) && checkRuns.length > 0;
+  const checkTarget = getCheckTarget(checkRuns, pullRequest);
+  const toggleRow = hasDetail ? onToggle : undefined;
 
   return (
     <div
       className={cn(
-        "relative flex flex-col",
+        "flex flex-col",
         isExpanded && "bg-well-raised",
         hasDetail && "hover:bg-well-raised",
       )}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={!hasDetail}
-        aria-expanded={isExpanded}
-        className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left"
-      >
-        <SignalIcon signal={ROW_SIGNALS[state]} />
-        <span className="flex min-w-0 items-center gap-2">
+      <div className="group/row relative">
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={!hasDetail}
+          aria-expanded={isExpanded}
+          className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left"
+        >
+          <SignalIcon signal={ROW_SIGNALS[state]} />
+          <span className="flex min-w-0 items-center gap-2">
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                isExpanded ? "text-foreground" : "text-body",
+              )}
+            >
+              {title}
+            </span>
+            {agents.length > 0 && (
+              <span
+                aria-hidden="true"
+                className="shrink-0"
+                style={{ width: getAgentStackWidth(agents.length) }}
+              />
+            )}
+          </span>
+          <SignalIcon signal={review ? REVIEW_SIGNALS[review] : null} />
+          <SignalIcon
+            signal={
+              checks && !hasCheckList
+                ? quietenColleagueFailure(
+                    CHECK_SIGNALS[checks],
+                    checks,
+                    pullRequest,
+                  )
+                : null
+            }
+          />
           <span
             className={cn(
-              "min-w-0 flex-1 truncate",
-              isExpanded ? "text-foreground" : "text-body",
+              "text-right text-muted-foreground",
+              pullRequest &&
+                "transition-opacity duration-150 group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0 motion-reduce:transition-none",
             )}
+            title={
+              commits.length > 0
+                ? pluralise(commits.length, "commit")
+                : undefined
+            }
           >
-            {title}
+            {time}
           </span>
-          {agents.length > 0 && (
-            <span
-              aria-hidden="true"
-              className="shrink-0"
-              style={{ width: getAgentStackWidth(agents.length) }}
-            />
-          )}
-        </span>
-        <SignalIcon signal={review ? REVIEW_SIGNALS[review] : null} />
-        <SignalIcon
-          signal={checks && !hasCheckList ? CHECK_SIGNALS[checks] : null}
-        />
-        <span
-          className="flex items-center justify-end gap-1 text-muted-foreground"
-          title={
-            commits.length > 0 ? pluralise(commits.length, "commit") : undefined
-          }
-        >
-          {commits.length > 0 && (
-            <>
-              <GitCommitIcon className="size-3.5" aria-hidden="true" />
-              {commits.length}
-            </>
-          )}
-        </span>
-      </button>
-      {/* Their tooltips are buttons, so they sit over gaps left in the row */}
-      {checks && hasCheckList && (
-        <ChecksHover
-          checks={checks}
-          checkRuns={checkRuns}
-          onClick={hasDetail ? onToggle : undefined}
-        />
-      )}
-      {agents.length > 0 && (
-        <AgentStack
-          agents={agents}
-          size={14}
-          className="absolute top-0 right-[100px] h-[27px]"
-        />
-      )}
+        </button>
+        {/* Buttons can't nest, so these sit over gaps left in the row */}
+        {checks && hasCheckList && (
+          <ChecksHover
+            checks={checks}
+            checkRuns={checkRuns}
+            pullRequest={pullRequest}
+            onClick={checkTarget ? () => openUrl(checkTarget) : toggleRow}
+          />
+        )}
+        {agents.length > 0 && (
+          <AgentStack
+            agents={agents}
+            size={14}
+            className="absolute top-0 right-[100px] h-[27px]"
+          />
+        )}
+        {pullRequest && (
+          <OpenPullRequest number={pullRequest.number} url={pullRequest.url} />
+        )}
+      </div>
       {isExpanded && <RowDetail row={row} />}
     </div>
   );
@@ -709,14 +990,18 @@ function RowItem({
 
 function RepoRows({
   rows,
+  date,
   openRowId,
   onToggleRow,
 }: {
   rows: WorkRow[];
+  date: Date;
   openRowId: string | null;
   onToggleRow: (rowId: string) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const now = useNow();
+  const isToday = getDateKey(date) === getDateKey(new Date(now));
   const hidden = rows.length - VISIBLE_ROWS;
   const visible = showAll ? rows : rows.slice(0, VISIBLE_ROWS);
 
@@ -726,6 +1011,11 @@ function RepoRows({
         <RowItem
           key={row.id}
           row={row}
+          time={
+            row.lastCommitTime === null
+              ? null
+              : formatRowTime(row.lastCommitTime, now, isToday)
+          }
           isExpanded={row.id === openRowId}
           onToggle={() => onToggleRow(row.id)}
         />
@@ -914,6 +1204,7 @@ export function CommitPanel({
               <RepoRows
                 key={shown.path}
                 rows={shown.rows}
+                date={date}
                 openRowId={openRowId}
                 onToggleRow={toggleRow}
               />
@@ -928,6 +1219,7 @@ export function CommitPanel({
             >
               <RepoRows
                 rows={rows}
+                date={date}
                 openRowId={openRowId}
                 onToggleRow={toggleRow}
               />
