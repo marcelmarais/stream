@@ -1396,4 +1396,17 @@ mod tests {
 
         assert!(snapshot.pull_requests.is_empty());
     }
+
+    /// Runs the real query, so GitHub gets to reject it. Run with
+    /// `REPOS=/path:/path cargo test read_real_repos -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn read_real_repos() {
+        let repos = std::env::var("REPOS").unwrap();
+        let repos = repos.split(':').map(str::to_string).collect();
+
+        let snapshot = tauri::async_runtime::block_on(get_pull_requests(repos)).unwrap();
+
+        println!("{}", serde_json::to_string(&snapshot).unwrap());
+    }
 }

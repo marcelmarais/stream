@@ -1,5 +1,6 @@
 import {
   keepPreviousData,
+  type QueryClient,
   queryOptions,
   useMutation,
   useQueries,
@@ -9,8 +10,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { load } from "@tauri-apps/plugin-store";
-import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listRunningAgents, type RunningAgent } from "@/ipc/agents";
 import {
   type CommitsByDate,
@@ -18,10 +18,12 @@ import {
   type DefaultBranch,
   discoverGitRepos,
   type GitHubStatus,
+  getBranchTips,
   getGitCommitsForRepos,
   getGitHubStatus,
   getPullRequests,
   groupCommitsByDate,
+  isMineOrRequested,
   type PullRequest,
   type PullRequestSnapshot,
 } from "@/ipc/git-reader";
@@ -43,6 +45,12 @@ const PULL_REQUEST_IDLE_POLL_MS = 300000;
 const PULL_REQUEST_STALE_MS = 15000;
 const LOW_RATE_LIMIT = 500;
 
+// Local refs go stale without this, and only git can move them
+const FETCH_POLL_MS = 5 * 60 * 1000;
+// Coming back to the window fetches if the last fetch is older than this
+const FETCH_STALE_MS = 2 * 60 * 1000;
+const BRANCH_TIP_POLL_MS = 10000;
+
 const NO_PULL_REQUESTS: PullRequest[] = [];
 const NO_DEFAULT_BRANCHES: DefaultBranch[] = [];
 
@@ -57,13 +65,18 @@ export const gitKeys = {
   repos: (folderPath: string) => [...gitKeys.all, "repos", folderPath] as const,
   discovered: (folderPath: string) =>
     [...gitKeys.all, "discovered", folderPath] as const,
+  allCommits: (folderPath: string) =>
+    [...gitKeys.all, "commits", folderPath] as const,
   commits: (folderPath: string, dateKey: string, repos: string[]) =>
-    [...gitKeys.all, "commits", folderPath, dateKey, repos] as const,
+    [...gitKeys.allCommits(folderPath), dateKey, repos] as const,
   pullRequests: (folderPath: string) =>
     [...gitKeys.all, "pull-requests", folderPath] as const,
   githubStatus: (folderPath: string) =>
     [...gitKeys.all, "github-status", folderPath] as const,
   agents: (repos: string[]) => [...gitKeys.all, "agents", repos] as const,
+  fetch: (folderPath: string) => [...gitKeys.all, "fetch", folderPath] as const,
+  branchTips: (repos: string[]) =>
+    [...gitKeys.all, "branch-tips", repos] as const,
 };
 
 function pullRequestQuery(folderPath: string, repos: string[]) {
@@ -75,7 +88,54 @@ function pullRequestQuery(folderPath: string, repos: string[]) {
   });
 }
 
-function getPullRequestPollInterval(
+function refreshGitData(queryClient: QueryClient, folderPath: string) {
+  queryClient.invalidateQueries({ queryKey: gitKeys.allCommits(folderPath) });
+  queryClient.invalidateQueries({
+    queryKey: gitKeys.pullRequests(folderPath),
+  });
+}
+
+// A query rather than a mutation, so there's one run at a time however it was
+// started, and every panel can read how the latest one went.
+export function repoFetchQuery(folderPath: string, repos: string[]) {
+  return queryOptions({
+    queryKey: [...gitKeys.fetch(folderPath), repos] as const,
+    queryFn: async ({ client }) => {
+      const results: FetchResult[] = await invoke("fetch_repos", {
+        repoPaths: repos,
+      });
+      refreshGitData(client, folderPath);
+      return results;
+    },
+    staleTime: FETCH_STALE_MS,
+    retry: false,
+  });
+}
+
+/**
+ * What git said about each repo that failed, or null if the fetch went fine
+ */
+export function getFetchFailure(
+  results: FetchResult[] | undefined,
+  error: Error | null,
+): string | null {
+  if (error) {
+    return String(error);
+  }
+
+  const failed = (results ?? []).filter(({ success }) => !success);
+
+  return failed.length > 0
+    ? failed
+        .map(
+          ({ repo_path, message }) =>
+            `${repo_path.split("/").pop()}: ${message}`,
+        )
+        .join("\n")
+    : null;
+}
+
+export function getPullRequestPollInterval(
   snapshot: PullRequestSnapshot | undefined,
   hasFailed: boolean,
   isWindowFocused: boolean,
@@ -89,7 +149,7 @@ function getPullRequestPollInterval(
   }
 
   const checked = [
-    ...(snapshot?.pull_requests ?? []),
+    ...(snapshot?.pull_requests ?? []).filter(isMineOrRequested),
     ...(snapshot?.default_branches ?? []),
   ];
 
@@ -222,7 +282,8 @@ export function useRemoveRepo(folderPath: string) {
 }
 
 /**
- * Hook to fetch (git fetch) all connected repositories
+ * Hook to fetch (git fetch) all connected repositories now. If a background
+ * fetch is running, this waits for it instead of starting another.
  */
 export function useFetchRepos(folderPath: string) {
   const queryClient = useQueryClient();
@@ -233,43 +294,73 @@ export function useFetchRepos(folderPath: string) {
       if (repos.length === 0) {
         return [];
       }
-      const results: FetchResult[] = await invoke("fetch_repos", {
-        repoPaths: repos,
-      });
-      return results;
-    },
-    onSuccess: (results) => {
-      results.forEach((result) => {
-        if (result.success) {
-          toast.success(
-            `${result.repo_path.split("/").pop()}: ${result.message}`,
-          );
-        } else {
-          toast.error(
-            `${result.repo_path.split("/").pop()}: ${result.message}`,
-          );
-        }
-      });
-      queryClient.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey;
-          return (
-            Array.isArray(key) &&
-            key[0] === "git" &&
-            key[1] === "commits" &&
-            key[2] === folderPath
-          );
-        },
-      });
-      queryClient.invalidateQueries({
-        queryKey: gitKeys.pullRequests(folderPath),
+      return queryClient.fetchQuery({
+        ...repoFetchQuery(folderPath, repos),
+        staleTime: 0,
       });
     },
     onError: (error) => {
       console.error("Error fetching repositories:", error);
-      toast.error(`Failed to fetch repositories: ${error}`);
     },
   });
+}
+
+/**
+ * Hook that keeps local refs current without anyone clicking. Mount it once,
+ * for the same reason as usePullRequestPolling.
+ */
+function useBackgroundFetch(
+  folderPath: string,
+  repos: string[],
+  isWindowFocused: boolean,
+) {
+  useQuery({
+    ...repoFetchQuery(folderPath, repos),
+    enabled: repos.length > 0,
+    refetchInterval: isWindowFocused ? FETCH_POLL_MS : false,
+  });
+}
+
+/**
+ * Hook to read how the latest fetch went. Like usePullRequests it never fetches.
+ */
+export function useFetchFailure(folderPath: string): string | null {
+  const { data: repos = [] } = useConnectedRepos(folderPath);
+  const { data, error } = useQuery({
+    ...repoFetchQuery(folderPath, repos),
+    enabled: false,
+  });
+
+  return getFetchFailure(data, error);
+}
+
+/**
+ * Hook that refreshes as soon as a commit or push moves a branch, rather than
+ * leaving the row without checks until the next poll.
+ */
+function useBranchTipRefresh(
+  folderPath: string,
+  repos: string[],
+  isWindowFocused: boolean,
+) {
+  const queryClient = useQueryClient();
+  const { data: tips } = useQuery({
+    queryKey: gitKeys.branchTips(repos),
+    queryFn: () => getBranchTips(repos),
+    enabled: repos.length > 0,
+    staleTime: 0,
+    retry: false,
+    refetchInterval: isWindowFocused ? BRANCH_TIP_POLL_MS : false,
+  });
+  const seenTips = useRef(tips);
+
+  // Structural sharing keeps the same array until a tip really changes
+  useEffect(() => {
+    if (seenTips.current && tips !== seenTips.current) {
+      refreshGitData(queryClient, folderPath);
+    }
+    seenTips.current = tips;
+  }, [folderPath, queryClient, tips]);
 }
 
 /**
@@ -291,6 +382,8 @@ export function usePullRequestPolling(folderPath: string) {
         isWindowFocused,
       ),
   });
+  useBackgroundFetch(folderPath, repos, isWindowFocused);
+  useBranchTipRefresh(folderPath, repos, isWindowFocused);
 
   useEffect(() => {
     let stopListening: (() => void) | undefined;
@@ -302,6 +395,10 @@ export function usePullRequestPolling(folderPath: string) {
           setIsWindowFocused(isFocused);
 
           if (isFocused) {
+            queryClient.refetchQueries({
+              queryKey: gitKeys.fetch(folderPath),
+              stale: true,
+            });
             queryClient.refetchQueries({
               queryKey: gitKeys.pullRequests(folderPath),
               stale: true,

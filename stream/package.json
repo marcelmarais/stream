@@ -14,6 +14,7 @@
     "check:fix": "biome check --write .",
     "tauri": "tauri",
     "release": "bash scripts/release.sh",
+    "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -68,6 +69,7 @@
     "tailwindcss": "^4.1.13",
     "tw-animate-css": "^1.3.8",
     "typescript": "~5.9.3",
-    "vite": "^7.1.10"
+    "vite": "^7.1.10",
+    "vitest": "^5.1.0"
   }
 }

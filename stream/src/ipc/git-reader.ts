@@ -12,6 +12,7 @@ export interface GitCommit {
   date: string; // ISO 8601 date string (YYYY-MM-DD)
   repo_path: string;
   branches: string[]; // Branches that contain this commit
+  parents: string[]; // Commit ids, which order commits made in the same second
   url?: string; // URL to commit on remote (if available)
   is_mine: boolean; // Authored by the repo's git user or one of their agents
 }
@@ -30,6 +31,7 @@ export type CheckRunStatus = PullRequestChecks | "skipped";
 export interface CheckRun {
   name: string;
   status: CheckRunStatus;
+  url: string | null; // Where this check's logs live
 }
 
 export interface PullRequest {
@@ -44,9 +46,12 @@ export interface PullRequest {
   comments: number;
   checks: PullRequestChecks | null;
   check_runs: CheckRun[];
-  review: PullRequestReview | null;
+  review: PullRequestReview | null; // Only set on mine or when I'm requested
+  reviews: { login: string; state: string }[]; // Each person's latest verdict
+  head_sha: string; // The commit that checks and check_runs describe
+  last_commit_at: string | null; // ISO 8601 timestamp
   merged_at: string | null; // ISO 8601 timestamp
-  is_mine: boolean; // False when it's only here because my review was requested
+  is_mine: boolean; // False when it's someone else's, requested from me or not
 }
 
 export interface DefaultBranch {
@@ -54,6 +59,8 @@ export interface DefaultBranch {
   branch: string;
   checks: PullRequestChecks | null;
   check_runs: CheckRun[];
+  head_sha: string | null; // The commit that checks and check_runs describe
+  last_commit_at: string | null; // ISO 8601 timestamp
 }
 
 export interface PullRequestSnapshot {
@@ -142,13 +149,29 @@ export async function getGitCommitsForRepos(
 }
 
 /**
- * Get my pull requests and review requests for repositories hosted on GitHub.
- * Goes through the gh CLI, so it uses whatever account gh is signed in to.
+ * Get pull requests for repositories hosted on GitHub, including other people's
+ * so their branches can be labelled. Goes through the gh CLI, so it uses
+ * whatever account gh is signed in to.
  */
 export async function getPullRequests(
   repoPaths: string[],
 ): Promise<PullRequestSnapshot> {
   return invoke("get_pull_requests", { repoPaths });
+}
+
+/**
+ * Other people's pull requests only label their branches. These are the ones
+ * worth showing or following for their own sake.
+ */
+export function isMineOrRequested({ is_mine, review }: PullRequest): boolean {
+  return is_mine || review === "requested";
+}
+
+/**
+ * List every branch tip in these repositories, to notice when one moves
+ */
+export async function getBranchTips(repoPaths: string[]): Promise<string[]> {
+  return invoke("get_branch_tips", { repoPaths });
 }
 
 /**

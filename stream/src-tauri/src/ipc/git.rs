@@ -896,4 +896,18 @@ mod tests {
             ]
         );
     }
+
+    /// Fetches real repos, private ones included, as the app does. Run with
+    /// `REPOS=/path:/path cargo test fetch_real_repos -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn fetch_real_repos() {
+        let repos = std::env::var("REPOS").unwrap();
+        let repos = repos.split(':').map(str::to_string).collect();
+
+        let results = tauri::async_runtime::block_on(fetch_repos(repos)).unwrap();
+
+        println!("{results:#?}");
+        assert!(results.iter().all(|result| result.success));
+    }
 }

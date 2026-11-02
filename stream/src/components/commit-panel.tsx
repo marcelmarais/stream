@@ -28,7 +28,11 @@ import {
   getAgentStackWidth,
   TOOLTIP_CLOSE_DELAY_MS,
 } from "@/components/agent-stack";
-import { useDefaultBranches, usePullRequests } from "@/hooks/use-git-queries";
+import {
+  useDefaultBranches,
+  useFetchFailure,
+  usePullRequests,
+} from "@/hooks/use-git-queries";
 import type { RunningAgent } from "@/ipc/agents";
 import type {
   CheckRun,
@@ -39,7 +43,7 @@ import type {
   PullRequestChecks,
   PullRequestReview,
 } from "@/ipc/git-reader";
-import { isMainBranch } from "@/ipc/git-reader";
+import { isMainBranch, isMineOrRequested } from "@/ipc/git-reader";
 import { cn } from "@/lib/utils";
 import { getDateKey } from "@/utils/date-utils";
 
@@ -251,8 +255,8 @@ function getBranchState(branch: string, commits: GitCommit[]): RowState {
   return isMerged ? "merged" : "branch";
 }
 
-// A pull request has one author. A branch has none, so it's mine if I committed
-// to it. Either way, an agent on this Mac means I'm working on it now.
+// It's mine if I wrote the pull request or committed to the branch. Either way,
+// an agent on this Mac means I'm working on it now.
 function isMyWork(
   commits: GitCommit[],
   agents: RunningAgent[],
@@ -260,7 +264,8 @@ function isMyWork(
 ): boolean {
   return (
     agents.length > 0 ||
-    (pullRequest?.is_mine ?? commits.some(({ is_mine }) => is_mine))
+    Boolean(pullRequest?.is_mine) ||
+    commits.some(({ is_mine }) => is_mine)
   );
 }
 
@@ -276,19 +281,51 @@ function getRowRank({ state, agents, pullRequest, isMine }: WorkRow): number {
 }
 
 // Open pull requests are live state, so they sit on today even with no commits.
-// Merged ones sit on the day they landed.
+// Merged ones sit on the day they landed. Other people's never stand alone.
 function belongsToDay(
   pullRequest: PullRequest,
   dateKey: string,
   todayKey: string,
 ): boolean {
+  if (!isMineOrRequested(pullRequest)) {
+    return false;
+  }
   if (pullRequest.merged_at) {
     return getDateKey(new Date(pullRequest.merged_at)) === dateKey;
   }
   return dateKey === todayKey;
 }
 
-function buildRows(
+// Commit times stop at the second, so a rebased stack can share one. Parents
+// still say which came last. Lines that tie can't be separated, so neither wins.
+function getNewestCommit(commits: GitCommit[]): GitCommit | undefined {
+  const parents = new Set(commits.flatMap((commit) => commit.parents));
+  const tips = commits.filter(({ id }) => !parents.has(id));
+  const newestTime = Math.max(...tips.map(({ timestamp }) => timestamp));
+  const newest = tips.filter(({ timestamp }) => timestamp === newestTime);
+
+  return newest.length === 1 ? newest[0] : undefined;
+}
+
+// Checks describe one commit, so a row only shows them if it leads with that
+// commit. A row with no commits has only the present to describe.
+function getRowChecks(
+  checked: PullRequest | DefaultBranch | undefined,
+  commits: GitCommit[],
+  dateKey: string,
+  todayKey: string,
+): Pick<WorkRow, "checks" | "checkRuns"> {
+  const isCurrent =
+    commits.length > 0
+      ? checked && getNewestCommit(commits)?.id === checked.head_sha
+      : dateKey === todayKey;
+
+  return isCurrent && checked
+    ? { checks: checked.checks, checkRuns: checked.check_runs }
+    : { checks: null, checkRuns: [] };
+}
+
+export function buildRows(
   commits: GitCommit[],
   pullRequests: PullRequest[],
   agents: RunningAgent[],
@@ -297,8 +334,6 @@ function buildRows(
   todayKey: string,
 ): WorkRow[] {
   const mainBranch = defaultBranch?.branch ?? getMainBranch(commits, agents);
-  // These are the checks on main right now, which say nothing about past days
-  const mainChecks = dateKey === todayKey ? defaultBranch : undefined;
 
   // Main always heads the list, even when nothing landed on it directly
   const branches = new Map<string, GitCommit[]>([[mainBranch, []]]);
@@ -316,9 +351,10 @@ function buildRows(
   }
 
   for (const [branch, branchCommits] of branches) {
-    const pullRequest = pullRequests.find((pr) => pr.branch === branch);
     const isMain = branch === mainBranch;
-    const checked = isMain ? mainChecks : pullRequest;
+    const pullRequest = isMain
+      ? undefined
+      : pullRequests.find((pr) => pr.branch === branch);
     const branchAgents = agents.filter(
       (agent) => (agent.branch ?? NO_BRANCH) === branch,
     );
@@ -332,8 +368,12 @@ function buildRows(
       agents: branchAgents,
       pullRequest,
       isMine: isMyWork(branchCommits, branchAgents, pullRequest),
-      checks: checked?.checks ?? null,
-      checkRuns: checked?.check_runs ?? [],
+      ...getRowChecks(
+        isMain ? defaultBranch : pullRequest,
+        branchCommits,
+        dateKey,
+        todayKey,
+      ),
     });
   }
 
@@ -350,8 +390,7 @@ function buildRows(
         agents: [],
         pullRequest,
         isMine: pullRequest.is_mine,
-        checks: pullRequest.checks,
-        checkRuns: pullRequest.check_runs,
+        ...getRowChecks(pullRequest, [], dateKey, todayKey),
       });
     }
   }
@@ -359,7 +398,7 @@ function buildRows(
   return [...rows.values()].sort((a, b) => getRowRank(a) - getRowRank(b));
 }
 
-function groupWork(
+export function groupWork(
   commits: GitCommit[],
   pullRequests: PullRequest[],
   agents: RunningAgent[],
@@ -754,6 +793,7 @@ export function CommitPanel({
 }: CommitPanelProps) {
   const pullRequests = usePullRequests(folderPath);
   const defaultBranches = useDefaultBranches(folderPath);
+  const fetchFailure = useFetchFailure(folderPath);
 
   const repos = useMemo(
     () => groupWork(commits, pullRequests, agents, defaultBranches, date),
@@ -859,6 +899,14 @@ export function CommitPanel({
               ),
             )}
           </Tabs.List>
+          {fetchFailure && (
+            <span
+              title={fetchFailure}
+              className="ml-auto flex shrink-0 items-center px-[11px] text-muted-foreground"
+            >
+              Fetch failed
+            </span>
+          )}
         </div>
         {docked ? (
           <DockBody open={isPanelOpen}>
