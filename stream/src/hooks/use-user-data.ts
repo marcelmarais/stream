@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
   clearSelectedFolder,
   getSelectedFolder,
   setSelectedFolder,
 } from "@/ipc/selected-folder";
+import { useStatusStore } from "@/stores/status-store";
 
 export const userDataKeys = {
   all: ["userData"] as const,
@@ -38,7 +38,7 @@ export function useSetSelectedFolder() {
     },
     onError: (error: Error) => {
       console.error("Error saving selected folder:", error);
-      toast.error("Failed to save selected folder");
+      useStatusStore.getState().showFailure("Failed to save selected folder");
     },
   });
 }
@@ -56,7 +56,7 @@ export function useClearSelectedFolder() {
     },
     onError: (error: Error) => {
       console.error("Error clearing selected folder:", error);
-      toast.error("Failed to clear selected folder");
+      useStatusStore.getState().showFailure("Failed to clear selected folder");
     },
   });
 }

@@ -3,7 +3,6 @@
 import { CheckIcon } from "@phosphor-icons/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { formatDistanceToNowStrict } from "date-fns";
-import { toast } from "sonner";
 import {
   Command,
   CommandEmpty,
@@ -20,6 +19,7 @@ import {
 } from "@/hooks/use-git-queries";
 import type { DiscoveredRepo } from "@/ipc/git-reader";
 import { cn } from "@/lib/utils";
+import { useStatusStore } from "@/stores/status-store";
 
 interface RepoConnectorProps {
   markdownDirectory: string;
@@ -92,7 +92,7 @@ export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
       }
     } catch (error) {
       console.error("Error updating repositories:", error);
-      toast.error("Failed to update repositories");
+      useStatusStore.getState().showFailure("Failed to update repositories");
     }
   };
 

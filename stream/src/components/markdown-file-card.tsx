@@ -1,8 +1,7 @@
-import { CopyIcon, TrashIcon } from "@phosphor-icons/react";
+import { CheckIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion } from "framer-motion";
 import { type ReactNode, useRef, useState } from "react";
-import { toast } from "sonner";
 import CommitPanel from "@/components/commit-panel";
 import { DateHeader } from "@/components/date-header";
 import { FileCalendar } from "@/components/file-calendar";
@@ -24,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useCopied } from "@/hooks/use-copied";
 import { useAgentsForDate, useCommitsForDate } from "@/hooks/use-git-queries";
 import {
   useCreateTodayFile,
@@ -35,6 +35,7 @@ import { getCommitsForDate } from "@/ipc/git-reader";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { getTodayMarkdownFileName } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
+import { useStatusStore } from "@/stores/status-store";
 import { getDateKey } from "@/utils/date-utils";
 
 const commitMountTransition = { duration: 0.18, ease: "easeOut" } as const;
@@ -54,48 +55,52 @@ export function NoteMenu({
   children: ReactNode;
 }) {
   const fileName = metadata.fileName.split(".")[0];
+  const [menuOpen, setMenuOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { copied, copy } = useCopied();
   const { mutateAsync: deleteFile, isPending: isDeleting } =
     useDeleteMarkdownFile(folderPath);
 
   const handleCopyToClipboard = async () => {
-    if (!content) {
-      toast.error("No content to copy");
-      return;
-    }
     const locationLine =
       metadata.country && metadata.city
         ? `${metadata.country}, ${metadata.city}\n\n`
         : "";
-    await navigator.clipboard.writeText(
-      `# ${fileName}\n\n${locationLine}${content}`,
-    );
-    toast.success("File content copied to clipboard");
+    try {
+      await copy(`# ${fileName}\n\n${locationLine}${content}`);
+    } catch (error) {
+      console.error("Failed to copy note:", error);
+      useStatusStore.getState().showFailure("Couldn't copy note");
+    }
+    setMenuOpen(false);
   };
 
   const handleConfirmDelete = async () => {
     try {
       await deleteFile(metadata.filePath);
-      setDeleteDialogOpen(false);
-      toast.success("File deleted");
       onDelete?.();
     } catch (error) {
       console.error("Failed to delete file:", error);
-      toast.error("Failed to delete file");
+      useStatusStore.getState().showFailure("Failed to delete file");
+    } finally {
+      // The dialog's backdrop would blur a failure in the footer
+      setDeleteDialogOpen(false);
     }
   };
 
   return (
     <>
-      <ContextMenu>
+      {/* Stays open while the item shows that the copy worked */}
+      <ContextMenu open={menuOpen || copied} onOpenChange={setMenuOpen}>
         <ContextMenuTrigger className="w-full">{children}</ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem
+            closeOnClick={false}
             onClick={handleCopyToClipboard}
-            disabled={isDeleting}
+            disabled={isDeleting || !content}
           >
-            <CopyIcon />
-            Copy content
+            {copied ? <CheckIcon /> : <CopyIcon />}
+            {copied ? "Copied" : "Copy content"}
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem

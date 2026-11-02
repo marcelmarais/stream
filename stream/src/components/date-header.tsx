@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,6 +20,7 @@ import {
   resolveCurrentLocation,
 } from "@/ipc/markdown-reader";
 import { cn } from "@/lib/utils";
+import { useStatusStore } from "@/stores/status-store";
 import { formatDayTitle, getDateKey } from "@/utils/date-utils";
 
 export function DateHeader({
@@ -46,6 +46,7 @@ export function DateHeader({
   const [editCity, setEditCity] = useState(city);
   const [editCountry, setEditCountry] = useState(country);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [editProblem, setEditProblem] = useState<string | null>(null);
   const prefillRequest = useRef(0);
 
   const shownCity = isEditing ? editCity : city;
@@ -88,15 +89,14 @@ export function DateHeader({
       setEditCity((current) => current || suggestion.city);
       setEditCountry((current) => current || suggestion.country);
     } else if (isToday) {
-      toast.error(
-        "Couldn't detect your location. Check Location Services in System Settings.",
-      );
+      setEditProblem("Couldn't detect location. Check Location Services.");
     }
   };
 
   const handleStartEdit = () => {
     setEditCity(city);
     setEditCountry(country);
+    setEditProblem(null);
     setIsEditing(true);
 
     if (!city && !country) {
@@ -107,6 +107,7 @@ export function DateHeader({
   const handleCancel = () => {
     stopPrefill();
     setIsEditing(false);
+    setEditProblem(null);
     setEditCity(city);
     setEditCountry(country);
   };
@@ -116,7 +117,7 @@ export function DateHeader({
     const trimmedCountry = editCountry.trim();
 
     if (!trimmedCity || !trimmedCountry) {
-      toast.error("Both city and country are required");
+      setEditProblem("Both city and country are required");
       return;
     }
 
@@ -127,6 +128,7 @@ export function DateHeader({
     }
 
     stopPrefill();
+    setEditProblem(null);
     updateLocation(
       {
         filePath: fileMetadata.filePath,
@@ -136,10 +138,9 @@ export function DateHeader({
       {
         onSuccess: () => {
           setIsEditing(false);
-          toast.success("Location updated");
         },
         onError: () => {
-          toast.error("Failed to update location");
+          useStatusStore.getState().showFailure("Failed to update location");
         },
       },
     );
@@ -199,8 +200,8 @@ export function DateHeader({
           )}
         </button>,
       )}
-      <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-        <div className="relative flex items-center">
+      <div className="flex max-w-full items-center gap-1.5 text-muted-foreground text-xs">
+        <div className="relative flex shrink-0 items-center">
           <span
             ref={cityMirrorRef}
             aria-hidden
@@ -233,7 +234,10 @@ export function DateHeader({
           </span>
           <Input
             value={shownCity}
-            onChange={(e) => setEditCity(e.target.value)}
+            onChange={(e) => {
+              setEditCity(e.target.value);
+              setEditProblem(null);
+            }}
             onKeyDown={handleKeyDown}
             onClick={!isEditing ? handleStartEdit : undefined}
             placeholder={cityPlaceholder}
@@ -246,7 +250,10 @@ export function DateHeader({
           <span>,&nbsp;</span>
           <Input
             value={shownCountry}
-            onChange={(e) => setEditCountry(e.target.value)}
+            onChange={(e) => {
+              setEditCountry(e.target.value);
+              setEditProblem(null);
+            }}
             onKeyDown={handleKeyDown}
             onClick={!isEditing ? handleStartEdit : undefined}
             placeholder={countryPlaceholder}
@@ -281,6 +288,11 @@ export function DateHeader({
               <XIcon />
             </Button>
           </div>
+        )}
+        {editProblem && (
+          <span className="truncate text-destructive" title={editProblem}>
+            {editProblem}
+          </span>
         )}
       </div>
     </div>

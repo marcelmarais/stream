@@ -9,11 +9,11 @@ import {
 import { syntaxTree } from "@codemirror/language";
 import { type EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, keymap, tooltips } from "@codemirror/view";
-import { toast } from "sonner";
 import { HEADING_NODE } from "@/components/heading-fold";
 import { AGENT_NAMES } from "@/ipc/agents";
 import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
 import { listSkills, type Skill, startSkillThread } from "@/ipc/skills";
+import { useStatusStore } from "@/stores/status-store";
 import { useUserStore } from "@/stores/user-store";
 
 const SKILL_QUERY = /\/[\p{L}\p{N}_-]*/u;
@@ -107,7 +107,7 @@ function followNote(
 
 /**
  * The note is saved first, so the agent reads what's on screen. The thread runs
- * out of sight, so the toast is the only sign that anything is happening.
+ * out of sight, so the footer is the only sign that anything is happening.
  */
 async function runSkill(
   view: EditorView,
@@ -120,7 +120,8 @@ async function runSkill(
   const line = state.doc.lineAt(position);
   const { skillAgent, skillModels } = useUserStore.getState();
   const agentName = AGENT_NAMES[skillAgent];
-  const toastId = toast.loading(`Running /${skill.name} in ${agentName}`);
+  const { startSkill, finishSkill, failSkill } = useStatusStore.getState();
+  const runId = startSkill(`Running /${skill.name} in ${agentName}`);
 
   try {
     await onSave(doc);
@@ -142,10 +143,10 @@ async function runSkill(
       await stopFollowing();
     }
 
-    toast.success(`Finished /${skill.name}`, { id: toastId });
+    finishSkill(runId, `Finished /${skill.name}`);
   } catch (error) {
     console.error("Skill failed:", error);
-    toast.error(`/${skill.name} failed in ${agentName}`, { id: toastId });
+    failSkill(runId, `/${skill.name} failed in ${agentName}`);
   }
 }
 

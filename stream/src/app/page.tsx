@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { StatusFooter } from "@/components/footer";
 import { Titlebar } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
 import { useSelectedFolder, useSetSelectedFolder } from "@/hooks/use-user-data";
@@ -143,6 +144,7 @@ function HomeContent() {
           </div>
         </div>
       </div>
+      <StatusFooter />
     </>
   );
 }

@@ -13,7 +13,6 @@ import { diff } from "@codemirror/merge";
 import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 import {
   collapsedHeadings,
   restoreCollapsedHeadings,
@@ -22,6 +21,7 @@ import { livePreview } from "@/components/live-preview";
 import { skillMenu } from "@/components/skill-menu";
 import { cn } from "@/lib/utils";
 import { useCollapsedHeadingsStore } from "@/stores/collapsed-headings-store";
+import { useStatusStore } from "@/stores/status-store";
 import { formatMarkdown } from "@/utils/markdown-formatter";
 
 const externalChange = Annotation.define<boolean>();
@@ -77,7 +77,7 @@ async function formatDocument(view: EditorView) {
     formatted = await formatMarkdown(original);
   } catch (error) {
     console.error("Failed to format note:", error);
-    toast.error("Couldn't format note");
+    useStatusStore.getState().showFailure("Couldn't format note");
     return view.state.doc.toString();
   }
 
@@ -138,11 +138,9 @@ export function MarkdownEditor({
               key: "Mod-s",
               preventDefault: true,
               run: (target) => {
-                void formatDocument(target)
-                  .then((doc) => callbacksRef.current.onSave(doc))
-                  .then(() => {
-                    toast.success("Saved successfully", { duration: 1000 });
-                  });
+                void formatDocument(target).then((doc) =>
+                  callbacksRef.current.onSave(doc),
+                );
                 return true;
               },
             },

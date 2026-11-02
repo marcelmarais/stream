@@ -8,7 +8,6 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import {
   AGENT_NAMES,
   type AgentKind,
@@ -17,6 +16,7 @@ import {
   type RunningAgent,
 } from "@/ipc/agents";
 import { cn } from "@/lib/utils";
+import { useStatusStore } from "@/stores/status-store";
 
 const VISIBLE_AGENTS = 3;
 const BADGE_WIDTH = 18;
@@ -319,7 +319,7 @@ function AgentBadge({
       await openAgentChat(chat.target);
     } catch (error) {
       console.error("Failed to open agent chat:", error);
-      toast.error(`Couldn't open ${chat.app}`);
+      useStatusStore.getState().showFailure(`Couldn't open ${chat.app}`);
     }
   };
 

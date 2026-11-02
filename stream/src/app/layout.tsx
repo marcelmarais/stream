@@ -5,7 +5,6 @@ import type { Metadata } from "next";
 import { AutoUpdater } from "@/components/auto-updater";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,7 +30,6 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             {children}
-            <Toaster />
             <AutoUpdater />
           </ThemeProvider>
         </QueryProvider>

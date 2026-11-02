@@ -3,6 +3,7 @@
 import { Switch } from "@base-ui/react/switch";
 import {
   ArrowSquareOutIcon,
+  CheckIcon,
   CircleNotchIcon,
   CopyIcon,
   GithubLogoIcon,
@@ -14,8 +15,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { toast } from "sonner";
 import { AgentLogo } from "@/components/agent-stack";
+import { Footer } from "@/components/footer";
 import RepoConnector from "@/components/repo-connector";
 import { Titlebar } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCopied } from "@/hooks/use-copied";
 import {
   useConnectedRepos,
   useFetchRepos,
@@ -146,22 +148,20 @@ function describeGitHubRepos(repoCount: number, connectedCount: number) {
 }
 
 function CopyableCommand({ command }: { command: string }) {
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(command);
-    toast.success("Command copied to clipboard");
-  };
+  const { copied, copy } = useCopied();
+  const Icon = copied ? CheckIcon : CopyIcon;
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-sm border border-well-rule bg-well px-2.5 py-1.5">
       <code className="truncate text-foreground text-xs">{command}</code>
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => copy(command)}
         className="shrink-0 text-muted-foreground hover:text-foreground"
-        title="Copy command"
+        title={copied ? "Copied" : "Copy command"}
         aria-label={`Copy ${command}`}
       >
-        <CopyIcon className="size-3.5" aria-hidden="true" />
+        <Icon className="size-3.5" aria-hidden="true" />
       </button>
     </div>
   );
@@ -533,6 +533,9 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
           </p>
         )}
       </main>
+
+      {/* This page covers the timeline's footer, so it needs its own */}
+      <Footer folderPath={folderPath} />
     </div>
   );
 }
