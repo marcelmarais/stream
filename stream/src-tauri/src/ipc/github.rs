@@ -1197,7 +1197,10 @@ mod tests {
 
         let on_head = &snapshot.pull_requests[0];
         assert_eq!(on_head.head_sha, "abc123");
-        assert_eq!(on_head.last_commit_at.as_deref(), Some("2026-11-01T09:00:00Z"));
+        assert_eq!(
+            on_head.last_commit_at.as_deref(),
+            Some("2026-11-01T09:00:00Z")
+        );
         assert_eq!(on_head.checks, Some("pass"));
 
         let on_older = &snapshot.pull_requests[1];

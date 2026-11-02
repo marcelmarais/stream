@@ -1,6 +1,6 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type FetchResult,
   getFetchFailure,
@@ -11,6 +11,11 @@ import {
 import type { PullRequest } from "@/ipc/git-reader";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+
+// TanStack skips its timers on a server, which is what it takes Node for
+vi.hoisted(() => {
+  vi.stubGlobal("window", globalThis);
+});
 
 const FOLDER = "/notes";
 const REPOS = ["/repos/stream"];
@@ -78,6 +83,49 @@ describe("repoFetchQuery", () => {
     expect(isInvalidated(commits)).toBe(true);
     expect(isInvalidated(pullRequests)).toBe(true);
     expect(isInvalidated(otherFolder)).toBe(false);
+  });
+});
+
+describe("fetching when the window regains focus", () => {
+  const MINUTE = 60000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockResolvedValue(FETCHED);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("waits until the last fetch is over two minutes old", async () => {
+    const client = new QueryClient();
+    const query = repoFetchQuery(FOLDER, REPOS);
+    const background = new QueryObserver(client, query);
+    // Every panel reads the same query, and mustn't change when it goes stale
+    const panel = new QueryObserver(client, { ...query, enabled: false });
+    const unsubscribe = [
+      background.subscribe(() => {}),
+      panel.subscribe(() => {}),
+    ];
+    const focus = () =>
+      client.refetchQueries({ queryKey: gitKeys.fetch(FOLDER), stale: true });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(invoke).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(MINUTE);
+    await focus();
+    expect(invoke).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(MINUTE + 1);
+    await focus();
+    expect(invoke).toHaveBeenCalledTimes(2);
+
+    for (const stop of unsubscribe) {
+      stop();
+    }
   });
 });
 

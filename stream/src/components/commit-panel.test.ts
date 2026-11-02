@@ -1,5 +1,9 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { buildRows, groupWork } from "@/components/commit-panel";
+import { buildRows, CommitPanel, groupWork } from "@/components/commit-panel";
+import { gitKeys, repoFetchQuery } from "@/hooks/use-git-queries";
 import type {
   CheckRun,
   DefaultBranch,
@@ -237,5 +241,49 @@ describe("other people's pull requests", () => {
 
     expect(row.title).toBe("main");
     expect(row.pullRequest).toBeUndefined();
+  });
+});
+
+describe("the fetch-failed note", () => {
+  const FOLDER = "/notes";
+  const REPOS = ["/repo"];
+
+  function renderPanel(results: unknown) {
+    const client = new QueryClient();
+    client.setQueryData(gitKeys.repos(FOLDER), REPOS);
+    client.setQueryData(repoFetchQuery(FOLDER, REPOS).queryKey, results as []);
+
+    return renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(CommitPanel, {
+          commits: [commit("tip", 1000)],
+          date: new Date(),
+          folderPath: FOLDER,
+        }),
+      ),
+    );
+  }
+
+  it("shows git's error as its title when the latest fetch failed", () => {
+    const html = renderPanel([
+      {
+        repo_path: "/repo",
+        success: false,
+        message: "fatal: Authentication failed",
+      },
+    ]);
+
+    expect(html).toContain("Fetch failed");
+    expect(html).toContain('title="repo: fatal: Authentication failed"');
+  });
+
+  it("stays away when the latest fetch worked", () => {
+    const html = renderPanel([
+      { repo_path: "/repo", success: true, message: "Fetched" },
+    ]);
+
+    expect(html).not.toContain("Fetch failed");
   });
 });
