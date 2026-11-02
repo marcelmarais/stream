@@ -213,9 +213,11 @@ export function FileCard({
           <MarkdownEditor
             key={file.filePath}
             filePath={file.filePath}
+            folderPath={folderPath}
             value={content}
             onChange={handleContentChange}
             onSave={saveContentImmediate}
+            onDiskChange={updateContentOptimistically}
             onFocus={onEditorFocus}
             isEditable={!isFocused}
           />
@@ -410,9 +412,11 @@ export function FocusedFileOverlay({
           <MarkdownEditor
             key={file.filePath}
             filePath={file.filePath}
+            folderPath={folderPath}
             value={content}
             onChange={handleContentChange}
             onSave={saveContentImmediate}
+            onDiskChange={updateContentOptimistically}
             onFocus={onEditorFocus || (() => {})}
             autoFocus={true}
             isEditable={true}

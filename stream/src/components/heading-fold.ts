@@ -26,7 +26,7 @@ import {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-const HEADING_NODE = /^ATXHeading[1-6]$/;
+export const HEADING_NODE = /^ATXHeading[1-6]$/;
 
 // Phosphor's regular CaretDown, matching the rest of the app
 const CARET_PATH =

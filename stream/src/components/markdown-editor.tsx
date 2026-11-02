@@ -19,6 +19,7 @@ import {
   restoreCollapsedHeadings,
 } from "@/components/heading-fold";
 import { livePreview } from "@/components/live-preview";
+import { skillMenu } from "@/components/skill-menu";
 import { cn } from "@/lib/utils";
 import { useCollapsedHeadingsStore } from "@/stores/collapsed-headings-store";
 import { formatMarkdown } from "@/utils/markdown-formatter";
@@ -30,9 +31,11 @@ const MAX_RECENT_EDITS = 100;
 
 interface MarkdownEditorProps {
   filePath: string;
+  folderPath: string;
   value: string;
   onChange: (value: string) => void;
   onSave: (value: string) => void | Promise<void>;
+  onDiskChange: (value: string) => void;
   onFocus?: () => void;
   autoFocus?: boolean;
   isActiveEditing?: boolean;
@@ -97,9 +100,11 @@ async function formatDocument(view: EditorView) {
 
 export function MarkdownEditor({
   filePath,
+  folderPath,
   value,
   onChange,
   onSave,
+  onDiskChange,
   onFocus,
   autoFocus = false,
   isActiveEditing = false,
@@ -109,12 +114,12 @@ export function MarkdownEditor({
   const viewRef = useRef<EditorView | null>(null);
   const editableRef = useRef(new Compartment());
   const recentEditsRef = useRef<string[]>([]);
-  const callbacksRef = useRef({ onChange, onSave, onFocus });
-  const initialRef = useRef({ filePath, value, isEditable });
+  const callbacksRef = useRef({ onChange, onSave, onDiskChange, onFocus });
+  const initialRef = useRef({ filePath, folderPath, value, isEditable });
 
   useEffect(() => {
-    callbacksRef.current = { onChange, onSave, onFocus };
-  }, [onChange, onSave, onFocus]);
+    callbacksRef.current = { onChange, onSave, onDiskChange, onFocus };
+  }, [onChange, onSave, onDiskChange, onFocus]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -146,6 +151,13 @@ export function MarkdownEditor({
             indentWithTab,
           ]),
           placeholder("Start typing..."),
+          // First, so an open menu takes Tab before list indenting does
+          skillMenu({
+            filePath: initialRef.current.filePath,
+            folderPath: initialRef.current.folderPath,
+            onSave: (doc) => callbacksRef.current.onSave(doc),
+            onDiskChange: (doc) => callbacksRef.current.onDiskChange(doc),
+          }),
           livePreview(),
           editableRef.current.of(
             EditorView.editable.of(initialRef.current.isEditable),

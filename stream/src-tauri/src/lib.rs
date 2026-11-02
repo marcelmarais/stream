@@ -11,6 +11,7 @@ use crate::ipc::markdown::{
     read_markdown_files_content, read_markdown_files_metadata, set_file_location_metadata,
 };
 use crate::ipc::repos::discover_git_repos;
+use crate::ipc::skills::{list_skills, start_skill_thread};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,6 +32,8 @@ pub fn run() {
             discover_git_repos,
             list_running_agents,
             open_agent_chat,
+            list_skills,
+            start_skill_thread,
             detect_location,
             set_file_location_metadata,
             search::search_markdown_files,

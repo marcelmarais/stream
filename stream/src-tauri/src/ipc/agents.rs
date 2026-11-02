@@ -34,7 +34,7 @@ const ACTIVITY_MAX_CHARS: usize = 80;
 const CLAUDE_CHAT_URL: &str = "claude://code/continue?session=";
 const CODEX_CHAT_URL: &str = "codex://threads/";
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentKind {
     Claude,

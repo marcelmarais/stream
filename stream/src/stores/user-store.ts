@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { AgentKind } from "@/ipc/agents";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 
 /**
@@ -14,12 +15,16 @@ interface UserState {
   // UI state
   settingsOpen: boolean;
   agentsEnabled: boolean;
+  skillAgent: AgentKind;
+  skillModels: Record<AgentKind, string>; // Empty uses the agent's own default
 
   // Actions
   setFolderPath: (path: string | null) => void;
   setActiveEditingFile: (file: MarkdownFileMetadata | null) => void;
   setSettingsOpen: (open: boolean) => void;
   setAgentsEnabled: (enabled: boolean) => void;
+  setSkillAgent: (agent: AgentKind) => void;
+  setSkillModel: (agent: AgentKind, model: string) => void;
   reset: () => void;
 }
 
@@ -28,6 +33,8 @@ const initialState = {
   activeEditingFile: null,
   settingsOpen: false,
   agentsEnabled: true,
+  skillAgent: "claude" as AgentKind,
+  skillModels: { claude: "", codex: "" },
 };
 
 export const useUserStore = create<UserState>()(
@@ -43,6 +50,13 @@ export const useUserStore = create<UserState>()(
 
       setAgentsEnabled: (enabled) => set({ agentsEnabled: enabled }),
 
+      setSkillAgent: (agent) => set({ skillAgent: agent }),
+
+      setSkillModel: (agent, model) =>
+        set((state) => ({
+          skillModels: { ...state.skillModels, [agent]: model },
+        })),
+
       reset: () => set(initialState),
     }),
     {
@@ -50,6 +64,8 @@ export const useUserStore = create<UserState>()(
       partialize: (state) => ({
         folderPath: state.folderPath,
         agentsEnabled: state.agentsEnabled,
+        skillAgent: state.skillAgent,
+        skillModels: state.skillModels,
       }),
     },
   ),

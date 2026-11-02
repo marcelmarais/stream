@@ -11,7 +11,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -19,6 +19,14 @@ import { AgentLogo } from "@/components/agent-stack";
 import RepoConnector from "@/components/repo-connector";
 import { Titlebar } from "@/components/titlebar-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   useConnectedRepos,
   useFetchRepos,
@@ -26,16 +34,15 @@ import {
   useRunningAgents,
 } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
+import { useSkills } from "@/hooks/use-skills";
 import { useSetSelectedFolder } from "@/hooks/use-user-data";
-import type { AgentKind } from "@/ipc/agents";
+import { AGENT_NAMES, type AgentKind } from "@/ipc/agents";
 import type { GitHubStatus, UnreadableRepo } from "@/ipc/git-reader";
+import { SKILLS_DIR } from "@/ipc/skills";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/stores/user-store";
 
-const AGENT_ROWS: { kind: AgentKind; name: string }[] = [
-  { kind: "claude", name: "Claude Code" },
-  { kind: "codex", name: "Codex" },
-];
+const AGENT_KINDS: AgentKind[] = ["claude", "codex"];
 
 const GH_INSTALL_URL = "https://cli.github.com";
 
@@ -317,7 +324,7 @@ function AgentsSection({ folderPath }: { folderPath: string }) {
       </p>
       {agentsEnabled && (
         <div className="flex flex-col">
-          {AGENT_ROWS.map(({ kind, name }) => (
+          {AGENT_KINDS.map((kind) => (
             <div
               key={kind}
               className="flex items-center gap-2.5 border-border border-b py-2"
@@ -327,7 +334,7 @@ function AgentsSection({ folderPath }: { folderPath: string }) {
                 size={16}
                 cutoutClassName="stroke-background"
               />
-              <span className="text-foreground">{name}</span>
+              <span className="text-foreground">{AGENT_NAMES[kind]}</span>
               <span className="ml-auto text-muted-foreground text-xs">
                 {getStatus(kind)}
               </span>
@@ -335,6 +342,89 @@ function AgentsSection({ folderPath }: { folderPath: string }) {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function SkillsSection({ folderPath }: { folderPath: string }) {
+  const skillAgent = useUserStore((state) => state.skillAgent);
+  const skillModels = useUserStore((state) => state.skillModels);
+  const setSkillAgent = useUserStore((state) => state.setSkillAgent);
+  const setSkillModel = useUserStore((state) => state.setSkillModel);
+  const { data: skills = [] } = useSkills(folderPath);
+
+  return (
+    <section className="mt-7 flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
+          Skills
+        </h2>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={() => revealItemInDir(`${folderPath}/${SKILLS_DIR}`)}
+        >
+          Show folder
+        </button>
+      </div>
+      <p className="text-muted-foreground text-xs">
+        Type / in a note to run a skill. It starts a new thread in the
+        background, told which note and line it came from. Nobody is there to
+        approve anything, so it edits your notes and runs commands without
+        asking. Add skills to the {SKILLS_DIR} folder as name.md or
+        name/SKILL.md.
+      </p>
+      <div className="flex flex-col">
+        <div className="flex items-center justify-between gap-3 border-border border-b py-2">
+          <span className="text-foreground">Agent</span>
+          <Select
+            value={skillAgent}
+            onValueChange={(agent) => agent && setSkillAgent(agent)}
+          >
+            <SelectTrigger size="sm" aria-label="Agent for skills">
+              <SelectValue>
+                {(agent: AgentKind) => AGENT_NAMES[agent]}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false} align="end">
+              {AGENT_KINDS.map((kind) => (
+                <SelectItem key={kind} value={kind}>
+                  {AGENT_NAMES[kind]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-border border-b py-2">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-foreground">Model</span>
+            <span className="text-muted-foreground text-xs">
+              Empty uses {AGENT_NAMES[skillAgent]}'s default
+            </span>
+          </div>
+          <Input
+            aria-label={`Model for ${AGENT_NAMES[skillAgent]}`}
+            className="h-7 w-40"
+            placeholder="Default"
+            spellCheck={false}
+            value={skillModels[skillAgent]}
+            onChange={(event) => setSkillModel(skillAgent, event.target.value)}
+          />
+        </div>
+        {skills.map((skill) => (
+          <div
+            key={skill.path}
+            className="flex flex-col gap-0.5 border-border border-b py-2"
+          >
+            <span className="truncate text-foreground">/{skill.name}</span>
+            {skill.description && (
+              <span className="truncate text-muted-foreground text-xs">
+                {skill.description}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -434,6 +524,8 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
         <GitHubSection folderPath={folderPath} />
 
         <AgentsSection folderPath={folderPath} />
+
+        <SkillsSection folderPath={folderPath} />
 
         {appVersion && (
           <p className="mt-7 text-muted-foreground text-xs">

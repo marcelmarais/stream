@@ -33,6 +33,7 @@ import {
   useMarkdownMetadata,
   usePrefetchFileContents,
 } from "@/hooks/use-markdown-queries";
+import { useSkills } from "@/hooks/use-skills";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
 import { useUserStore } from "@/stores/user-store";
 import { getDateFromFilename, getDateKey } from "@/utils/date-utils";
@@ -89,6 +90,7 @@ export default function TimelinePage() {
 function TimelineView({ folderPath }: { folderPath: string }) {
   useConnectedRepos(folderPath);
   usePullRequestPolling(folderPath);
+  useSkills(folderPath);
   const [showLoading, setShowLoading] = useState(true);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
     null,

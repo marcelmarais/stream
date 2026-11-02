@@ -10,6 +10,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  AGENT_NAMES,
   type AgentKind,
   type AgentStatus,
   openAgentChat,
@@ -40,11 +41,6 @@ const GESTURE_GAP_GROWTH = 1.5;
 
 // Claude's rays and Codex's lobes both land back on the same silhouette
 const TURN_STEP: Record<AgentKind, number> = { claude: 30, codex: 360 / 7 };
-
-const AGENT_NAMES: Record<AgentKind, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-};
 
 const AGENT_COLORS: Record<AgentKind, string> = {
   claude: "fill-agent-claude",

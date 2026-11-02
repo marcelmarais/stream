@@ -4,6 +4,11 @@ export type AgentKind = "claude" | "codex";
 
 export type AgentStatus = "working" | "waiting" | "finished";
 
+export const AGENT_NAMES: Record<AgentKind, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+};
+
 /**
  * TypeScript interface matching the Rust struct
  */
