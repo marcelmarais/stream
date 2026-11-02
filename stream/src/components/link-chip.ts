@@ -1,6 +1,5 @@
 import { WidgetType } from "@codemirror/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { toast } from "sonner";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -64,11 +63,8 @@ export function linkLabel(href: string) {
   }
 }
 
-/**
- * Public hosts only, so local and private addresses aren't sent to the
- * favicon service.
- */
-function faviconUrl(href: string) {
+/** Public hosts only, so local and private addresses aren't sent anywhere */
+function publicHost(href: string) {
   try {
     const { protocol, hostname } = new URL(href);
 
@@ -81,10 +77,81 @@ function faviconUrl(href: string) {
       return null;
     }
 
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=32`;
+    return hostname;
   } catch {
     return null;
   }
+}
+
+// Google answers unknown hosts with a generic 16px globe, and a 404 status
+// that an <img> can't see, so only larger icons count as real ones
+const GOOGLE_PLACEHOLDER_SIZE = 16;
+
+function googleFavicon(domain: string) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+}
+
+/** `travelperk.legalos.io` -> `legalos.io`, or null when there's no parent */
+function parentDomain(hostname: string) {
+  const labels = hostname.replace(/^www\./, "").split(".");
+
+  return labels.length > 2 ? labels.slice(-2).join(".") : null;
+}
+
+/** Icons to try for a host, best first. Google's come first as they're cached */
+function faviconCandidates(hostname: string) {
+  const parent = parentDomain(hostname);
+
+  return [
+    { src: googleFavicon(hostname), google: true },
+    { src: `https://${hostname}/favicon.ico`, google: false },
+    ...(parent ? [{ src: googleFavicon(parent), google: true }] : []),
+  ];
+}
+
+// Per host for the session: the icon that worked, or null once none did
+const resolvedFavicons = new Map<string, string | null>();
+const pendingFavicons = new Map<string, Promise<string | null>>();
+
+function loads(src: string, google: boolean) {
+  return new Promise<boolean>((resolve) => {
+    const probe = new Image();
+    probe.referrerPolicy = "no-referrer";
+    probe.onload = () =>
+      resolve(!google || probe.naturalWidth > GOOGLE_PLACEHOLDER_SIZE);
+    probe.onerror = () => resolve(false);
+    probe.src = src;
+  });
+}
+
+function resolveFavicon(hostname: string) {
+  const known = resolvedFavicons.get(hostname);
+
+  if (known !== undefined) {
+    return Promise.resolve(known);
+  }
+
+  let pending = pendingFavicons.get(hostname);
+
+  if (!pending) {
+    pending = (async () => {
+      for (const { src, google } of faviconCandidates(hostname)) {
+        if (await loads(src, google)) {
+          return src;
+        }
+      }
+
+      return null;
+    })().then((src) => {
+      resolvedFavicons.set(hostname, src);
+      pendingFavicons.delete(hostname);
+
+      return src;
+    });
+    pendingFavicons.set(hostname, pending);
+  }
+
+  return pending;
 }
 
 function glyph(path: string) {
@@ -105,33 +172,35 @@ function linkIcon(href: string) {
     return glyph(ENVELOPE_PATH);
   }
 
-  const src = faviconUrl(href);
+  const hostname = publicHost(href);
+  const fallback = glyph(GLOBE_PATH);
 
-  if (!src) {
-    return glyph(GLOBE_PATH);
+  if (!hostname) {
+    return fallback;
   }
 
-  const image = document.createElement("img");
-  image.className = "cm-note-link-icon";
-  image.alt = "";
-  image.draggable = false;
-  image.referrerPolicy = "no-referrer";
-  image.src = src;
-  image.addEventListener(
-    "error",
-    () => {
-      image.replaceWith(glyph(GLOBE_PATH));
-    },
-    { once: true },
-  );
+  // The globe holds the icon's place, so the chip keeps its size while the
+  // candidates load and the real icon swaps in only once one has
+  resolveFavicon(hostname).then((src) => {
+    if (!src) {
+      return;
+    }
 
-  return image;
+    const image = document.createElement("img");
+    image.className = "cm-note-link-icon";
+    image.alt = "";
+    image.draggable = false;
+    image.referrerPolicy = "no-referrer";
+    image.src = src;
+    fallback.replaceWith(image);
+  });
+
+  return fallback;
 }
 
 function openLink(href: string) {
   openUrl(href).catch((error) => {
     console.error("Failed to open link:", error);
-    toast.error("Couldn't open link");
   });
 }
 
