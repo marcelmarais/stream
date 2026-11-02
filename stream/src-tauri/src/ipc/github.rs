@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -14,14 +14,14 @@ use crate::ipc::git::get_remote_url;
 const GH_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Apps launched from Finder don't inherit the shell PATH, so look here too.
-const GH_INSTALL_PATHS: [&str; 4] = [
-    "/opt/homebrew/bin/gh",
-    "/usr/local/bin/gh",
-    "/opt/local/bin/gh",
-    "/usr/bin/gh",
+const INSTALL_DIRS: [&str; 4] = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "/usr/bin",
 ];
 
-/// A slow shell profile must not stall the search for gh.
+/// A slow shell profile must not stall the search for an executable.
 const SHELL_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// `gh` exits with this when it has no account to use.
@@ -34,7 +34,7 @@ fragment repo on Repository {
   defaultBranchRef {
     name
     target {
-      ... on Commit { statusCheckRollup { ...checks } }
+      ... on Commit { oid committedDate statusCheckRollup { ...checks } }
     }
   }
   open: pullRequests(states: OPEN, first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) {
@@ -52,17 +52,25 @@ fragment repo on Repository {
   }
 }
 fragment pullRequest on PullRequest {
-  number title url isDraft headRefName mergedAt additions deletions
-  reviewDecision viewerDidAuthor
+  number title url isDraft headRefName headRefOid isCrossRepository mergedAt
+  additions deletions reviewDecision viewerDidAuthor
   comments { totalCount }
   viewerLatestReviewRequest { id }
+  latestOpinionatedReviews(first: 20) {
+    nodes { state author { login } }
+  }
+  commits(last: 1) {
+    nodes {
+      commit { oid committedDate }
+    }
+  }
 }
 fragment checks on StatusCheckRollup {
   state
   contexts(first: 100) {
     nodes {
-      ... on CheckRun { name conclusion }
-      ... on StatusContext { context state }
+      ... on CheckRun { name conclusion detailsUrl }
+      ... on StatusContext { context state targetUrl }
     }
   }
 }
@@ -73,6 +81,14 @@ fragment checks on StatusCheckRollup {
 pub struct CheckRun {
     pub name: String,
     pub status: &'static str,
+    pub url: Option<String>,
+}
+
+/// One person's latest verdict on a pull request
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Review {
+    pub login: String,
+    pub state: String,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -89,6 +105,9 @@ pub struct PullRequest {
     pub checks: Option<&'static str>,
     pub check_runs: Vec<CheckRun>,
     pub review: Option<&'static str>,
+    pub reviews: Vec<Review>,
+    pub head_sha: String,
+    pub last_commit_at: Option<String>,
     pub merged_at: Option<String>,
     pub is_mine: bool,
 }
@@ -100,6 +119,8 @@ pub struct DefaultBranch {
     pub branch: String,
     pub checks: Option<&'static str>,
     pub check_runs: Vec<CheckRun>,
+    pub head_sha: Option<String>,
+    pub last_commit_at: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -169,6 +190,8 @@ struct PullRequestNode {
     url: String,
     is_draft: bool,
     head_ref_name: String,
+    head_ref_oid: String,
+    is_cross_repository: bool,
     merged_at: Option<String>,
     additions: u64,
     deletions: u64,
@@ -176,7 +199,19 @@ struct PullRequestNode {
     viewer_did_author: bool,
     comments: TotalCount,
     viewer_latest_review_request: Option<Value>,
+    latest_opinionated_reviews: Option<Nodes<ReviewNode>>,
     commits: Option<Nodes<CommitNode>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReviewNode {
+    state: String,
+    author: Option<AuthorNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuthorNode {
+    login: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -193,6 +228,8 @@ struct CommitNode {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Commit {
+    oid: String,
+    committed_date: String,
     status_check_rollup: Option<CheckRollup>,
 }
 
@@ -203,11 +240,14 @@ struct CheckRollup {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CheckNode {
     name: Option<String>,
     conclusion: Option<String>,
+    details_url: Option<String>,
     context: Option<String>,
     state: Option<String>,
+    target_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -253,28 +293,29 @@ fn parse_github_remote(remote_url: &str) -> Option<(String, String)> {
     Some((owner.to_string(), name.to_string()))
 }
 
-async fn find_gh() -> Option<PathBuf> {
+pub(crate) async fn find_executable(name: &str) -> Option<PathBuf> {
     let on_path = std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
         .unwrap_or_default()
         .into_iter()
-        .map(|dir| dir.join("gh"));
+        .map(|dir| dir.join(name));
 
     match on_path
-        .chain(GH_INSTALL_PATHS.iter().map(PathBuf::from))
+        .chain(INSTALL_DIRS.iter().map(|dir| Path::new(dir).join(name)))
         .find(|candidate| candidate.is_file())
     {
-        Some(gh) => Some(gh),
-        None => find_gh_in_shell().await,
+        Some(path) => Some(path),
+        None => find_in_shell(name).await,
     }
 }
 
-/// Version managers such as mise or asdf only put gh on the PATH of a real
-/// shell, so ask one before saying gh isn't installed.
-async fn find_gh_in_shell() -> Option<PathBuf> {
+/// Version managers such as mise or asdf only put tools on the PATH of a real
+/// shell, so ask one before saying a tool isn't installed.
+async fn find_in_shell(name: &str) -> Option<PathBuf> {
     let mut command = Command::new(std::env::var_os("SHELL")?);
     command
-        .args(["-ilc", "command -v gh"])
+        .arg("-ilc")
+        .arg(format!("command -v {name}"))
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .kill_on_drop(true);
@@ -365,6 +406,7 @@ fn map_check_runs(rollup: Option<CheckRollup>) -> Vec<CheckRun> {
                     Some(CheckRun {
                         name: check.name.or(check.context)?,
                         status,
+                        url: check.details_url.or(check.target_url),
                     })
                 })
                 .collect()
@@ -373,29 +415,69 @@ fn map_check_runs(rollup: Option<CheckRollup>) -> Vec<CheckRun> {
 }
 
 fn map_default_branch(repo_path: &str, node: BranchRefNode) -> DefaultBranch {
-    let rollup = node.target.and_then(|commit| commit.status_check_rollup);
+    let (head_sha, last_commit_at, rollup) = match node.target {
+        Some(commit) => (
+            Some(commit.oid),
+            Some(commit.committed_date),
+            commit.status_check_rollup,
+        ),
+        None => (None, None, None),
+    };
 
     DefaultBranch {
         repo_path: repo_path.to_string(),
         branch: node.name,
         checks: rollup.as_ref().and_then(|rollup| map_checks(&rollup.state)),
         check_runs: map_check_runs(rollup),
+        head_sha,
+        last_commit_at,
     }
+}
+
+fn map_reviews(reviews: Option<Nodes<ReviewNode>>) -> Vec<Review> {
+    reviews
+        .map(|reviews| {
+            reviews
+                .nodes
+                .into_iter()
+                .filter_map(|review| {
+                    // Deleted accounts come back without an author
+                    Some(Review {
+                        login: review.author?.login,
+                        state: review.state,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn map_pull_request(repo_path: &str, node: PullRequestNode) -> Option<PullRequest> {
     let is_requested = node.viewer_latest_review_request.is_some() && !node.viewer_did_author;
-    if !node.viewer_did_author && !is_requested {
+    let is_relevant = node.viewer_did_author || is_requested;
+
+    // Someone else's pull request is only here to name its branch, and a fork's
+    // branch isn't one of this repo's, even when the names match.
+    if !is_relevant && node.is_cross_repository {
         return None;
     }
 
-    let rollup = node
+    // Checks are only for head_sha if they were read from that exact commit
+    let head_commit = node
         .commits
         .and_then(|commits| commits.nodes.into_iter().next())
-        .and_then(|node| node.commit.status_check_rollup);
+        .map(|node| node.commit)
+        .filter(|commit| commit.oid == node.head_ref_oid);
+    let (last_commit_at, rollup) = match head_commit {
+        Some(commit) => (Some(commit.committed_date), commit.status_check_rollup),
+        None => (None, None),
+    };
 
     let review = if is_requested {
         Some("requested")
+    } else if !node.viewer_did_author {
+        // Their review state is theirs to act on, and `reviews` still has it
+        None
     } else {
         match node.review_decision.as_deref() {
             Some("CHANGES_REQUESTED") => Some("changes"),
@@ -425,6 +507,9 @@ fn map_pull_request(repo_path: &str, node: PullRequestNode) -> Option<PullReques
         checks: rollup.as_ref().and_then(|rollup| map_checks(&rollup.state)),
         check_runs: map_check_runs(rollup),
         review,
+        reviews: map_reviews(node.latest_opinionated_reviews),
+        head_sha: node.head_ref_oid,
+        last_commit_at,
         merged_at: node.merged_at,
         is_mine: node.viewer_did_author,
     })
@@ -629,7 +714,7 @@ fn graphql_command(gh: PathBuf, repos: &[GitHubRepo]) -> Command {
 /// that refresh works too.
 #[tauri::command]
 pub(crate) async fn get_github_status(repo_paths: Vec<String>) -> GitHubStatus {
-    let Some(gh) = find_gh().await else {
+    let Some(gh) = find_executable("gh").await else {
         return GitHubStatus::GhMissing;
     };
 
@@ -666,7 +751,7 @@ pub(crate) async fn get_pull_requests(
         });
     }
 
-    let gh = find_gh()
+    let gh = find_executable("gh")
         .await
         .ok_or_else(|| "GitHub CLI (gh) is not installed".to_string())?;
 
@@ -705,6 +790,8 @@ mod tests {
             "url": "https://github.com/marcelmarais/stream/pull/1",
             "isDraft": false,
             "headRefName": "github-panel",
+            "headRefOid": "abc123",
+            "isCrossRepository": false,
             "mergedAt": null,
             "additions": 3,
             "deletions": 1,
@@ -712,6 +799,19 @@ mod tests {
             "viewerDidAuthor": true,
             "comments": { "totalCount": 2 },
             "viewerLatestReviewRequest": null,
+        })
+    }
+
+    /// The head commit of `pull_request`, with these checks on it
+    fn head_commit(checks: Value) -> Value {
+        json!({
+            "nodes": [{
+                "commit": {
+                    "oid": "abc123",
+                    "committedDate": "2026-11-01T09:00:00Z",
+                    "statusCheckRollup": checks,
+                },
+            }],
         })
     }
 
@@ -1037,51 +1137,134 @@ mod tests {
     }
 
     #[test]
-    fn keeps_only_my_pull_requests_and_review_requests() {
-        let mut dependabot = pull_request(2);
-        dependabot["viewerDidAuthor"] = json!(false);
+    fn keeps_other_peoples_pull_requests_but_flags_only_mine_and_requested() {
+        let mut colleague = pull_request(2);
+        colleague["viewerDidAuthor"] = json!(false);
+        colleague["reviewDecision"] = json!("CHANGES_REQUESTED");
 
         let mut requested = pull_request(3);
         requested["viewerDidAuthor"] = json!(false);
         requested["viewerLatestReviewRequest"] = json!({ "id": "abc" });
 
         let snapshot = parse_snapshot(
-            &response(vec![pull_request(1), dependabot, requested], vec![]),
+            &response(vec![pull_request(1), colleague, requested], vec![]),
             &[repo("/repo")],
         )
         .unwrap();
 
         let numbers: Vec<u64> = snapshot.pull_requests.iter().map(|pr| pr.number).collect();
-        assert_eq!(numbers, vec![1, 3]);
-        assert_eq!(snapshot.pull_requests[1].review, Some("requested"));
+        assert_eq!(numbers, vec![1, 2, 3]);
         assert!(snapshot.pull_requests[0].is_mine);
         assert!(!snapshot.pull_requests[1].is_mine);
+        assert_eq!(snapshot.pull_requests[1].review, None);
+        assert_eq!(snapshot.pull_requests[2].review, Some("requested"));
+        assert!(!snapshot.pull_requests[2].is_mine);
         assert_eq!(snapshot.rate_remaining, Some(4200));
+    }
+
+    #[test]
+    fn someone_elses_fork_has_no_branch_here_to_join() {
+        let mut fork = pull_request(2);
+        fork["viewerDidAuthor"] = json!(false);
+        fork["isCrossRepository"] = json!(true);
+
+        let mut my_fork = pull_request(3);
+        my_fork["isCrossRepository"] = json!(true);
+
+        let snapshot =
+            parse_snapshot(&response(vec![fork, my_fork], vec![]), &[repo("/repo")]).unwrap();
+
+        let numbers: Vec<u64> = snapshot.pull_requests.iter().map(|pr| pr.number).collect();
+        assert_eq!(numbers, vec![3]);
+    }
+
+    #[test]
+    fn checks_on_any_commit_but_the_head_are_dropped() {
+        let checks = json!({
+            "state": "SUCCESS",
+            "contexts": { "nodes": [{ "name": "Lint", "conclusion": "SUCCESS" }] },
+        });
+
+        let mut on_head = pull_request(1);
+        on_head["commits"] = head_commit(checks.clone());
+
+        let mut on_older = pull_request(2);
+        on_older["headRefOid"] = json!("def456");
+        on_older["commits"] = head_commit(checks);
+
+        let snapshot =
+            parse_snapshot(&response(vec![on_head, on_older], vec![]), &[repo("/repo")]).unwrap();
+
+        let on_head = &snapshot.pull_requests[0];
+        assert_eq!(on_head.head_sha, "abc123");
+        assert_eq!(on_head.last_commit_at.as_deref(), Some("2026-11-01T09:00:00Z"));
+        assert_eq!(on_head.checks, Some("pass"));
+
+        let on_older = &snapshot.pull_requests[1];
+        assert_eq!(on_older.head_sha, "def456");
+        assert_eq!(on_older.last_commit_at, None);
+        assert_eq!(on_older.checks, None);
+        assert!(on_older.check_runs.is_empty());
+    }
+
+    #[test]
+    fn merged_pull_requests_keep_their_head_but_no_checks() {
+        let mut merged = pull_request(1);
+        merged["mergedAt"] = json!("2026-11-01T10:00:00Z");
+        merged["commits"] = json!({
+            "nodes": [{
+                "commit": { "oid": "abc123", "committedDate": "2026-11-01T09:00:00Z" },
+            }],
+        });
+
+        let snapshot = parse_snapshot(&response(vec![], vec![merged]), &[repo("/repo")]).unwrap();
+
+        assert_eq!(snapshot.pull_requests[0].head_sha, "abc123");
+        assert_eq!(
+            snapshot.pull_requests[0].last_commit_at.as_deref(),
+            Some("2026-11-01T09:00:00Z")
+        );
+        assert_eq!(snapshot.pull_requests[0].checks, None);
+    }
+
+    #[test]
+    fn reads_each_reviewer_and_skips_deleted_accounts() {
+        let mut reviewed = pull_request(1);
+        reviewed["latestOpinionatedReviews"] = json!({
+            "nodes": [
+                { "state": "APPROVED", "author": { "login": "colleague" } },
+                { "state": "CHANGES_REQUESTED", "author": null },
+            ],
+        });
+
+        let snapshot = parse_snapshot(&response(vec![reviewed], vec![]), &[repo("/repo")]).unwrap();
+
+        assert_eq!(
+            snapshot.pull_requests[0].reviews,
+            vec![Review {
+                login: "colleague".to_string(),
+                state: "APPROVED".to_string(),
+            }]
+        );
     }
 
     #[test]
     fn reads_each_check_and_merged_state() {
         let mut failing = pull_request(1);
-        failing["commits"] = json!({
-            "nodes": [{
-                "commit": {
-                    "statusCheckRollup": {
-                        "state": "FAILURE",
-                        "contexts": {
-                            "nodes": [
-                                { "name": "Lint", "conclusion": "SUCCESS" },
-                                { "name": "Build macOS App", "conclusion": "FAILURE" },
-                                { "context": "ci/legacy", "state": "ERROR" },
-                                { "name": "Deploy", "conclusion": "CANCELLED" },
-                                { "name": "Build Windows App", "conclusion": "SKIPPED" },
-                                { "name": "Test", "conclusion": null },
-                                { "context": "ci/queue", "state": "PENDING" },
-                            ],
-                        },
-                    },
-                },
-            }],
-        });
+        failing["commits"] = head_commit(json!({
+            "state": "FAILURE",
+            "contexts": {
+                "nodes": [
+                    { "name": "Lint", "conclusion": "SUCCESS", "detailsUrl": "https://ci/lint" },
+                    { "name": "Build macOS App", "conclusion": "FAILURE" },
+                    { "context": "ci/legacy", "state": "ERROR", "targetUrl": "https://ci/legacy" },
+                    { "name": "Deploy", "conclusion": "CANCELLED" },
+                    { "name": "Build Windows App", "conclusion": "SKIPPED" },
+                    { "name": "Test", "conclusion": null },
+                    { "context": "ci/queue", "state": "PENDING" },
+                ],
+            },
+        }));
 
         let mut merged = pull_request(2);
         merged["mergedAt"] = json!("2026-11-01T10:00:00Z");
@@ -1107,6 +1290,10 @@ mod tests {
                 ("ci/queue", "running"),
             ]
         );
+        let check_runs = &snapshot.pull_requests[0].check_runs;
+        assert_eq!(check_runs[0].url.as_deref(), Some("https://ci/lint"));
+        assert_eq!(check_runs[1].url, None);
+        assert_eq!(check_runs[2].url.as_deref(), Some("https://ci/legacy"));
         assert_eq!(snapshot.pull_requests[1].state, "merged");
     }
 
@@ -1118,6 +1305,8 @@ mod tests {
                     "defaultBranchRef": {
                         "name": "trunk",
                         "target": {
+                            "oid": "abc123",
+                            "committedDate": "2026-11-01T09:00:00Z",
                             "statusCheckRollup": {
                                 "state": "FAILURE",
                                 "contexts": {
@@ -1149,12 +1338,16 @@ mod tests {
                     CheckRun {
                         name: "Build".to_string(),
                         status: "pass",
+                        url: None,
                     },
                     CheckRun {
                         name: "Lint".to_string(),
                         status: "fail",
+                        url: None,
                     },
                 ],
+                head_sha: Some("abc123".to_string()),
+                last_commit_at: Some("2026-11-01T09:00:00Z".to_string()),
             }]
         );
     }
@@ -1166,7 +1359,11 @@ mod tests {
                 "r0": {
                     "defaultBranchRef": {
                         "name": "main",
-                        "target": { "statusCheckRollup": null },
+                        "target": {
+                            "oid": "abc123",
+                            "committedDate": "2026-11-01T09:00:00Z",
+                            "statusCheckRollup": null,
+                        },
                     },
                     "open": { "nodes": [] },
                     "merged": { "nodes": [] },

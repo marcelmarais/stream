@@ -1,9 +1,15 @@
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use std::process::Stdio;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use git2::{self, Repository, Time};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use tokio::process::Command;
+
+use crate::ipc::github::find_executable;
 
 /// Maximum number of commits to return per repository to prevent memory issues
 const MAX_COMMITS_PER_REPO: usize = 200;
@@ -13,6 +19,13 @@ const MAX_BRANCH_TIPS_FOR_MATCH: usize = 50;
 
 /// Agents commit under their own name for you, in cloud sessions for example.
 const AGENT_AUTHOR_EMAILS: [&str; 2] = ["noreply@anthropic.com", "cursoragent@cursor.com"];
+
+/// A stuck fetch must not hold up every later one.
+const FETCH_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Commits are attributed to branches through remote-tracking refs, so a pruned
+/// ref would regroup past days. `--no-prune` also overrides `fetch.prune`.
+const FETCH_ARGS: [&str; 4] = ["fetch", "--all", "--quiet", "--no-prune"];
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitCommit {
@@ -24,6 +37,7 @@ pub struct GitCommit {
     pub date: String,
     pub repo_path: String,
     pub branches: Vec<String>,
+    pub parents: Vec<String>,
     pub url: Option<String>,
     pub is_mine: bool,
 }
@@ -44,25 +58,72 @@ pub struct FetchResult {
 
 #[tauri::command]
 pub(crate) async fn fetch_repos(repo_paths: Vec<String>) -> Result<Vec<FetchResult>, String> {
-    let mut results = Vec::new();
-
-    for repo_path in repo_paths {
-        let result = match fetch_repo(&repo_path).await {
-            Ok(message) => FetchResult {
-                repo_path: repo_path.clone(),
-                success: true,
-                message,
-            },
-            Err(e) => FetchResult {
-                repo_path: repo_path.clone(),
+    let Some(git) = find_executable("git").await else {
+        return Ok(repo_paths
+            .into_iter()
+            .map(|repo_path| FetchResult {
+                repo_path,
                 success: false,
-                message: format!("Failed to fetch: {}", e),
-            },
-        };
-        results.push(result);
+                message: "git is not installed".to_string(),
+            })
+            .collect());
+    };
+
+    let fetches: Vec<_> = repo_paths
+        .into_iter()
+        .map(|repo_path| {
+            let git = git.clone();
+            tauri::async_runtime::spawn(async move {
+                match fetch_repo(&git, &repo_path, FETCH_TIMEOUT).await {
+                    Ok(message) => FetchResult {
+                        repo_path,
+                        success: true,
+                        message,
+                    },
+                    Err(message) => FetchResult {
+                        repo_path,
+                        success: false,
+                        message,
+                    },
+                }
+            })
+        })
+        .collect();
+
+    let mut results = Vec::new();
+    for fetch in fetches {
+        results.push(fetch.await.map_err(|e| e.to_string())?);
     }
 
     Ok(results)
+}
+
+/// Every branch tip in a repo, local and remote-tracking. A commit moves a local
+/// one and a push moves a remote-tracking one.
+#[tauri::command]
+pub(crate) async fn get_branch_tips(repo_paths: Vec<String>) -> Vec<String> {
+    repo_paths
+        .par_iter()
+        .flat_map(|repo_path| read_branch_tips(repo_path).unwrap_or_default())
+        .collect()
+}
+
+fn read_branch_tips(repo_path: &str) -> Result<Vec<String>, git2::Error> {
+    let repo = Repository::open(repo_path)?;
+    let mut tips = Vec::new();
+
+    for reference in repo.references()? {
+        let reference = reference?;
+        if !reference.is_branch() && !reference.is_remote() {
+            continue;
+        }
+        if let (Some(name), Some(target)) = (reference.name(), reference.target()) {
+            tips.push(format!("{} {} {}", repo_path, name, target));
+        }
+    }
+
+    tips.sort();
+    Ok(tips)
 }
 
 #[tauri::command]
@@ -351,55 +412,32 @@ fn is_main_branch(branch_name: &str) -> bool {
     main_branch_names.contains(&branch_name)
 }
 
-async fn fetch_repo(repo_path: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let repo = Repository::open(repo_path)?;
+/// Runs git itself rather than libgit2, because only git knows the user's
+/// credential helpers and SSH config.
+async fn fetch_repo(git: &Path, repo_path: &str, timeout: Duration) -> Result<String, String> {
+    let mut command = Command::new(git);
+    command
+        .args(FETCH_ARGS)
+        .current_dir(repo_path)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
 
-    let remotes = repo.remotes()?;
-    let mut fetch_results = Vec::new();
+    let output = tokio::time::timeout(timeout, command.output())
+        .await
+        .map_err(|_| "Timed out waiting for git fetch".to_string())?
+        .map_err(|e| format!("Failed to run git: {}", e))?;
 
-    for remote_name in remotes.iter() {
-        if let Some(remote_name) = remote_name {
-            match repo.find_remote(remote_name) {
-                Ok(mut remote) => {
-                    let mut fetch_options = git2::FetchOptions::new();
-
-                    let mut callbacks = git2::RemoteCallbacks::new();
-                    callbacks.credentials(|_url, username_from_url, _allowed_types| {
-                        if let Some(username) = username_from_url {
-                            git2::Cred::ssh_key_from_agent(username)
-                        } else {
-                            git2::Cred::default()
-                        }
-                    });
-
-                    fetch_options.remote_callbacks(callbacks);
-
-                    match remote.fetch(&[] as &[&str], Some(&mut fetch_options), None) {
-                        Ok(()) => {
-                            let stats = remote.stats();
-                            fetch_results.push(format!(
-                                "{}: {} objects received",
-                                remote_name,
-                                stats.received_objects()
-                            ));
-                        }
-                        Err(e) => {
-                            fetch_results.push(format!("{}: {}", remote_name, e));
-                        }
-                    }
-                }
-                Err(e) => {
-                    fetch_results.push(format!("{}: Failed to find remote - {}", remote_name, e));
-                }
-            }
-        }
+    if output.status.success() {
+        return Ok("Fetched".to_string());
     }
 
-    if fetch_results.is_empty() {
-        Ok("No remotes found".to_string())
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        format!("git fetch failed: {}", output.status)
     } else {
-        Ok(fetch_results.join("; "))
-    }
+        stderr
+    })
 }
 
 pub(crate) fn get_remote_url(repo: &Repository) -> Option<String> {
@@ -588,6 +626,7 @@ fn get_repo_commits(
             date: time_to_iso_date(commit_time),
             repo_path: repo_path.to_string(),
             branches,
+            parents: commit.parent_ids().map(|id| id.to_string()).collect(),
             url,
             is_mine: is_my_commit(author.email().unwrap_or(""), user_email.as_deref()),
         };
@@ -716,5 +755,145 @@ mod tests {
         test.commit("feature", "feature work", 200, &[first]);
 
         assert_eq!(test.branches_of("feature work"), vec!["feature"]);
+    }
+
+    #[test]
+    fn commits_list_their_parents() {
+        let test = TestRepo::new("parents");
+        let first = test.commit("main", "first", 100, &[]);
+        let second = test.commit("main", "second", 100, &[first]);
+
+        let commits = get_repo_commits(test.path.to_str().unwrap(), 0, i64::MAX / 2).unwrap();
+        let parents_of = |oid: Oid| {
+            commits
+                .iter()
+                .find(|commit| commit.id == oid.to_string())
+                .unwrap()
+                .parents
+                .clone()
+        };
+
+        assert_eq!(parents_of(second), vec![first.to_string()]);
+        assert!(parents_of(first).is_empty());
+    }
+
+    fn git() -> PathBuf {
+        tauri::async_runtime::block_on(find_executable("git")).unwrap()
+    }
+
+    fn fetch(path: &Path, timeout: Duration) -> Result<String, String> {
+        tauri::async_runtime::block_on(fetch_repo(&git(), path.to_str().unwrap(), timeout))
+    }
+
+    /// A repo with a commit on main, and a clone that hasn't fetched it yet.
+    fn with_clone(name: &str) -> (TestRepo, TestRepo, Oid) {
+        let origin = TestRepo::new(&format!("{name}-origin"));
+        let clone = TestRepo::new(&format!("{name}-clone"));
+        let tip = origin.commit("main", "first", 100, &[]);
+        clone
+            .repo
+            .remote("origin", origin.path.to_str().unwrap())
+            .unwrap();
+
+        (origin, clone, tip)
+    }
+
+    #[test]
+    fn fetching_updates_remote_tracking_refs() {
+        let (_origin, clone, tip) = with_clone("fetch");
+
+        assert_eq!(fetch(&clone.path, FETCH_TIMEOUT), Ok("Fetched".to_string()));
+        assert_eq!(
+            clone.repo.refname_to_id("refs/remotes/origin/main"),
+            Ok(tip)
+        );
+    }
+
+    #[test]
+    fn fetching_keeps_refs_of_deleted_branches_whatever_the_config_says() {
+        let (origin, clone, tip) = with_clone("no-prune");
+        create_branch(&origin, "feature", tip);
+        clone
+            .repo
+            .config()
+            .unwrap()
+            .set_bool("fetch.prune", true)
+            .unwrap();
+        fetch(&clone.path, FETCH_TIMEOUT).unwrap();
+
+        origin
+            .repo
+            .find_branch("feature", git2::BranchType::Local)
+            .unwrap()
+            .delete()
+            .unwrap();
+        fetch(&clone.path, FETCH_TIMEOUT).unwrap();
+
+        assert_eq!(
+            clone.repo.refname_to_id("refs/remotes/origin/feature"),
+            Ok(tip)
+        );
+    }
+
+    #[test]
+    fn a_repo_without_remotes_has_nothing_to_fetch() {
+        let test = TestRepo::new("no-remotes");
+
+        assert!(fetch(&test.path, FETCH_TIMEOUT).is_ok());
+    }
+
+    #[test]
+    fn a_failed_fetch_reports_what_git_said() {
+        let test = TestRepo::new("missing-remote");
+        test.repo
+            .remote("origin", "/nonexistent/stream-remote.git")
+            .unwrap();
+
+        let error = fetch(&test.path, FETCH_TIMEOUT).unwrap_err();
+
+        assert!(error.contains("/nonexistent/stream-remote.git"), "{error}");
+    }
+
+    #[test]
+    fn a_stuck_fetch_times_out() {
+        let (_origin, clone, _) = with_clone("timeout");
+        let slow_git = clone.path.join("slow-git");
+        std::fs::write(&slow_git, "#!/bin/sh\nsleep 5\n").unwrap();
+        std::fs::set_permissions(
+            &slow_git,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+
+        let result = tauri::async_runtime::block_on(fetch_repo(
+            &slow_git,
+            clone.path.to_str().unwrap(),
+            Duration::from_millis(50),
+        ));
+
+        assert_eq!(result, Err("Timed out waiting for git fetch".to_string()));
+    }
+
+    #[test]
+    fn branch_tips_cover_local_and_remote_tracking_branches() {
+        let (_origin, clone, tip) = with_clone("tips");
+        fetch(&clone.path, FETCH_TIMEOUT).unwrap();
+        let path = clone.path.to_str().unwrap();
+        let remote_only = read_branch_tips(path).unwrap();
+
+        assert_eq!(
+            remote_only,
+            vec![format!("{path} refs/remotes/origin/main {tip}")]
+        );
+
+        let local = clone.commit("feature", "local work", 200, &[tip]);
+
+        assert_eq!(
+            read_branch_tips(path).unwrap(),
+            vec![
+                format!("{path} refs/heads/feature {local}"),
+                format!("{path} refs/remotes/origin/main {tip}"),
+            ]
+        );
     }
 }
