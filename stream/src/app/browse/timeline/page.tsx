@@ -273,7 +273,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
       )}
 
       {!isLoadingMetadata && allFilesMetadata.length === 0 && (
-        <div className="mt-9">
+        <div className="mt-9 flex flex-1 flex-col">
           <EmptyState folderPath={folderPath} />
         </div>
       )}
