@@ -2,6 +2,7 @@ import {
   CheckIcon,
   CopyIcon,
   MagnifyingGlassIcon,
+  PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -12,6 +13,7 @@ import { DateHeader } from "@/components/date-header";
 import { FileCalendar } from "@/components/file-calendar";
 import type { Footer as FooterComponent } from "@/components/footer";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { titlebarButton } from "@/components/titlebar-button";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -310,18 +312,16 @@ export function SearchButton({
   return (
     <button
       type="button"
-      className="no-drag group flex h-[26px] w-full max-w-[280px] items-center gap-2 rounded-[5px] border border-border bg-well/70 pr-1 pl-2 text-muted-foreground transition-colors hover:border-rail hover:text-foreground"
+      className={cn(titlebarButton, showSearch && "bg-well text-foreground")}
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      title="Search notes (⌘F)"
+      aria-label="Search notes"
+      aria-expanded={showSearch}
+      title="Search (⌘F)"
     >
-      <MagnifyingGlassIcon className="size-3.5 shrink-0" aria-hidden="true" />
-      <span className="flex-1 text-left">search</span>
-      <kbd className="rounded-[3px] border border-border px-1 font-mono text-[10.5px] text-faint leading-4 transition-colors group-hover:text-muted-foreground">
-        ⌘F
-      </kbd>
+      <MagnifyingGlassIcon aria-hidden="true" />
     </button>
   );
 }
@@ -344,16 +344,17 @@ export function HeaderActions({
   );
 
   return (
-    <div className="no-drag flex shrink-0 items-center gap-3.5 text-muted-foreground">
+    <div className="no-drag flex shrink-0 items-center gap-0.5">
       {!todayFileExists && (
         <button
           type="button"
-          className="no-drag h-6 text-primary transition-colors hover:text-foreground disabled:opacity-50"
+          className={cn(titlebarButton, "text-primary hover:text-primary")}
           onClick={async () => await createToday(folderPath)}
           disabled={isLoadingMetadata || Boolean(creatingToday)}
-          title="Create today's file"
+          aria-label="Create today's note"
+          title="Create today's note"
         >
-          today
+          <PlusIcon aria-hidden="true" />
         </button>
       )}
       <FileCalendar folderPath={folderPath} onScrollToDate={onScrollToDate} />

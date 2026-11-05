@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import { HeaderActions, SearchButton } from "@/components/markdown-file-card";
 
 interface TitlebarProps {
+  /** Sits just right of the window buttons */
+  leading?: ReactNode;
   actions?: ReactNode;
   centerContent?: ReactNode;
   isLoading: boolean;
@@ -23,6 +25,7 @@ interface TitlebarHeaderProps {
 }
 
 export function Titlebar({
+  leading,
   actions,
   centerContent,
   isLoading,
@@ -36,8 +39,11 @@ export function Titlebar({
     >
       <div
         data-tauri-drag-region
-        className="drag flex w-[clamp(6rem,24vw,10rem)] shrink-0 items-center gap-2 pl-18"
+        // With the bar's 12px padding, content starts 74px in: 8px past the
+        // window buttons that trafficLightPosition places
+        className="drag flex w-[clamp(6rem,24vw,10rem)] shrink-0 items-center gap-2 pl-[62px]"
       >
+        {leading && !isLoading && leading}
         {onBack && (
           <button
             type="button"
@@ -76,7 +82,7 @@ export function TitlebarHeader({
   onBack,
   backLabel,
 }: TitlebarHeaderProps) {
-  const centerContent = (
+  const leading = (
     <SearchButton showSearch={showSearch} setShowSearch={setShowSearch} />
   );
 
@@ -89,8 +95,8 @@ export function TitlebarHeader({
 
   return (
     <Titlebar
+      leading={leading}
       actions={actions}
-      centerContent={centerContent}
       isLoading={isLoading}
       onBack={onBack}
       backLabel={backLabel}

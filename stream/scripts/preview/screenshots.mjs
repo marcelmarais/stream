@@ -282,6 +282,24 @@ async function launchBrowser(headless) {
   );
 }
 
+/**
+ * Stand-ins for macOS's close, minimise and zoom buttons, where
+ * trafficLightPosition in tauri.conf.json puts them, so titlebar layouts can
+ * be checked against them.
+ */
+function drawWindowButtons() {
+  const buttons = document.createElement("div");
+  buttons.setAttribute("aria-hidden", "true");
+  buttons.style.cssText =
+    "position:fixed;top:11px;left:13px;z-index:2147483647;display:flex;gap:8px;pointer-events:none";
+  for (const color of ["#ff5f57", "#febc2e", "#28c840"]) {
+    const button = document.createElement("span");
+    button.style.cssText = `width:12px;height:12px;border-radius:50%;background:${color}`;
+    buttons.append(button);
+  }
+  document.body.append(buttons);
+}
+
 async function openPage(browser, scene, scale, problems) {
   const context = await browser.newContext({
     viewport: scene.viewport ?? WINDOW,
@@ -307,6 +325,7 @@ async function openPage(browser, scene, scale, problems) {
   await page.addStyleTag({
     content: "nextjs-portal { display: none !important; }",
   });
+  await page.evaluate(drawWindowButtons);
   await page
     .locator(scene.ready ?? "article .cm-content")
     .first()

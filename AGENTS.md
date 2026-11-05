@@ -32,8 +32,9 @@ pnpm screenshots
 ```
 
 That saves every scene to `stream/.screenshots/` (ignored by git) at 2x, in the
-app's default 600×800 window. It starts `next dev` on port 3000 if nothing is
-serving there, and stops it afterwards. A cold run takes about a minute.
+app's default 600×800 window, with stand-ins for the macOS window buttons where
+`trafficLightPosition` puts them. It starts `next dev` on port 3000 if nothing
+is serving there, and stops it afterwards. A cold run takes about a minute.
 
 ```bash
 pnpm screenshots --list
@@ -48,7 +49,9 @@ When you change the UI:
 
 - Shoot the scenes you'll touch before you start (`--out .screenshots/before`)
   and again after, then open the PNGs and look. A run that succeeds only means
-  nothing crashed.
+  nothing crashed. If you've already started editing, shoot the before state
+  from a worktree instead: `git worktree add <dir> main`, `pnpm install
+  --offline` there, and run `pnpm screenshots` with an absolute `--out`.
 - For a new screen or state, add a scene to `SCENES` in `screenshots.mjs`
   rather than writing a one-off Playwright script. Scenes take mock options:
   `folder: null` (first launch), `notes: false` (empty folder),

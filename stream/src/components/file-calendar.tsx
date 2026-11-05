@@ -1,4 +1,6 @@
+import { CalendarBlankIcon } from "@phosphor-icons/react";
 import { type ComponentProps, useState } from "react";
+import { titlebarButton } from "@/components/titlebar-button";
 import { Button } from "@/components/ui/button";
 import { Calendar, type CalendarDayButton } from "@/components/ui/calendar";
 import {
@@ -141,12 +143,13 @@ export function FileCalendar({
             <button
               type="button"
               disabled={isLoadingMetadata}
-              title="Open calendar"
-              className="no-drag h-6 transition-colors hover:text-foreground disabled:opacity-50 data-popup-open:text-foreground"
+              aria-label="Calendar"
+              title="Jump to a day"
+              className={titlebarButton}
             />
           }
         >
-          calendar
+          <CalendarBlankIcon aria-hidden="true" />
         </PopoverTrigger>
         <PopoverContent className="z-[70] w-auto gap-0 p-0" align="end">
           <Calendar
