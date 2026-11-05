@@ -2,21 +2,16 @@
 //! with rebase, push. Only files under the notes folder are ever committed,
 //! because the repo around it may hold other people's or other apps' work.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ipc::git::{git_output, run_git};
+use crate::ipc::git::{git_output, lock_repo, run_git, run_git_retrying};
 use crate::ipc::github::find_executable;
 
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(30);
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// obsidian-git or an editor may hold the index for a moment
-const INDEX_LOCK_RETRY: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct NotesSyncStatus {
@@ -64,7 +59,15 @@ async fn read_status(git: &Path, folder: &Path) -> Result<NotesSyncStatus, Strin
     let porcelain = run_git(
         git,
         folder,
-        &["status", "--porcelain=v2", "--branch", "--", "."],
+        // Polling must never hold the index lock that a sync or obsidian-git needs
+        &[
+            "--no-optional-locks",
+            "status",
+            "--porcelain=v2",
+            "--branch",
+            "--",
+            ".",
+        ],
         LOCAL_TIMEOUT,
     )
     .await?;
@@ -120,24 +123,13 @@ fn parse_status(porcelain: &str) -> NotesSyncStatus {
     status
 }
 
-fn repo_locks() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>> {
-    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
-    LOCKS.get_or_init(Default::default)
-}
-
 async fn sync(git: &Path, folder: &Path) -> Result<NotesSyncResult, String> {
     let Some((repo_root, git_dir)) = find_repo(git, folder).await else {
         return Err("The notes folder isn't in a git repository".to_string());
     };
 
-    // A manual sync and an automatic one must not interleave
-    let lock = repo_locks()
-        .lock()
-        .map_err(|e| e.to_string())?
-        .entry(repo_root.clone())
-        .or_default()
-        .clone();
-    let _guard = lock.lock().await;
+    // Nor may a background fetch, or another sync, run alongside this one
+    let _guard = lock_repo(Path::new(&repo_root)).await;
 
     let repo_name = Path::new(&repo_root)
         .file_name()
@@ -168,7 +160,7 @@ async fn sync(git: &Path, folder: &Path) -> Result<NotesSyncResult, String> {
     )
     .await?;
     if ahead.trim().parse::<u32>().unwrap_or(0) > 0 {
-        run_git(git, folder, &["push", "--quiet"], NETWORK_TIMEOUT).await?;
+        run_git_retrying(git, folder, &["push", "--quiet"], NETWORK_TIMEOUT).await?;
         result.pushed = true;
     }
 
@@ -178,7 +170,7 @@ async fn sync(git: &Path, folder: &Path) -> Result<NotesSyncResult, String> {
 /// Commits everything under the notes folder, and nothing else even if other
 /// files are already staged. Returns whether there was anything to commit.
 async fn commit_notes(git: &Path, folder: &Path) -> Result<bool, String> {
-    run_git_retrying(git, folder, &["add", "--all", "--", "."]).await?;
+    run_git_retrying(git, folder, &["add", "--all", "--", "."], LOCAL_TIMEOUT).await?;
 
     let staged = git_output(
         git,
@@ -196,6 +188,7 @@ async fn commit_notes(git: &Path, folder: &Path) -> Result<bool, String> {
         git,
         folder,
         &["commit", "--quiet", "-m", &message, "--", "."],
+        LOCAL_TIMEOUT,
     )
     .await?;
     Ok(true)
@@ -204,7 +197,7 @@ async fn commit_notes(git: &Path, folder: &Path) -> Result<bool, String> {
 /// Rebases onto the upstream. A conflict is aborted rather than left for the
 /// user to find half-done; the notes commit stays safe locally.
 async fn pull(git: &Path, folder: &Path, upstream: &str) -> Result<(), String> {
-    let pulled = run_git(
+    let pulled = run_git_retrying(
         git,
         folder,
         &["pull", "--rebase", "--autostash", "--quiet"],
@@ -241,16 +234,6 @@ async fn pull(git: &Path, folder: &Path, upstream: &str) -> Result<(), String> {
             files.join(", ")
         )
     })
-}
-
-async fn run_git_retrying(git: &Path, folder: &Path, args: &[&str]) -> Result<String, String> {
-    match run_git(git, folder, args, LOCAL_TIMEOUT).await {
-        Err(error) if error.contains("index.lock") => {
-            tokio::time::sleep(INDEX_LOCK_RETRY).await;
-            run_git(git, folder, args, LOCAL_TIMEOUT).await
-        }
-        result => result,
-    }
 }
 
 #[cfg(test)]
@@ -503,6 +486,86 @@ mod tests {
                 pulled: true,
                 pushed: false
             }
+        );
+    }
+
+    /// Holds the repo lock on another thread for `held`, as an in-flight fetch
+    /// or sync would, and returns once it's taken.
+    fn hold_repo_lock(repo: &Path, held: Duration) -> std::thread::JoinHandle<()> {
+        let repo = repo.to_path_buf();
+        let (taken, wait_for_lock) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            // Sleep outside the runtime, so only the lock makes others wait
+            let guard = block_on(lock_repo(&repo));
+            taken.send(()).unwrap();
+            std::thread::sleep(held);
+            drop(guard);
+        });
+        wait_for_lock.recv().unwrap();
+        holder
+    }
+
+    /// The background fetch and a sync used to start together on window focus
+    /// and race to move origin/main, so the sync failed whenever the other Mac
+    /// had pushed. Each must wait for the other.
+    #[test]
+    fn a_sync_waits_for_a_fetch_of_the_same_repo() {
+        let remote = Remote::new("sync-waits");
+        let clone = remote.clone_as("clone");
+        write(&clone, "Daily Notes/2026-11-05.md", "edited\n");
+        let held = Duration::from_millis(1000);
+
+        let fetch = hold_repo_lock(&clone, held);
+        let started = std::time::Instant::now();
+        let result = sync_now(&notes(&clone));
+        let took = started.elapsed();
+        fetch.join().unwrap();
+
+        assert!(took >= held, "{took:?}");
+        assert!(result.unwrap().pushed);
+    }
+
+    #[test]
+    fn a_fetch_waits_for_a_sync_of_the_same_repo() {
+        let remote = Remote::new("fetch-waits");
+        let clone = remote.clone_as("clone");
+        let held = Duration::from_millis(1000);
+
+        let sync = hold_repo_lock(&clone, held);
+        let started = std::time::Instant::now();
+        let fetched = block_on(crate::ipc::git::fetch_repos(vec![clone
+            .to_string_lossy()
+            .into_owned()]))
+        .unwrap();
+        let took = started.elapsed();
+        sync.join().unwrap();
+
+        assert!(took >= held, "{took:?}");
+        assert!(fetched[0].success, "{fetched:?}");
+    }
+
+    #[test]
+    fn waits_out_another_process_holding_the_index() {
+        let remote = Remote::new("index-lock");
+        let clone = remote.clone_as("clone");
+        write(&clone, "Daily Notes/2026-11-05.md", "edited\n");
+        let lock = clone.join(".git/index.lock");
+        std::fs::write(&lock, "").unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(700));
+            std::fs::remove_file(lock).unwrap();
+        });
+
+        let result = sync_now(&notes(&clone));
+        release.join().unwrap();
+
+        assert_eq!(
+            result,
+            Ok(NotesSyncResult {
+                committed: true,
+                pulled: true,
+                pushed: true
+            })
         );
     }
 

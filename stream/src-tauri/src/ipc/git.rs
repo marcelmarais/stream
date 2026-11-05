@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -138,8 +139,8 @@ pub(crate) async fn get_git_commits_for_repos(
     // Process all repos in parallel using rayon
     let results: Vec<RepoCommits> = repo_paths
         .par_iter()
-        .map(|repo_path| {
-            match get_repo_commits(repo_path, start_seconds, end_seconds) {
+        .map(
+            |repo_path| match get_repo_commits(repo_path, start_seconds, end_seconds) {
                 Ok(commits) => RepoCommits {
                     repo_path: repo_path.clone(),
                     commits,
@@ -150,8 +151,8 @@ pub(crate) async fn get_git_commits_for_repos(
                     commits: Vec::new(),
                     error: Some(format!("Error reading repository: {}", e)),
                 },
-            }
-        })
+            },
+        )
         .collect();
 
     Ok(results)
@@ -216,9 +217,7 @@ struct BranchTip {
 }
 
 /// Build a list of all branch tips (local + remote) with normalized names.
-fn build_branch_tip_list(
-    repo: &Repository,
-) -> Result<Vec<BranchTip>, Box<dyn std::error::Error>> {
+fn build_branch_tip_list(repo: &Repository) -> Result<Vec<BranchTip>, Box<dyn std::error::Error>> {
     let mut tips = Vec::new();
 
     let local_branches = repo.branches(Some(git2::BranchType::Local))?;
@@ -352,7 +351,9 @@ fn build_main_line(
         .filter(|other| {
             other.name != tip.name
                 && (other.oid == tip.oid
-                    || repo.graph_descendant_of(other.oid, tip.oid).unwrap_or(false))
+                    || repo
+                        .graph_descendant_of(other.oid, tip.oid)
+                        .unwrap_or(false))
         })
         .map(|other| other.name.clone())
         .collect();
@@ -458,8 +459,55 @@ pub(crate) async fn run_git(
     })
 }
 
+/// Errors git gives when another git process holds a lock for a moment.
+/// obsidian-git refreshes its status every few seconds, for example.
+fn is_lock_contention(error: &str) -> bool {
+    error.contains("index.lock") || error.contains("cannot lock ref")
+}
+
+const LOCK_RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(500), Duration::from_millis(1500)];
+
+/// Like run_git, but waits out another process's lock before giving up.
+pub(crate) async fn run_git_retrying(
+    git: &Path,
+    cwd: &Path,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<String, String> {
+    let mut result = run_git(git, cwd, args, timeout).await;
+    for delay in LOCK_RETRY_DELAYS {
+        match &result {
+            Err(error) if is_lock_contention(error) => {
+                tokio::time::sleep(delay).await;
+                result = run_git(git, cwd, args, timeout).await;
+            }
+            _ => break,
+        }
+    }
+    result
+}
+
+type RepoLocks = Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>;
+
+/// Stream runs git on a repo from more than one place: the background fetch
+/// and the notes sync. Run together, they race to move the same remote-tracking
+/// refs and one fails, so each holds this lock while it works on the repo.
+pub(crate) async fn lock_repo(repo_path: &Path) -> tokio::sync::OwnedMutexGuard<()> {
+    static LOCKS: OnceLock<RepoLocks> = OnceLock::new();
+    let key = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
+    let lock = LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .entry(key)
+        .or_default()
+        .clone();
+    lock.lock_owned().await
+}
+
 async fn fetch_repo(git: &Path, repo_path: &str, timeout: Duration) -> Result<String, String> {
-    run_git(git, Path::new(repo_path), &FETCH_ARGS, timeout)
+    let _guard = lock_repo(Path::new(repo_path)).await;
+    run_git_retrying(git, Path::new(repo_path), &FETCH_ARGS, timeout)
         .await
         .map(|_| "Fetched".to_string())
 }
@@ -540,7 +588,7 @@ fn get_repo_commits(
 
     let remote_url = get_remote_url(&repo);
     let user_email = get_user_email(&repo);
-    
+
     // Build branch tip map once upfront (much faster than per-commit checks)
     let branch_tip_map = build_branch_tip_map(&repo).unwrap_or_default();
     let branch_tips_raw = build_branch_tip_list(&repo).unwrap_or_default();
@@ -674,7 +722,10 @@ mod tests {
         assert!(is_my_commit("Marcel@Example.com", me));
         assert!(is_my_commit("noreply@anthropic.com", me));
         assert!(is_my_commit("cursoragent@cursor.com", None));
-        assert!(!is_my_commit("49699333+dependabot[bot]@users.noreply.github.com", me));
+        assert!(!is_my_commit(
+            "49699333+dependabot[bot]@users.noreply.github.com",
+            me
+        ));
         assert!(!is_my_commit("", None));
     }
     use git2::{Oid, Signature};
@@ -687,11 +738,8 @@ mod tests {
 
     impl TestRepo {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "stream-git-{}-{}",
-                name,
-                std::process::id()
-            ));
+            let path =
+                std::env::temp_dir().join(format!("stream-git-{}-{}", name, std::process::id()));
             let _ = std::fs::remove_dir_all(&path);
             let repo = Repository::init_opts(
                 &path,
