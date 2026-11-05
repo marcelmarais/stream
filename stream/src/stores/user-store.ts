@@ -15,6 +15,7 @@ interface UserState {
   // UI state
   settingsOpen: boolean;
   agentsEnabled: boolean;
+  autoSync: boolean; // Commit, pull and push the notes on their own
   skillAgent: AgentKind;
   skillModels: Record<AgentKind, string>; // Empty uses the agent's own default
 
@@ -23,6 +24,7 @@ interface UserState {
   setActiveEditingFile: (file: MarkdownFileMetadata | null) => void;
   setSettingsOpen: (open: boolean) => void;
   setAgentsEnabled: (enabled: boolean) => void;
+  setAutoSync: (enabled: boolean) => void;
   setSkillAgent: (agent: AgentKind) => void;
   setSkillModel: (agent: AgentKind, model: string) => void;
   reset: () => void;
@@ -33,6 +35,7 @@ const initialState = {
   activeEditingFile: null,
   settingsOpen: false,
   agentsEnabled: true,
+  autoSync: true,
   skillAgent: "claude" as AgentKind,
   skillModels: { claude: "", codex: "" },
 };
@@ -50,6 +53,8 @@ export const useUserStore = create<UserState>()(
 
       setAgentsEnabled: (enabled) => set({ agentsEnabled: enabled }),
 
+      setAutoSync: (enabled) => set({ autoSync: enabled }),
+
       setSkillAgent: (agent) => set({ skillAgent: agent }),
 
       setSkillModel: (agent, model) =>
@@ -64,6 +69,7 @@ export const useUserStore = create<UserState>()(
       partialize: (state) => ({
         folderPath: state.folderPath,
         agentsEnabled: state.agentsEnabled,
+        autoSync: state.autoSync,
         skillAgent: state.skillAgent,
         skillModels: state.skillModels,
       }),

@@ -413,31 +413,55 @@ fn is_main_branch(branch_name: &str) -> bool {
 }
 
 /// Runs git itself rather than libgit2, because only git knows the user's
-/// credential helpers and SSH config.
-async fn fetch_repo(git: &Path, repo_path: &str, timeout: Duration) -> Result<String, String> {
+/// credential helpers and SSH config. Errors only when git couldn't run or
+/// timed out; a non-zero exit is the caller's to read.
+pub(crate) async fn git_output(
+    git: &Path,
+    cwd: &Path,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<std::process::Output, String> {
     let mut command = Command::new(git);
     command
-        .args(FETCH_ARGS)
-        .current_dir(repo_path)
+        .args(args)
+        .current_dir(cwd)
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
         .kill_on_drop(true);
 
-    let output = tokio::time::timeout(timeout, command.output())
+    let subcommand = args.first().copied().unwrap_or("command");
+    tokio::time::timeout(timeout, command.output())
         .await
-        .map_err(|_| "Timed out waiting for git fetch".to_string())?
-        .map_err(|e| format!("Failed to run git: {}", e))?;
+        .map_err(|_| format!("Timed out waiting for git {subcommand}"))?
+        .map_err(|e| format!("Failed to run git: {}", e))
+}
+
+/// Like git_output, but a non-zero exit is an error carrying what git said.
+pub(crate) async fn run_git(
+    git: &Path,
+    cwd: &Path,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<String, String> {
+    let output = git_output(git, cwd, args, timeout).await?;
 
     if output.status.success() {
-        return Ok("Fetched".to_string());
+        return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let subcommand = args.first().copied().unwrap_or("command");
     Err(if stderr.is_empty() {
-        format!("git fetch failed: {}", output.status)
+        format!("git {subcommand} failed: {}", output.status)
     } else {
         stderr
     })
+}
+
+async fn fetch_repo(git: &Path, repo_path: &str, timeout: Duration) -> Result<String, String> {
+    run_git(git, Path::new(repo_path), &FETCH_ARGS, timeout)
+        .await
+        .map(|_| "Fetched".to_string())
 }
 
 pub(crate) fn get_remote_url(repo: &Repository) -> Option<String> {

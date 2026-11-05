@@ -8,9 +8,9 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { load } from "@tauri-apps/plugin-store";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useWindowFocus } from "@/hooks/use-window-focus";
 import { listRunningAgents, type RunningAgent } from "@/ipc/agents";
 import {
   type CommitsByDate,
@@ -88,7 +88,7 @@ function pullRequestQuery(folderPath: string, repos: string[]) {
   });
 }
 
-function refreshGitData(queryClient: QueryClient, folderPath: string) {
+export function refreshGitData(queryClient: QueryClient, folderPath: string) {
   queryClient.invalidateQueries({ queryKey: gitKeys.allCommits(folderPath) });
   queryClient.invalidateQueries({
     queryKey: gitKeys.pullRequests(folderPath),
@@ -370,7 +370,24 @@ function useBranchTipRefresh(
 export function usePullRequestPolling(folderPath: string) {
   const queryClient = useQueryClient();
   const { data: repos = [] } = useConnectedRepos(folderPath);
-  const [isWindowFocused, setIsWindowFocused] = useState(true);
+  const isWindowFocused = useWindowFocus((isFocused) => {
+    if (!isFocused) {
+      return;
+    }
+    queryClient.refetchQueries({
+      queryKey: gitKeys.fetch(folderPath),
+      stale: true,
+    });
+    queryClient.refetchQueries({
+      queryKey: gitKeys.pullRequests(folderPath),
+      stale: true,
+    });
+    // Settings may be open while gh is fixed in a terminal
+    queryClient.refetchQueries({
+      queryKey: gitKeys.githubStatus(folderPath),
+      type: "active",
+    });
+  });
 
   useQuery({
     ...pullRequestQuery(folderPath, repos),
@@ -384,52 +401,6 @@ export function usePullRequestPolling(folderPath: string) {
   });
   useBackgroundFetch(folderPath, repos, isWindowFocused);
   useBranchTipRefresh(folderPath, repos, isWindowFocused);
-
-  useEffect(() => {
-    let stopListening: (() => void) | undefined;
-    let isCancelled = false;
-
-    const startListening = async () => {
-      const unlisten = await getCurrentWindow().onFocusChanged(
-        ({ payload: isFocused }) => {
-          setIsWindowFocused(isFocused);
-
-          if (isFocused) {
-            queryClient.refetchQueries({
-              queryKey: gitKeys.fetch(folderPath),
-              stale: true,
-            });
-            queryClient.refetchQueries({
-              queryKey: gitKeys.pullRequests(folderPath),
-              stale: true,
-            });
-            // Settings may be open while gh is fixed in a terminal
-            queryClient.refetchQueries({
-              queryKey: gitKeys.githubStatus(folderPath),
-              type: "active",
-            });
-          }
-        },
-      );
-
-      if (isCancelled) {
-        unlisten();
-      } else {
-        stopListening = unlisten;
-      }
-    };
-
-    try {
-      void startListening().catch(() => {});
-    } catch {
-      // Browser previews do not expose the Tauri window API.
-    }
-
-    return () => {
-      isCancelled = true;
-      stopListening?.();
-    };
-  }, [folderPath, queryClient]);
 }
 
 /**

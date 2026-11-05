@@ -36,6 +36,7 @@ import {
   useRunningAgents,
 } from "@/hooks/use-git-queries";
 import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
+import { useNotesSyncStatus } from "@/hooks/use-notes-sync";
 import { useSkills } from "@/hooks/use-skills";
 import { useSetSelectedFolder } from "@/hooks/use-user-data";
 import { AGENT_NAMES, type AgentKind } from "@/ipc/agents";
@@ -291,6 +292,43 @@ function GitHubSection({ folderPath }: { folderPath: string }) {
   );
 }
 
+function NotesSyncRow({ folderPath }: { folderPath: string }) {
+  const autoSync = useUserStore((state) => state.autoSync);
+  const setAutoSync = useUserStore((state) => state.setAutoSync);
+  const { data: status } = useNotesSyncStatus(folderPath);
+
+  if (!status) {
+    return null;
+  }
+
+  let description =
+    "Commit notes and push them about a minute after you stop typing. Pulls with rebase first, and only ever commits files in this folder.";
+  if (!status.repo_root) {
+    description = "Not a git repository.";
+  } else if (!status.upstream) {
+    description = `${status.branch ?? "This branch"} has no upstream, so there's nowhere to push.`;
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-3 border-border border-t pt-3">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-foreground">Sync with git</span>
+        <span className="text-muted-foreground text-xs">{description}</span>
+      </div>
+      {status.repo_root && (
+        <Switch.Root
+          checked={autoSync}
+          onCheckedChange={setAutoSync}
+          aria-label="Sync notes with git automatically"
+          className="mt-0.5 flex h-4 w-[30px] shrink-0 items-center rounded-[2px] bg-rail px-0.5 data-checked:bg-primary"
+        >
+          <Switch.Thumb className="size-3 rounded-[1px] bg-muted-foreground transition-transform data-checked:translate-x-3.5 data-checked:bg-background" />
+        </Switch.Root>
+      )}
+    </div>
+  );
+}
+
 function AgentsSection({ folderPath }: { folderPath: string }) {
   const agentsEnabled = useUserStore((state) => state.agentsEnabled);
   const setAgentsEnabled = useUserStore((state) => state.setAgentsEnabled);
@@ -500,6 +538,7 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
               Change folder
             </Button>
           </div>
+          <NotesSyncRow folderPath={folderPath} />
         </section>
 
         <section className="mt-7 flex flex-col gap-3">

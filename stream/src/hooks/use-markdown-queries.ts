@@ -11,6 +11,7 @@ import {
   setFileLocationMetadata,
   writeMarkdownFileContent,
 } from "@/ipc/markdown-reader";
+import { noteSaved } from "@/lib/notes-sync";
 
 export const markdownKeys = {
   all: ["markdown"] as const,
@@ -85,6 +86,7 @@ export function useSaveMarkdownFile() {
 
       return { previousContent };
     },
+    onSuccess: () => noteSaved(),
     onError: (_err, { filePath }, context) => {
       if (context?.previousContent !== undefined) {
         queryClient.setQueryData(

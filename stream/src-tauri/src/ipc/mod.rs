@@ -3,6 +3,7 @@ pub mod git;
 pub mod github;
 pub mod location;
 pub mod markdown;
+pub mod notes_sync;
 pub mod repos;
 pub mod skills;
 

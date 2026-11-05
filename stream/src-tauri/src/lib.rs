@@ -10,6 +10,7 @@ use crate::ipc::location::detect_location;
 use crate::ipc::markdown::{
     read_markdown_files_content, read_markdown_files_metadata, set_file_location_metadata,
 };
+use crate::ipc::notes_sync::{get_notes_sync_status, sync_notes};
 use crate::ipc::repos::discover_git_repos;
 use crate::ipc::skills::{list_skills, start_skill_thread};
 
@@ -31,6 +32,8 @@ pub fn run() {
             get_pull_requests,
             get_github_status,
             discover_git_repos,
+            get_notes_sync_status,
+            sync_notes,
             list_running_agents,
             open_agent_chat,
             list_skills,

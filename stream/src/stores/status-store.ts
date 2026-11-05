@@ -23,6 +23,7 @@ interface StatusState {
   update: AppUpdate | null;
 
   showFailure: (text: string) => void;
+  notify: (text: string) => void; // Shown briefly, like a finished skill
   dismissFailure: () => void;
   startSkill: (label: string) => number;
   finishSkill: (id: number, text: string) => void;
@@ -44,6 +45,12 @@ export const useStatusStore = create<StatusState>()((set) => {
     update: null,
 
     showFailure: (text) => set({ failure: text }),
+
+    notify: (text) => {
+      clearTimeout(finishedTimer);
+      finishedTimer = setTimeout(() => set({ finished: null }), FINISHED_MS);
+      set({ finished: text });
+    },
 
     dismissFailure: () => set({ failure: null }),
 

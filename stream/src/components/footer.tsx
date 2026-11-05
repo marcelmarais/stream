@@ -1,6 +1,11 @@
 import { UpdateStatus } from "@/components/auto-updater";
 import { useConnectedRepos, useFetchRepos } from "@/hooks/use-git-queries";
-import { useMarkdownMetadata } from "@/hooks/use-markdown-queries";
+import {
+  useLatestSync,
+  useNotesSyncStatus,
+  useSyncNotes,
+} from "@/hooks/use-notes-sync";
+import { getSyncLabel } from "@/lib/notes-sync";
 import { cn } from "@/lib/utils";
 import { useStatusStore } from "@/stores/status-store";
 import { useUserStore } from "@/stores/user-store";
@@ -55,6 +60,65 @@ function StatusLine() {
   );
 }
 
+function formatTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Commits the notes, pulls with rebase and pushes, on a click. */
+function SyncControl({
+  folderPath,
+  className,
+}: {
+  folderPath: string;
+  className?: string;
+}) {
+  const { data: status } = useNotesSyncStatus(folderPath);
+  const { mutate: sync } = useSyncNotes(folderPath);
+  const { syncing, error, lastSyncedAt } = useLatestSync(folderPath);
+  const showFailure = useStatusStore((state) => state.showFailure);
+  const notify = useStatusStore((state) => state.notify);
+
+  const label = getSyncLabel(status, { syncing, failed: !!error });
+  if (!status || !label) {
+    return null;
+  }
+
+  const title = [
+    status.upstream
+      ? `${status.branch ?? "detached"} → ${status.upstream}`
+      : `${status.branch ?? "detached"} has no upstream`,
+    error ?? (lastSyncedAt && `Last synced at ${formatTime(lastSyncedAt)}`),
+    status.busy ? "Finish the rebase in a terminal" : "Click to sync",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "shrink-0 hover:text-foreground disabled:pointer-events-none",
+        error && "text-destructive",
+        className,
+      )}
+      disabled={syncing || status.busy}
+      title={title}
+      onClick={() =>
+        sync(undefined, {
+          onSuccess: ({ committed, pushed }) =>
+            notify(committed || pushed ? "Synced" : "Up to date"),
+          onError: (message) => showFailure(String(message)),
+        })
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
 /** Home has no folder to describe, so it only appears when there's news. */
 export function StatusFooter() {
   const hasNews = useHasNews();
@@ -77,11 +141,9 @@ export function Footer({ folderPath }: FooterProps) {
   const setSettingsOpen = useUserStore((state) => state.setSettingsOpen);
 
   const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
-  const { data: allFilesMetadata = [] } = useMarkdownMetadata(folderPath);
   const { mutateAsync: fetchRepos, isPending: isFetching } =
     useFetchRepos(folderPath);
 
-  const fileCount = allFilesMetadata.length;
   const connectedReposCount = connectedRepos.length;
 
   const folderName = folderPath?.split("/").pop() || folderPath || "";
@@ -89,7 +151,7 @@ export function Footer({ folderPath }: FooterProps) {
   return (
     <div className="@container z-50 flex h-6 shrink-0 items-center gap-3.5 border-t bg-background px-3 text-[11.5px] text-muted-foreground">
       {/* News matters more than the counts when the window is narrow */}
-      <div className="flex min-w-0 shrink-[100] items-center gap-3.5">
+      <div className="flex min-w-0 shrink-[100] items-center gap-3.5 overflow-hidden">
         <button
           type="button"
           className="truncate text-foreground"
@@ -98,9 +160,10 @@ export function Footer({ folderPath }: FooterProps) {
         >
           {folderName}
         </button>
-        <span className={cn("shrink-0", hasNews && "@max-2xl:hidden")}>
-          {fileCount} {fileCount === 1 ? "file" : "files"}
-        </span>
+        <SyncControl
+          folderPath={folderPath}
+          className={cn(hasNews && "@max-2xl:hidden")}
+        />
         <button
           type="button"
           className={cn(
