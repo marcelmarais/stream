@@ -12,7 +12,22 @@ import {
 } from "@/components/ui/command";
 
 import { useSearchMarkdownFiles } from "@/hooks/use-search";
+import { cleanSnippet } from "@/lib/search-snippet";
 import { cn } from "@/lib/utils";
+import { formatDayTitle, getDateFromFilename } from "@/utils/date-utils";
+
+/** "Thursday 5 November", with the year when it isn't this one */
+function formatFileHeading(fileName: string): string {
+  const dateKey = getDateFromFilename(fileName);
+  if (!dateKey) {
+    return fileName;
+  }
+
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  const title = formatDayTitle(date);
+  return year === new Date().getFullYear() ? title : `${title} ${year}`;
+}
 
 interface SearchPanelProps {
   open: boolean;
@@ -69,11 +84,11 @@ export function SearchBar({
       onOpenChange={onOpenChange}
       title="Search Markdown Files"
       description="Search through your markdown files"
-      className="sm:max-w-xl"
+      className="shadow-2xl shadow-black/40 sm:max-w-xl"
     >
       <Command shouldFilter={false}>
         <CommandInput
-          placeholder="search notes"
+          placeholder="Search notes"
           value={searchQuery}
           onValueChange={setSearchQuery}
         />
@@ -81,7 +96,7 @@ export function SearchBar({
         {searchQuery && deferredResults && (
           <div
             className={cn(
-              "flex h-7 items-center gap-1.5 border-b px-3 text-muted-foreground text-xs",
+              "flex h-7 items-center gap-1.5 border-b px-3.5 text-faint text-meta",
               isStale && "opacity-50",
             )}
           >
@@ -101,13 +116,13 @@ export function SearchBar({
         <CommandList
           ref={scrollRef}
           className={cn(
-            "h-[360px] max-h-[60vh] transition-opacity duration-200",
+            "h-[380px] max-h-[60vh] py-1 transition-opacity duration-200",
             isStale && "opacity-60",
           )}
         >
           {isLoading && (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              Searching...
+            <div className="flex h-full items-center justify-center font-sans text-faint text-prose">
+              Searching…
             </div>
           )}
 
@@ -115,12 +130,14 @@ export function SearchBar({
             !error &&
             searchQuery &&
             deferredResults?.totalResults === 0 && (
-              <CommandEmpty>No results for "{searchQuery}"</CommandEmpty>
+              <CommandEmpty className="font-sans text-faint text-prose">
+                Nothing matches “{searchQuery}”
+              </CommandEmpty>
             )}
 
           {!searchQuery && !isLoading && (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              Start typing to search your notes
+            <div className="flex h-full items-center justify-center font-sans text-faint text-prose">
+              Search every note as you type
             </div>
           )}
 
@@ -133,18 +150,24 @@ export function SearchBar({
               return (
                 <CommandGroup
                   key={filePath}
+                  className="px-1.5 **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-2.5 **:[[cmdk-group-heading]]:pb-1"
                   heading={
-                    <div className="flex w-full items-center justify-between text-muted-foreground">
+                    <div className="flex w-full items-baseline justify-between gap-3">
                       <button
                         type="button"
-                        className="truncate hover:text-foreground"
+                        className="truncate font-medium font-sans text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
                         onClick={() =>
                           handleFileClick(filePath, matches[0].lineNumber)
                         }
+                        title={fileName}
                       >
-                        {fileName}
+                        {formatFileHeading(fileName)}
                       </button>
-                      {matches.length > 1 && <span>{matches.length}</span>}
+                      {matches.length > 1 && (
+                        <span className="text-faint text-meta">
+                          {matches.length}
+                        </span>
+                      )}
                     </div>
                   }
                 >
@@ -187,9 +210,9 @@ const MatchItem = React.memo(
         key={`${match.filePath}-${match.lineNumber}-${idx}`}
         value={`${match.filePath}-${match.lineNumber}-${idx}`}
         onSelect={onClick}
-        className="px-2 py-1.5"
+        className="rounded-[5px] px-2 py-1.5"
       >
-        <span className="min-w-0 font-sans text-[13.5px] text-body leading-snug">
+        <span className="line-clamp-2 min-w-0 font-sans text-[14px] text-body leading-[1.5]">
           {highlightMatch(match.contextSnippet, match.matchRanges)}
         </span>
       </CommandItem>
@@ -198,8 +221,10 @@ const MatchItem = React.memo(
 );
 MatchItem.displayName = "MatchItem";
 
-function highlightMatch(text: string, ranges: Array<[number, number]>) {
-  if (!ranges || ranges.length === 0) {
+function highlightMatch(snippet: string, matchRanges: Array<[number, number]>) {
+  const { text, ranges } = cleanSnippet(snippet, matchRanges ?? []);
+
+  if (ranges.length === 0) {
     return text;
   }
 
@@ -229,7 +254,10 @@ function highlightMatch(text: string, ranges: Array<[number, number]>) {
     }
 
     parts.push(
-      <mark key={`match-${i}`} className="bg-primary text-primary-foreground">
+      <mark
+        key={`match-${i}`}
+        className="rounded-[2px] bg-primary/20 text-heading shadow-[inset_0_-1.5px_0_var(--primary)]"
+      >
         {text.slice(start, end)}
       </mark>,
     );
