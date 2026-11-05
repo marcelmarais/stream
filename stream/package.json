@@ -14,7 +14,6 @@
     "check:fix": "biome check --write .",
     "tauri": "tauri",
     "release": "bash scripts/release.sh",
-    "snapshot": "bash scripts/webkit-snapshot.sh",
     "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
