@@ -63,4 +63,6 @@ pnpm type-check
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+To see the frontend without building the app, `pnpm screenshots` renders every screen in Chromium on fake data. See [AGENTS.md](AGENTS.md#previewing-the-ui).
+
 To release, see [AGENTS.md](AGENTS.md).
