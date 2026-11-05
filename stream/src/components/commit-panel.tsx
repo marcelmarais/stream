@@ -653,7 +653,7 @@ export function ChecksHover({
           aria-label={`${label}: ${summary}`}
           onClick={onClick}
           className={cn(
-            "absolute top-0 right-[52px] flex h-[27px] w-[22px] items-center justify-center",
+            "absolute top-0 right-[52px] flex h-7 w-[22px] items-center justify-center",
             className,
           )}
         >
@@ -667,7 +667,7 @@ export function ChecksHover({
             sideOffset={4}
             className="isolate z-[70]"
           >
-            <Tooltip.Popup className="flex w-[280px] flex-col gap-1 rounded-[3px] border border-well-rule bg-popover px-[9px] py-[7px] font-mono text-[11.5px] leading-[1.4] shadow-md">
+            <Tooltip.Popup className="flex w-[280px] flex-col gap-1 rounded-[5px] border border-well-rule bg-popover px-2.5 py-2 font-mono text-meta leading-[1.45] shadow-black/30 shadow-lg">
               <span className="text-balance font-medium text-foreground">
                 {summary}
               </span>
@@ -714,7 +714,7 @@ function OpenPullRequest({ number, url }: Pick<PullRequest, "number" | "url">) {
       onClick={() => openUrl(url)}
       aria-label={label}
       title={label}
-      className="absolute top-0 right-0 flex h-[27px] w-12 items-center justify-end pr-2.5 text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-foreground group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 motion-reduce:transition-none"
+      className="absolute top-0 right-0 flex h-7 w-12 items-center justify-end pr-2.5 text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-foreground group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 motion-reduce:transition-none"
     >
       <ArrowSquareOutIcon className="size-3.5" aria-hidden="true" />
     </button>
@@ -864,7 +864,7 @@ function RowDetail({ row }: { row: WorkRow }) {
   const hasFailedChecks = getFailedChecks(checkRuns).length > 0;
 
   return (
-    <div className="flex flex-col gap-1.5 pt-0.5 pr-2.5 pb-2.5 pl-8 text-[11.5px] leading-[1.6]">
+    <div className="flex flex-col gap-1.5 pt-0.5 pr-2.5 pb-3 pl-8 text-meta leading-[1.6]">
       {pullRequest && <PullRequestMeta pullRequest={pullRequest} />}
       {pullRequest && <ReviewLine pullRequest={pullRequest} />}
       {hasFailedChecks && (
@@ -916,7 +916,7 @@ function RowItem({
           onClick={onToggle}
           disabled={!hasDetail}
           aria-expanded={isExpanded}
-          className="grid h-[27px] w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left"
+          className="grid h-7 w-full grid-cols-[14px_minmax(0,1fr)_14px_14px_38px] items-center gap-x-2 px-2.5 text-left"
         >
           <SignalIcon signal={ROW_SIGNALS[state]} />
           <span className="flex min-w-0 items-center gap-2">
@@ -976,7 +976,7 @@ function RowItem({
           <AgentStack
             agents={agents}
             size={14}
-            className="absolute top-0 right-[100px] h-[27px]"
+            className="absolute top-0 right-[100px] h-7"
           />
         )}
         {pullRequest && (
@@ -1024,7 +1024,7 @@ function RepoRows({
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="h-[25px] pl-8 text-left text-muted-foreground hover:text-foreground"
+          className="h-[26px] pl-8 text-left text-muted-foreground transition-colors hover:text-foreground"
         >
           Show {hidden} more
         </button>
@@ -1121,16 +1121,16 @@ export function CommitPanel({
     <div className={cn("relative", className)}>
       <span
         aria-hidden="true"
-        className="-left-6 absolute top-[15px] h-px w-6 bg-rail"
+        className="-left-6 absolute top-4 h-px w-6 bg-rail"
       />
       <Tabs.Root
         value={repo?.path ?? null}
         className={cn(
           "flex flex-col overflow-hidden border border-well-rule bg-well text-xs leading-[1.4]",
-          docked ? "rounded-t-[3px] border-b-0" : "rounded-[3px]",
+          docked ? "rounded-t-[5px] border-b-0" : "rounded-[5px]",
         )}
       >
-        <div className="flex h-[30px] items-stretch">
+        <div className="flex h-8 items-stretch">
           <Tabs.List
             aria-label="Repositories"
             className="flex min-w-0 items-stretch overflow-x-auto"
@@ -1159,8 +1159,7 @@ export function CommitPanel({
                     value={path}
                     onClick={() => toggleRepo(path)}
                     className={cn(
-                      "flex items-center gap-[7px] px-[11px] font-medium",
-                      docked && "transition-colors duration-150",
+                      "flex items-center gap-[7px] px-3 font-medium transition-colors duration-150 hover:text-foreground",
                       repoAgents.length > 0 && "pr-1",
                       isPanelOpen && path !== activeRepo
                         ? "text-muted-foreground"

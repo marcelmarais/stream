@@ -14,7 +14,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { type ComponentProps, type ReactNode, useEffect } from "react";
 import { AgentLogo } from "@/components/agent-stack";
 import { Footer } from "@/components/footer";
 import RepoConnector from "@/components/repo-connector";
@@ -148,17 +148,83 @@ function describeGitHubRepos(repoCount: number, connectedCount: number) {
   return `${repoCount} of ${connectedCount} repositories on GitHub`;
 }
 
+const ROW = "flex min-h-11 items-center gap-3 border-border border-b py-2.5";
+const LABEL = "font-sans text-[14px] text-foreground";
+const HINT = "font-sans text-[12.5px] text-muted-foreground leading-normal";
+const VALUE = "shrink-0 text-meta text-muted-foreground";
+
+function SettingsSection({
+  title,
+  action,
+  description,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  description?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <section className="mt-11 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-serif text-[21px] text-heading leading-[1.25] tracking-[-0.01em]">
+          {title}
+        </h2>
+        {action}
+      </div>
+      {description && (
+        <p className="max-w-[58ch] font-sans text-muted-foreground text-prose">
+          {description}
+        </p>
+      )}
+      {children && <div className="mt-2 flex flex-col">{children}</div>}
+    </section>
+  );
+}
+
+function SectionAction({ className, ...props }: ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "shrink-0 text-meta text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function Toggle({
+  className,
+  ...props
+}: Omit<ComponentProps<typeof Switch.Root>, "className"> & {
+  className?: string;
+}) {
+  return (
+    <Switch.Root
+      className={cn(
+        "flex h-[18px] w-8 shrink-0 items-center rounded-[5px] bg-rail p-0.5 transition-colors duration-150 data-checked:bg-primary",
+        className,
+      )}
+      {...props}
+    >
+      <Switch.Thumb className="size-3.5 rounded-[3px] bg-muted-foreground transition-transform duration-150 data-checked:translate-x-3.5 data-checked:bg-primary-foreground" />
+    </Switch.Root>
+  );
+}
+
 function CopyableCommand({ command }: { command: string }) {
   const { copied, copy } = useCopied();
   const Icon = copied ? CheckIcon : CopyIcon;
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-sm border border-well-rule bg-well px-2.5 py-1.5">
+    <div className="flex items-center justify-between gap-2 rounded-[5px] border border-well-rule bg-well px-3 py-2">
       <code className="truncate text-foreground text-xs">{command}</code>
       <button
         type="button"
         onClick={() => copy(command)}
-        className="shrink-0 text-muted-foreground hover:text-foreground"
+        className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
         title={copied ? "Copied" : "Copy command"}
         aria-label={`Copy ${command}`}
       >
@@ -178,7 +244,7 @@ function GitHubProblemRow({
   const { title, hint, command, detail, needsYou } = problem;
 
   return (
-    <div className="flex flex-col gap-2 border-border border-b py-2">
+    <div className="flex flex-col gap-2 border-border border-b py-3">
       <div className="flex items-center gap-2.5">
         <WarningCircleIcon
           className={cn(
@@ -188,10 +254,10 @@ function GitHubProblemRow({
           weight="fill"
           aria-hidden="true"
         />
-        <span className="text-foreground">{title}</span>
+        <span className={LABEL}>{title}</span>
       </div>
       <div className="flex flex-col gap-2 pl-[26px]">
-        <p className="text-muted-foreground text-xs">{hint}</p>
+        <p className={HINT}>{hint}</p>
         {command && <CopyableCommand command={command} />}
         {children}
         {detail && (
@@ -209,86 +275,73 @@ function GitHubSection({ folderPath }: { folderPath: string }) {
   const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
 
   return (
-    <section className="mt-7 flex flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
-          GitHub
-        </h2>
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground disabled:opacity-50"
-          onClick={recheck}
-          disabled={isChecking}
-        >
-          {isChecking ? "Checking..." : "Recheck"}
-        </button>
-      </div>
-      <p className="text-muted-foreground text-xs">
-        Pull requests and checks come through the GitHub CLI on this Mac, using
-        whichever account gh is signed in to.
-      </p>
-      <div className="flex flex-col">
-        {!status && (
-          <div className="flex items-center gap-2.5 border-border border-b py-2 text-muted-foreground">
-            <CircleNotchIcon
-              className="size-4 shrink-0 motion-safe:animate-spin"
+    <SettingsSection
+      title="GitHub"
+      action={
+        <SectionAction onClick={recheck} disabled={isChecking}>
+          {isChecking ? "checking…" : "recheck"}
+        </SectionAction>
+      }
+      description="Pull requests and checks come through the GitHub CLI on this Mac, using whichever account gh is signed in to."
+    >
+      {!status && (
+        <div className={cn(ROW, "text-muted-foreground")}>
+          <CircleNotchIcon
+            className="size-4 shrink-0 motion-safe:animate-spin"
+            aria-hidden="true"
+          />
+          Checking...
+        </div>
+      )}
+      {status?.state === "connected" && (
+        <>
+          <div className={ROW}>
+            <GithubLogoIcon
+              className="size-4 shrink-0 text-muted-foreground"
               aria-hidden="true"
             />
-            Checking...
+            <span className={cn(LABEL, "truncate")}>
+              Connected as{" "}
+              <span className="font-mono text-[13px]">{status.login}</span>
+            </span>
+            <span className={cn(VALUE, "ml-auto")}>
+              {describeGitHubRepos(status.repo_count, connectedRepos.length)}
+            </span>
           </div>
-        )}
-        {status?.state === "connected" && (
-          <>
-            <div className="flex items-center gap-2.5 border-border border-b py-2">
-              <GithubLogoIcon
-                className="size-4 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <span className="truncate text-foreground">
-                Connected as {status.login}
-              </span>
-              <span className="ml-auto shrink-0 text-muted-foreground text-xs">
-                {describeGitHubRepos(status.repo_count, connectedRepos.length)}
-              </span>
-            </div>
-            {(status.unreadable_repos.length > 0 ||
-              status.needs_repo_scope) && (
-              <GitHubProblemRow
-                problem={getUnreadableReposProblem(
-                  status.unreadable_repos,
-                  status.needs_repo_scope,
-                )}
-              >
-                {status.unreadable_repos.map(({ name, message }) => (
-                  <div key={name} className="flex flex-col gap-0.5">
-                    <span className="truncate text-foreground text-xs">
-                      {name}
-                    </span>
-                    <span className="break-words text-muted-foreground text-xs">
-                      {message}
-                    </span>
-                  </div>
-                ))}
-              </GitHubProblemRow>
-            )}
-          </>
-        )}
-        {status && status.state !== "connected" && (
-          <GitHubProblemRow problem={getGitHubProblem(status)}>
-            {status.state === "gh_missing" && (
-              <button
-                type="button"
-                onClick={() => openUrl(GH_INSTALL_URL)}
-                className="flex items-center gap-1 self-start text-muted-foreground text-xs hover:text-foreground"
-              >
-                Other ways to install
-                <ArrowSquareOutIcon className="size-3.5" aria-hidden="true" />
-              </button>
-            )}
-          </GitHubProblemRow>
-        )}
-      </div>
-    </section>
+          {(status.unreadable_repos.length > 0 || status.needs_repo_scope) && (
+            <GitHubProblemRow
+              problem={getUnreadableReposProblem(
+                status.unreadable_repos,
+                status.needs_repo_scope,
+              )}
+            >
+              {status.unreadable_repos.map(({ name, message }) => (
+                <div key={name} className="flex flex-col gap-0.5">
+                  <span className="truncate text-foreground text-xs">
+                    {name}
+                  </span>
+                  <span className={cn(HINT, "break-words")}>{message}</span>
+                </div>
+              ))}
+            </GitHubProblemRow>
+          )}
+        </>
+      )}
+      {status && status.state !== "connected" && (
+        <GitHubProblemRow problem={getGitHubProblem(status)}>
+          {status.state === "gh_missing" && (
+            <button
+              type="button"
+              onClick={() => openUrl(GH_INSTALL_URL)}
+              className="flex items-center gap-1 self-start text-meta text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Other ways to install
+              <ArrowSquareOutIcon className="size-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </GitHubProblemRow>
+      )}
+    </SettingsSection>
   );
 }
 
@@ -310,20 +363,18 @@ function NotesSyncRow({ folderPath }: { folderPath: string }) {
   }
 
   return (
-    <div className="flex items-start justify-between gap-3 border-border border-t pt-3">
+    <div className={cn(ROW, "items-start justify-between gap-6 py-3")}>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-foreground">Sync with git</span>
-        <span className="text-muted-foreground text-xs">{description}</span>
+        <span className={LABEL}>Sync with git</span>
+        <span className={cn(HINT, "max-w-[52ch]")}>{description}</span>
       </div>
       {status.repo_root && (
-        <Switch.Root
+        <Toggle
           checked={autoSync}
           onCheckedChange={setAutoSync}
           aria-label="Sync notes with git automatically"
-          className="mt-0.5 flex h-4 w-[30px] shrink-0 items-center rounded-[2px] bg-rail px-0.5 data-checked:bg-primary"
-        >
-          <Switch.Thumb className="size-3 rounded-[1px] bg-muted-foreground transition-transform data-checked:translate-x-3.5 data-checked:bg-background" />
-        </Switch.Root>
+          className="mt-0.5"
+        />
       )}
     </div>
   );
@@ -338,49 +389,34 @@ function AgentsSection({ folderPath }: { folderPath: string }) {
     const running = agents.filter(
       (agent) => agent.kind === kind && agent.status !== "finished",
     ).length;
-    return running > 0 ? `${running} running` : "None running";
+    return running > 0 ? `${running} running` : "none running";
   };
 
   return (
-    <section className="mt-7 flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
-          Agents
-        </h2>
-        <Switch.Root
+    <SettingsSection
+      title="Agents"
+      action={
+        <Toggle
           checked={agentsEnabled}
           onCheckedChange={setAgentsEnabled}
           aria-label="Show running agents"
-          className="flex h-4 w-[30px] shrink-0 items-center rounded-[2px] bg-rail px-0.5 data-checked:bg-primary"
-        >
-          <Switch.Thumb className="size-3 rounded-[1px] bg-muted-foreground transition-transform data-checked:translate-x-3.5 data-checked:bg-background" />
-        </Switch.Root>
-      </div>
-      <p className="text-muted-foreground text-xs">
-        Show agents running in your repositories on today's note. Stream only
-        reads session files on this Mac.
-      </p>
-      {agentsEnabled && (
-        <div className="flex flex-col">
-          {AGENT_KINDS.map((kind) => (
-            <div
-              key={kind}
-              className="flex items-center gap-2.5 border-border border-b py-2"
-            >
-              <AgentLogo
-                kind={kind}
-                size={16}
-                cutoutClassName="stroke-background"
-              />
-              <span className="text-foreground">{AGENT_NAMES[kind]}</span>
-              <span className="ml-auto text-muted-foreground text-xs">
-                {getStatus(kind)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
+        />
+      }
+      description="Show agents running in your repositories on today's note. Stream only reads session files on this Mac."
+    >
+      {agentsEnabled &&
+        AGENT_KINDS.map((kind) => (
+          <div key={kind} className={ROW}>
+            <AgentLogo
+              kind={kind}
+              size={16}
+              cutoutClassName="stroke-background"
+            />
+            <span className={LABEL}>{AGENT_NAMES[kind]}</span>
+            <span className={cn(VALUE, "ml-auto")}>{getStatus(kind)}</span>
+          </div>
+        ))}
+    </SettingsSection>
   );
 }
 
@@ -392,78 +428,81 @@ function SkillsSection({ folderPath }: { folderPath: string }) {
   const { data: skills = [] } = useSkills(folderPath);
 
   return (
-    <section className="mt-7 flex flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
-          Skills
-        </h2>
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground"
+    <SettingsSection
+      title="Skills"
+      action={
+        <SectionAction
           onClick={() => revealItemInDir(`${folderPath}/${SKILLS_DIR}`)}
         >
-          Show folder
-        </button>
+          show folder
+        </SectionAction>
+      }
+      description={
+        <>
+          Type <kbd className="font-mono text-[12.5px] text-foreground">/</kbd>{" "}
+          in a note to run a skill. It starts a new thread in the background,
+          told which note and line it came from. Nobody is there to approve
+          anything, so it edits your notes and runs commands without asking. Add
+          skills to the{" "}
+          <code className="font-mono text-[12.5px] text-foreground">
+            {SKILLS_DIR}
+          </code>{" "}
+          folder as name.md or name/SKILL.md.
+        </>
+      }
+    >
+      <div className={cn(ROW, "justify-between")}>
+        <span className={LABEL}>Agent</span>
+        <Select
+          value={skillAgent}
+          onValueChange={(agent) => agent && setSkillAgent(agent)}
+        >
+          <SelectTrigger size="sm" aria-label="Agent for skills">
+            <SelectValue>
+              {(agent: AgentKind) => AGENT_NAMES[agent]}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false} align="end">
+            {AGENT_KINDS.map((kind) => (
+              <SelectItem key={kind} value={kind}>
+                {AGENT_NAMES[kind]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <p className="text-muted-foreground text-xs">
-        Type / in a note to run a skill. It starts a new thread in the
-        background, told which note and line it came from. Nobody is there to
-        approve anything, so it edits your notes and runs commands without
-        asking. Add skills to the {SKILLS_DIR} folder as name.md or
-        name/SKILL.md.
-      </p>
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between gap-3 border-border border-b py-2">
-          <span className="text-foreground">Agent</span>
-          <Select
-            value={skillAgent}
-            onValueChange={(agent) => agent && setSkillAgent(agent)}
-          >
-            <SelectTrigger size="sm" aria-label="Agent for skills">
-              <SelectValue>
-                {(agent: AgentKind) => AGENT_NAMES[agent]}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false} align="end">
-              {AGENT_KINDS.map((kind) => (
-                <SelectItem key={kind} value={kind}>
-                  {AGENT_NAMES[kind]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className={cn(ROW, "justify-between")}>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className={LABEL}>Model</span>
+          <span className={HINT}>
+            Empty uses {AGENT_NAMES[skillAgent]}'s default
+          </span>
         </div>
-        <div className="flex items-center justify-between gap-3 border-border border-b py-2">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-foreground">Model</span>
-            <span className="text-muted-foreground text-xs">
-              Empty uses {AGENT_NAMES[skillAgent]}'s default
+        <Input
+          aria-label={`Model for ${AGENT_NAMES[skillAgent]}`}
+          className="h-7 w-40 rounded-[5px]"
+          placeholder="default"
+          spellCheck={false}
+          value={skillModels[skillAgent]}
+          onChange={(event) => setSkillModel(skillAgent, event.target.value)}
+        />
+      </div>
+      {skills.map((skill) => (
+        <div
+          key={skill.path}
+          className={cn(ROW, "flex-col items-start gap-0.5")}
+        >
+          <span className="truncate font-mono text-[12.5px] text-foreground">
+            /{skill.name}
+          </span>
+          {skill.description && (
+            <span className={cn(HINT, "w-full truncate")}>
+              {skill.description}
             </span>
-          </div>
-          <Input
-            aria-label={`Model for ${AGENT_NAMES[skillAgent]}`}
-            className="h-7 w-40"
-            placeholder="Default"
-            spellCheck={false}
-            value={skillModels[skillAgent]}
-            onChange={(event) => setSkillModel(skillAgent, event.target.value)}
-          />
+          )}
         </div>
-        {skills.map((skill) => (
-          <div
-            key={skill.path}
-            className="flex flex-col gap-0.5 border-border border-b py-2"
-          >
-            <span className="truncate text-foreground">/{skill.name}</span>
-            {skill.description && (
-              <span className="truncate text-muted-foreground text-xs">
-                {skill.description}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
+      ))}
+    </SettingsSection>
   );
 }
 
@@ -517,21 +556,18 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
         backLabel="Back to notes"
       />
 
-      <main className="mx-auto mt-9 w-full max-w-2xl flex-1 overflow-y-auto pt-7 pr-7 pb-6 pl-12">
-        <h1 className="font-serif text-[32px] text-heading leading-[1.1] tracking-[-0.01em]">
+      <main className="mx-auto mt-9 w-full max-w-2xl flex-1 overflow-y-auto pt-9 pr-7 pb-16 pl-12 [mask-image:linear-gradient(to_bottom,#000_calc(100%-32px),transparent)]">
+        <h1 className="text-(length:--day-title-size) font-serif text-heading leading-[1.15] tracking-[-0.018em]">
           Settings
         </h1>
 
-        <section className="mt-7 flex flex-col gap-3">
-          <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
-            Notes folder
-          </h2>
-          <div className="flex items-center justify-between gap-3">
+        <SettingsSection title="Notes folder">
+          <div className={cn(ROW, "justify-between gap-6 border-t")}>
             <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate text-foreground">{folderName}</span>
-              <span className="truncate text-muted-foreground text-xs">
+              <span className={cn(LABEL, "truncate")}>{folderName}</span>
+              <span className="truncate text-meta text-muted-foreground">
                 {folderPath}
-                {!isLoading && ` · ${files.length} files`}
+                {!isLoading && ` · ${files.length} notes`}
               </span>
             </div>
             <Button variant="outline" size="sm" onClick={handleChangeFolder}>
@@ -539,26 +575,24 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
             </Button>
           </div>
           <NotesSyncRow folderPath={folderPath} />
-        </section>
+        </SettingsSection>
 
-        <section className="mt-7 flex flex-col gap-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
-              Git repositories
-            </h2>
-            {connectedRepos.length > 0 && (
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+        <SettingsSection
+          title="Git repositories"
+          action={
+            connectedRepos.length > 0 && (
+              <SectionAction
                 onClick={async () => await fetchRepos()}
                 disabled={isFetching}
               >
-                {isFetching ? "Fetching..." : "Fetch all"}
-              </button>
-            )}
-          </div>
+                {isFetching ? "fetching…" : "fetch all"}
+              </SectionAction>
+            )
+          }
+          description="Connect the repositories you work in. Each day lists what you committed, grouped by repo and branch."
+        >
           <RepoConnector key={folderPath} markdownDirectory={folderPath} />
-        </section>
+        </SettingsSection>
 
         <GitHubSection folderPath={folderPath} />
 
@@ -567,9 +601,7 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
         <SkillsSection folderPath={folderPath} />
 
         {appVersion && (
-          <p className="mt-7 text-muted-foreground text-xs">
-            stream {appVersion}
-          </p>
+          <p className="mt-12 text-faint text-meta">stream {appVersion}</p>
         )}
       </main>
 

@@ -100,7 +100,7 @@ function SyncControl({
     <button
       type="button"
       className={cn(
-        "shrink-0 hover:text-foreground disabled:pointer-events-none",
+        "shrink-0 transition-colors hover:text-foreground disabled:pointer-events-none",
         error && "text-destructive",
         className,
       )}
@@ -128,7 +128,7 @@ export function StatusFooter() {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 flex h-6 items-center gap-3.5 border-t bg-background px-3 text-[11.5px] text-muted-foreground">
+    <div className="fixed inset-x-0 bottom-0 z-50 flex h-7 items-center gap-4 border-t bg-background px-3.5 text-meta text-muted-foreground">
       <StatusLine />
       <UpdateStatus />
     </div>
@@ -149,12 +149,12 @@ export function Footer({ folderPath }: FooterProps) {
   const folderName = folderPath?.split("/").pop() || folderPath || "";
 
   return (
-    <div className="@container z-50 flex h-6 shrink-0 items-center gap-3.5 border-t bg-background px-3 text-[11.5px] text-muted-foreground">
+    <div className="@container z-50 flex h-7 shrink-0 items-center gap-4 border-t bg-background px-3.5 text-meta text-muted-foreground">
       {/* News matters more than the counts when the window is narrow */}
-      <div className="flex min-w-0 shrink-[100] items-center gap-3.5 overflow-hidden">
+      <div className="flex min-w-0 shrink-[100] items-center gap-4 overflow-hidden">
         <button
           type="button"
-          className="truncate text-foreground"
+          className="truncate text-foreground transition-colors hover:text-primary"
           onClick={() => setSettingsOpen(true)}
           title={folderPath}
         >
@@ -167,7 +167,7 @@ export function Footer({ folderPath }: FooterProps) {
         <button
           type="button"
           className={cn(
-            "shrink-0 hover:text-foreground disabled:pointer-events-none",
+            "shrink-0 transition-colors hover:text-foreground disabled:pointer-events-none",
             hasNews && "@max-2xl:hidden",
           )}
           disabled={connectedReposCount === 0 || isFetching}
@@ -187,7 +187,10 @@ export function Footer({ folderPath }: FooterProps) {
       <UpdateStatus />
       <button
         type="button"
-        className="shrink-0 hover:text-foreground"
+        className={cn(
+          "shrink-0 transition-colors hover:text-foreground",
+          settingsOpen && "text-foreground",
+        )}
         onClick={() => setSettingsOpen(!settingsOpen)}
         title={settingsOpen ? "Close settings" : "Open settings"}
       >

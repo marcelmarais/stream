@@ -142,7 +142,7 @@ export function FileCalendar({
               type="button"
               disabled={isLoadingMetadata}
               title="Open calendar"
-              className="no-drag h-6 hover:text-foreground disabled:opacity-50"
+              className="no-drag h-6 transition-colors hover:text-foreground disabled:opacity-50 data-popup-open:text-foreground"
             />
           }
         >

@@ -32,7 +32,7 @@ export function Titlebar({
   return (
     <div
       data-tauri-drag-region
-      className="drag fixed inset-x-0 top-0 z-40 flex h-9 items-center gap-4 border-b bg-background px-3"
+      className="drag fixed inset-x-0 top-0 z-40 flex h-9 items-center gap-4 bg-background px-3 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent"
     >
       <div
         data-tauri-drag-region
@@ -41,10 +41,10 @@ export function Titlebar({
         {onBack && (
           <button
             type="button"
-            className="no-drag flex h-6 items-center gap-1.5 whitespace-nowrap text-muted-foreground hover:text-foreground"
+            className="no-drag flex h-6 items-center gap-1.5 whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
             onClick={onBack}
           >
-            <ArrowLeft className="size-3" />
+            <ArrowLeft className="size-3.5" />
             {backLabel || "Back"}
           </button>
         )}

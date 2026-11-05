@@ -56,92 +56,77 @@ function HomeContent() {
       <>
         <Titlebar isLoading={true} />
         <div className="flex min-h-screen items-center justify-center pt-9">
-          <div className="animate-pulse text-muted-foreground">Loading...</div>
+          <div className="animate-pulse text-faint">Loading…</div>
         </div>
       </>
     );
   }
 
+  const pickFolder = async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const folderPath = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (folderPath && typeof folderPath === "string") {
+        handleFolderSelected(folderPath);
+      }
+    } catch (error) {
+      console.error("Error opening folder picker:", error);
+    }
+  };
+
+  const folderName = selectedFolder?.split("/").pop() || selectedFolder;
+
   return (
     <>
       <Titlebar isLoading={false} />
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 pt-9">
-        <div className="w-full max-w-md space-y-8 text-center">
-          <div className="space-y-2">
-            <h1 className="cursor-default select-none font-serif text-[32px] text-heading">
-              stream.
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-8 pt-9 pb-16">
+        <div className="flex w-full max-w-sm flex-col items-center gap-10 text-center">
+          <div className="flex cursor-default select-none flex-col items-center gap-3">
+            <h1 className="font-serif text-[48px] text-heading leading-none tracking-[-0.025em]">
+              stream<span className="text-primary">.</span>
             </h1>
-            <p className="cursor-default select-none text-muted-foreground">
-              Select a folder to get started
+            <p className="max-w-[32ch] font-sans text-muted-foreground text-prose">
+              Daily notes for engineers. Your commits, pull requests and agents
+              show up under each day.
             </p>
           </div>
 
-          <div className="space-y-4">
-            {!selectedFolder ? (
+          {!selectedFolder ? (
+            <Button onClick={pickFolder} className="h-9 w-full text-[13px]">
+              Choose a notes folder
+            </Button>
+          ) : (
+            <div className="flex w-full flex-col gap-3">
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    const { open } = await import("@tauri-apps/plugin-dialog");
-                    const folderPath = await open({
-                      directory: true,
-                      multiple: false,
-                    });
-
-                    if (folderPath && typeof folderPath === "string") {
-                      handleFolderSelected(folderPath);
-                    }
-                  } catch (error) {
-                    console.error("Error opening folder picker:", error);
-                  }
-                }}
-                className="h-8 w-full rounded-sm bg-primary px-3 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/80"
+                onClick={pickFolder}
+                className="group flex w-full items-center gap-3 rounded-[7px] border border-well-rule bg-well px-4 py-3 text-left transition-colors hover:border-rail"
+                title={selectedFolder}
               >
-                Open Folder
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-sans text-[14px] text-foreground">
+                    {folderName}
+                  </span>
+                  <span className="truncate text-faint text-meta">
+                    {selectedFolder}
+                  </span>
+                </span>
+                <span className="shrink-0 text-meta text-muted-foreground transition-colors group-hover:text-foreground">
+                  change
+                </span>
               </button>
-            ) : (
-              <div className="space-y-3">
-                <Button
-                  variant="ghost"
-                  onClick={async () => {
-                    try {
-                      const { open } = await import(
-                        "@tauri-apps/plugin-dialog"
-                      );
-                      const folderPath = await open({
-                        directory: true,
-                        multiple: false,
-                      });
-
-                      if (folderPath && typeof folderPath === "string") {
-                        handleFolderSelected(folderPath);
-                      }
-                    } catch (error) {
-                      console.error("Error opening folder picker:", error);
-                    }
-                  }}
-                  className="h-auto w-full justify-start border-well-rule bg-well px-3 py-2.5 text-muted-foreground"
-                >
-                  <div className="flex w-full min-w-0 items-center gap-3">
-                    <div className="flex min-w-0 flex-1 flex-col items-center">
-                      <div
-                        className="max-w-full truncate text-foreground"
-                        title={selectedFolder}
-                      >
-                        {selectedFolder}
-                      </div>
-                      <div className="mt-1 text-muted-foreground text-xs">
-                        Click to change
-                      </div>
-                    </div>
-                  </div>
-                </Button>
-                <Button onClick={handleContinue} className="w-full">
-                  Open
-                </Button>
-              </div>
-            )}
-          </div>
+              <Button
+                onClick={handleContinue}
+                className="h-9 w-full text-[13px]"
+              >
+                Open notes
+              </Button>
+            </div>
+          )}
         </div>
       </div>
       <StatusFooter />
@@ -156,9 +141,7 @@ export default function Home() {
         <>
           <Titlebar isLoading={true} />
           <div className="flex min-h-screen items-center justify-center pt-9">
-            <div className="animate-pulse text-muted-foreground">
-              Loading...
-            </div>
+            <div className="animate-pulse text-faint">Loading…</div>
           </div>
         </>
       }

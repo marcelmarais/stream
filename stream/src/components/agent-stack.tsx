@@ -345,7 +345,7 @@ function AgentBadge({
           <Tooltip.Popup
             onClick={openChat}
             className={cn(
-              "flex w-[280px] flex-col gap-1 rounded-[3px] border border-well-rule bg-popover px-[9px] py-[7px] font-mono text-[11.5px] leading-[1.4] shadow-md",
+              "flex w-[280px] flex-col gap-1 rounded-[5px] border border-well-rule bg-popover px-2.5 py-2 font-mono text-meta leading-[1.45] shadow-black/30 shadow-lg",
               chat && "cursor-pointer",
             )}
           >

@@ -203,36 +203,46 @@ const menuTheme = EditorView.theme({
   ".cm-tooltip.cm-tooltip-autocomplete": {
     backgroundColor: "var(--popover)",
     border: "none",
-    borderRadius: "var(--radius)",
+    borderRadius: "7px",
     boxShadow:
-      "0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent), 0 4px 12px rgb(0 0 0 / 0.12)",
+      "0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent), 0 12px 32px rgb(0 0 0 / 0.35)",
     color: "var(--popover-foreground)",
     fontFamily: "var(--font-geist-sans), ui-sans-serif, sans-serif",
-    fontSize: "12px",
+    fontSize: "13px",
   },
   ".cm-tooltip.cm-tooltip-autocomplete > ul": {
     fontFamily: "inherit",
-    maxHeight: "15rem",
-    maxWidth: "min(22rem, 90vw)",
-    minWidth: "16rem",
+    maxHeight: "16rem",
+    maxWidth: "min(24rem, 90vw)",
+    minWidth: "17rem",
     padding: "4px",
   },
   ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
-    borderRadius: "var(--radius)",
-    lineHeight: "1.4",
+    borderRadius: "4px",
+    lineHeight: "1.45",
     padding: "6px 8px",
   },
   ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
-    backgroundColor: "var(--accent)",
-    color: "var(--accent-foreground)",
+    backgroundColor: "var(--well-raised)",
+    color: "var(--foreground)",
   },
   ".cm-tooltip.cm-tooltip-autocomplete > ul > completion-section": {
     border: "none",
-    color: "var(--muted-foreground)",
+    color: "var(--faint)",
+    fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+    fontSize: "11.5px",
     opacity: "1",
-    padding: "4px 8px",
+    padding: "6px 8px 4px",
   },
-  ".cm-completionMatchedText": { textDecoration: "none" },
+  ".cm-completionLabel": {
+    color: "var(--foreground)",
+    fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+    fontSize: "12.5px",
+  },
+  ".cm-completionMatchedText": {
+    color: "var(--primary)",
+    textDecoration: "none",
+  },
   ".cm-completionDetail": {
     color: "var(--muted-foreground)",
     display: "block",
@@ -240,6 +250,7 @@ const menuTheme = EditorView.theme({
     marginLeft: "0",
     overflow: "hidden",
     textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
 });
 

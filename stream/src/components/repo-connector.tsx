@@ -42,12 +42,12 @@ function RepoRow({
     <CommandItem
       value={repo.display_path}
       onSelect={onToggle}
-      className="gap-2.5 px-2.5 py-1.5 [&>svg]:hidden"
+      className="mx-1 gap-3 px-2 py-1.5 [&>svg]:hidden"
     >
       <span
         aria-hidden="true"
         className={cn(
-          "flex size-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+          "flex size-3.5 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
           isConnected
             ? "border-primary bg-primary text-primary-foreground"
             : "border-input",
@@ -64,7 +64,7 @@ function RepoRow({
         </span>
       </span>
       {repo.last_modified && (
-        <span className="shrink-0 text-muted-foreground">
+        <span className="shrink-0 text-faint text-meta">
           {formatDistanceToNowStrict(repo.last_modified, { addSuffix: true })}
         </span>
       )}
@@ -121,16 +121,20 @@ export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
     <div className="flex flex-col gap-2">
       <Command
         filter={filterRepos}
-        className="rounded-sm border border-well-rule bg-well"
+        className="rounded-[6px] border border-well-rule bg-well"
       >
         <CommandInput autoFocus placeholder="Filter repositories" />
-        <CommandList className="max-h-[22rem]">
+        <CommandList className="max-h-[22rem] pb-1">
           {isLoading && (
-            <div className="px-2.5 py-3 text-muted-foreground">
-              Looking for repositories...
+            <div className="px-3 py-3 font-sans text-faint text-prose">
+              Looking for repositories…
             </div>
           )}
-          {!isLoading && <CommandEmpty>No repositories found</CommandEmpty>}
+          {!isLoading && (
+            <CommandEmpty className="font-sans text-faint text-prose">
+              No repositories found
+            </CommandEmpty>
+          )}
           {connected.length > 0 && (
             <CommandGroup heading="Connected">
               {connected.map(renderRow)}
@@ -146,10 +150,10 @@ export function RepoConnector({ markdownDirectory }: RepoConnectorProps) {
 
       <button
         type="button"
-        className="self-start text-muted-foreground hover:text-foreground"
+        className="self-start text-meta text-muted-foreground transition-colors hover:text-foreground"
         onClick={handleChooseFolder}
       >
-        Choose a folder
+        choose a folder…
       </button>
     </div>
   );
