@@ -66,7 +66,7 @@ function TimelinePageContent() {
   if (isLoading || !folderPath) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-faint">Loading…</div>
       </div>
     );
   }
@@ -79,7 +79,7 @@ export default function TimelinePage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <div className="animate-pulse text-muted-foreground">Loading...</div>
+          <div className="animate-pulse text-faint">Loading…</div>
         </div>
       }
     >
@@ -253,14 +253,14 @@ function TimelineView({ folderPath }: { folderPath: string }) {
           showLoading ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
-          <div className="text-muted-foreground">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-5 animate-spin rounded-full border-2 border-rail border-t-primary" />
+          <div className="text-faint text-meta">Loading notes…</div>
         </div>
       </div>
 
       {!isLoadingMetadata && allFilesMetadata.length > 0 && (
-        <div className="mx-auto mt-9 min-h-0 w-full max-w-2xl flex-1">
+        <div className="mx-auto mt-9 min-h-0 w-full max-w-2xl flex-1 [mask-image:linear-gradient(to_bottom,#000_calc(100%-32px),transparent)]">
           <Virtuoso
             ref={virtuosoRef}
             totalCount={allFilesMetadata.length}
@@ -308,16 +308,19 @@ function EmptyState({ folderPath }: { folderPath: string }) {
 
   return (
     <div className="flex flex-1 items-center justify-center p-8">
-      <div className="flex max-w-[300px] flex-col items-center gap-4 text-center">
-        <h2 className="font-serif text-[22px] text-heading leading-[1.2]">
+      <div className="flex max-w-[320px] flex-col items-center gap-4 text-center">
+        <h2 className="font-serif text-[28px] text-heading leading-[1.15] tracking-[-0.015em]">
           No notes yet
         </h2>
-        <p className="text-muted-foreground">
+        <p className="font-sans text-muted-foreground text-prose">
           Files named{" "}
-          <code className="bg-muted px-1 text-foreground">YYYY-MM-DD.md</code>{" "}
+          <code className="rounded-[4px] border border-well-rule bg-muted px-1 font-mono text-[12.5px] text-foreground">
+            YYYY-MM-DD.md
+          </code>{" "}
           in this folder show up here.
         </p>
         <Button
+          className="mt-2 h-9 px-4 text-[13px]"
           onClick={() => createToday(folderPath)}
           disabled={creatingToday}
         >

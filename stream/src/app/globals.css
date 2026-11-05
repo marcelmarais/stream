@@ -40,6 +40,27 @@
   --radius-md: calc(var(--radius) + 1px);
   --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Interface type. Mono labels the app, sans carries anything you read. */
+  --text-meta: 11.5px;
+  --text-meta--line-height: 1.5;
+  --text-ui: 12.5px;
+  --text-ui--line-height: 1.5;
+  --text-prose: 13.5px;
+  --text-prose--line-height: 1.55;
+}
+
+/* Registered so a day can fade between its present and past colours */
+@property --body {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d3d7d1;
+}
+
+@property --heading {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #eef1ec;
 }
 
 :root {
@@ -73,23 +94,29 @@
   --input: #c3c8bf;
   --ring: #3f6b00;
 
-  /* Note typography. Headings 1 and 2 are Geist Serif, the rest are mono. */
-  --note-font-size: 14.5px;
-  --note-line-height: 1.55;
-  --note-code-size: 0.88em;
+  /* Note typography. Headings 1 and 2 are Geist Serif, the rest are sans. */
+  --day-title-size: 34px;
+  --note-font-size: 16px;
+  --note-line-height: 1.6;
+  --note-code-size: 0.875em;
   --note-list-indent: 1.5em;
-  --note-h1-size: 28px;
-  --note-h1-line-height: 1.15;
-  --note-h2-size: 22px;
-  --note-h2-line-height: 1.2;
-  --note-h3-size: 13.5px;
-  --note-h3-line-height: 1.4;
-  --note-h4-size: 13.5px;
-  --note-h4-line-height: 1.4;
-  --note-h5-size: 13.5px;
-  --note-h5-line-height: 1.4;
-  --note-h6-size: 13.5px;
-  --note-h6-line-height: 1.4;
+  --note-h1-size: 27px;
+  --note-h1-line-height: 1.2;
+  --note-h2-size: 21px;
+  --note-h2-line-height: 1.3;
+  --note-h3-size: 16.5px;
+  --note-h3-line-height: 1.45;
+  --note-h4-size: 16px;
+  --note-h4-line-height: 1.5;
+  --note-h5-size: 14.5px;
+  --note-h5-line-height: 1.5;
+  --note-h6-size: 14.5px;
+  --note-h6-line-height: 1.5;
+
+  /* Days before today step back until you point at them */
+  --body-past: #4f5650;
+  --heading-past: #3d433e;
+  --note-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 .dark {
@@ -121,6 +148,9 @@
   --border: #262a28;
   --input: #3a403d;
   --ring: #c8f03c;
+  --body-past: #a3aba5;
+  --heading-past: #bcc3bd;
+  --note-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%230c0e0d' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 @layer base {
@@ -199,6 +229,24 @@
   html::-webkit-scrollbar,
   body::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Earlier days step back, and come forward when you point at or write in them */
+.note-day {
+  transition:
+    --body 240ms ease,
+    --heading 240ms ease;
+}
+
+.note-day[data-past]:not(:hover, :focus-within) {
+  --body: var(--body-past);
+  --heading: var(--heading-past);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-day {
+    transition: none;
   }
 }
 

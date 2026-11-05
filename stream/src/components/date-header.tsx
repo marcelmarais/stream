@@ -174,14 +174,12 @@ export function DateHeader({
   }, [updateMeasuredWidths]);
 
   return (
-    <div className="relative mb-4 flex flex-col items-start gap-1.5">
+    <div className="relative mb-5 flex flex-col items-start gap-1">
       <span
         aria-hidden="true"
         className={cn(
-          "-left-7 absolute top-3 size-[9px] rounded-[1px]",
-          isToday
-            ? "bg-primary"
-            : "border border-muted-foreground bg-background",
+          "-left-7 absolute top-[15px] size-[9px] rounded-[2px]",
+          isToday ? "bg-primary" : "border border-faint bg-background",
         )}
       />
       {renderTitle(
@@ -190,17 +188,17 @@ export function DateHeader({
           className="group flex w-full items-center gap-3 text-left"
           onClick={onToggleFocus}
         >
-          <h1 className="line-clamp-1 min-w-0 font-serif text-[32px] text-heading leading-[1.1] tracking-[-0.01em]">
+          <h1 className="text-(length:--day-title-size) line-clamp-1 min-w-0 font-serif text-heading leading-[1.15] tracking-[-0.018em]">
             {dayTitle}
           </h1>
           {isFocused ? (
-            <EyeSlashIcon className="size-4 shrink-0 text-muted-foreground" />
+            <EyeSlashIcon className="size-4 shrink-0 text-faint transition-colors group-hover:text-foreground" />
           ) : (
-            <EyeIcon className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+            <EyeIcon className="size-4 shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100" />
           )}
         </button>,
       )}
-      <div className="flex max-w-full items-center gap-1.5 text-muted-foreground text-xs">
+      <div className="flex h-5 max-w-full items-center gap-1.5 font-sans text-[13px] text-muted-foreground">
         <div className="relative flex shrink-0 items-center">
           <span
             ref={cityMirrorRef}
@@ -242,12 +240,12 @@ export function DateHeader({
             onClick={!isEditing ? handleStartEdit : undefined}
             placeholder={cityPlaceholder}
             style={{ width: cityWidthPx ? `${cityWidthPx}px` : undefined }}
-            className="m-0 h-[18px] min-w-0 cursor-text rounded-none border-none bg-transparent p-0 text-muted-foreground text-xs shadow-none placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
+            className="m-0 h-5 min-w-0 cursor-text rounded-none border-none bg-transparent p-0 font-sans text-[13px] text-muted-foreground shadow-none placeholder:text-faint focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-100 md:text-[13px] dark:bg-transparent"
             autoFocus={isEditing}
             disabled={isPending}
             readOnly={!isEditing}
           />
-          <span>,&nbsp;</span>
+          <span className="-ml-px">,&nbsp;</span>
           <Input
             value={shownCountry}
             onChange={(e) => {
@@ -260,7 +258,7 @@ export function DateHeader({
             style={{
               width: countryWidthPx ? `${countryWidthPx}px` : undefined,
             }}
-            className="m-0 h-[18px] min-w-0 cursor-text rounded-none border-none bg-transparent p-0 text-muted-foreground text-xs shadow-none placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-100 dark:bg-transparent"
+            className="m-0 h-5 min-w-0 cursor-text rounded-none border-none bg-transparent p-0 font-sans text-[13px] text-muted-foreground shadow-none placeholder:text-faint focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-100 md:text-[13px] dark:bg-transparent"
             disabled={isPending}
             readOnly={!isEditing}
           />

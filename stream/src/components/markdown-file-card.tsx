@@ -1,4 +1,9 @@
-import { CheckIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react";
+import {
+  CheckIcon,
+  CopyIcon,
+  MagnifyingGlassIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion } from "framer-motion";
 import { type ReactNode, useRef, useState } from "react";
@@ -173,12 +178,11 @@ export function FileCard({
     saveContentImmediate,
   } = useFileContentManager(file.filePath);
 
+  const isToday = getDateKey(file.dateFromFilename) === getDateKey(new Date());
   const { data: commitsByDate = {} } = useCommitsForDate(
     folderPath,
     file.dateFromFilename,
-    {
-      autoRefresh: getDateKey(file.dateFromFilename) === getDateKey(new Date()),
-    },
+    { autoRefresh: isToday },
   );
 
   const commits = getCommitsForDate(commitsByDate, file.dateFromFilename);
@@ -190,7 +194,13 @@ export function FileCard({
   };
 
   return (
-    <article className={cn("relative pt-6 pr-7 pb-3 pl-12", isLast && "pb-12")}>
+    <article
+      data-past={isToday ? undefined : ""}
+      className={cn(
+        "note-day relative pt-9 pr-7 pb-6 pl-12",
+        isLast && "pb-16",
+      )}
+    >
       <span
         aria-hidden="true"
         className="absolute inset-y-0 left-6 w-px bg-rail"
@@ -300,15 +310,18 @@ export function SearchButton({
   return (
     <button
       type="button"
-      className="no-drag flex h-6 w-full max-w-[300px] items-center justify-between rounded-sm bg-card px-2 text-muted-foreground hover:text-foreground"
+      className="no-drag group flex h-[26px] w-full max-w-[280px] items-center gap-2 rounded-[5px] border border-border bg-well/70 pr-1 pl-2 text-muted-foreground transition-colors hover:border-rail hover:text-foreground"
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      title="Search markdown files (Cmd/Ctrl+F)"
+      title="Search notes (⌘F)"
     >
-      <span>search</span>
-      <span className="text-faint">⌘F</span>
+      <MagnifyingGlassIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="flex-1 text-left">search</span>
+      <kbd className="rounded-[3px] border border-border px-1 font-mono text-[10.5px] text-faint leading-4 transition-colors group-hover:text-muted-foreground">
+        ⌘F
+      </kbd>
     </button>
   );
 }
@@ -331,11 +344,11 @@ export function HeaderActions({
   );
 
   return (
-    <div className="no-drag flex shrink-0 items-center gap-3 text-muted-foreground">
+    <div className="no-drag flex shrink-0 items-center gap-3.5 text-muted-foreground">
       {!todayFileExists && (
         <button
           type="button"
-          className="no-drag h-6 hover:text-foreground disabled:opacity-50"
+          className="no-drag h-6 text-primary transition-colors hover:text-foreground disabled:opacity-50"
           onClick={async () => await createToday(folderPath)}
           disabled={isLoadingMetadata || Boolean(creatingToday)}
           title="Create today's file"
@@ -396,7 +409,7 @@ export function FocusedFileOverlay({
           aria-hidden="true"
           className="absolute inset-y-0 left-6 w-px bg-rail"
         />
-        <article className="min-h-0 flex-1 overflow-auto pt-1 pr-7 pb-6 pl-12">
+        <article className="min-h-0 flex-1 overflow-auto pt-4 pr-7 pb-8 pl-12 [mask-image:linear-gradient(to_bottom,transparent,#000_16px,#000_calc(100%-32px),transparent)]">
           <DateHeader
             fileMetadata={file}
             isFocused={true}

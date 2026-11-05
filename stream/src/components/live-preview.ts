@@ -343,9 +343,13 @@ function buildDecorations(view: EditorView) {
               : new BulletWidget(/\d/.test(marker) ? marker : "•");
             const end = includeTrailingSpace(state, task?.to ?? node.to);
 
+            const isDone = widget instanceof TaskWidget && widget.checked;
+
             decorations.push(
               Decoration.line({
-                class: "cm-note-list-item",
+                class: isDone
+                  ? "cm-note-list-item cm-note-task-done"
+                  : "cm-note-list-item",
                 attributes: { style: `--note-list-depth: ${depth}` },
               }).range(line.from),
             );
@@ -784,6 +788,7 @@ const noteHighlighting = HighlightStyle.define([
 ]);
 
 const SERIF_FONT = 'var(--font-geist-serif), "Times New Roman", serif';
+const SANS_FONT = "var(--font-geist-sans), ui-sans-serif, sans-serif";
 const MONO_FONT = "var(--font-geist-mono), ui-monospace, monospace";
 
 // Geist Serif has one weight and thin hairlines, so it stops at heading 2
@@ -791,14 +796,14 @@ const headingStyles = Object.fromEntries(
   [1, 2, 3, 4, 5, 6].map((level) => [
     `.cm-note-h${level}`,
     {
-      fontFamily: level <= 2 ? SERIF_FONT : MONO_FONT,
+      fontFamily: level <= 2 ? SERIF_FONT : SANS_FONT,
       fontSize: `var(--note-h${level}-size)`,
       lineHeight: `var(--note-h${level}-line-height)`,
       fontWeight: level <= 2 ? "400" : "600",
       fontSynthesis: "none",
-      letterSpacing: level <= 2 ? "-0.01em" : "0",
-      color: "var(--heading)",
-      paddingTop: "0.5em",
+      letterSpacing: level <= 2 ? "-0.015em" : "-0.006em",
+      color: level <= 4 ? "var(--heading)" : "var(--muted-foreground)",
+      paddingTop: level <= 2 ? "0.45em" : "0.35em",
     },
   ]),
 );
@@ -807,7 +812,7 @@ const noteTheme = EditorView.theme({
   "&": {
     backgroundColor: "transparent",
     color: "var(--body)",
-    fontFamily: "var(--font-geist-sans), ui-sans-serif, sans-serif",
+    fontFamily: SANS_FONT,
     fontSize: "var(--note-font-size)",
     minHeight: "inherit",
   },
@@ -818,60 +823,88 @@ const noteTheme = EditorView.theme({
     overflow: "visible",
   },
   ".cm-content": {
-    caretColor: "var(--foreground)",
+    caretColor: "var(--primary)",
     minHeight: "inherit",
     padding: "0",
   },
   ".cm-line": { padding: "0" },
-  ".cm-placeholder": { color: "var(--muted-foreground)" },
+  ".cm-placeholder": { color: "var(--faint)" },
   ".cm-note-marker": {
-    color: "var(--muted-foreground)",
+    color: "var(--faint)",
     left: "calc(var(--note-list-indent) * var(--note-list-depth))",
     position: "absolute",
   },
   ".cm-note-checkbox": {
-    accentColor: "var(--primary)",
+    appearance: "none",
+    backgroundColor: "transparent",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+    backgroundSize: "100%",
+    border: "1.5px solid var(--faint)",
+    borderRadius: "4px",
+    cursor: "pointer",
     height: "0.9em",
     margin: "0",
-    verticalAlign: "-0.1em",
+    transition: "background-color 120ms ease, border-color 120ms ease",
+    verticalAlign: "-0.12em",
     width: "0.9em",
   },
+  ".cm-note-checkbox:hover": { borderColor: "var(--muted-foreground)" },
+  ".cm-note-checkbox:checked": {
+    backgroundColor: "var(--primary)",
+    backgroundImage: "var(--note-check)",
+    borderColor: "var(--primary)",
+  },
+  ".cm-note-task-done": { color: "var(--muted-foreground)" },
   ".cm-note-list-item": {
     minHeight: "calc(var(--note-line-height) * 1em)",
     paddingLeft: "calc(var(--note-list-indent) * (var(--note-list-depth) + 1))",
     position: "relative",
   },
   ".cm-note-quote": {
-    borderLeft: "0.2em solid var(--border)",
-    paddingLeft: "0.8em",
+    borderLeft: "2px solid var(--rail)",
+    color: "var(--muted-foreground)",
+    paddingLeft: "0.9em",
   },
   ".cm-note-code, .cm-note-codeblock": {
     backgroundColor: "var(--muted)",
     fontFamily: MONO_FONT,
     fontSize: "var(--note-code-size)",
   },
-  ".cm-note-code": { borderRadius: "0.2em", padding: "0.1em 0.25em" },
-  ".cm-note-codeblock": { padding: "0 0.75em" },
+  ".cm-note-code": {
+    border: "1px solid var(--well-rule)",
+    borderRadius: "4px",
+    padding: "0.05em 0.3em",
+  },
+  ".cm-note-codeblock": { padding: "0 0.85em" },
   ".cm-note-rule": {
-    borderTop: "1px solid var(--border)",
+    borderTop: "1px solid var(--rail)",
     display: "inline-block",
     verticalAlign: "middle",
     width: "100%",
   },
-  ".cm-note-link": { textDecoration: "underline" },
+  ".cm-note-link, .cm-note-link-chip": {
+    textDecoration: "underline",
+    textDecorationColor: "color-mix(in srgb, currentColor 35%, transparent)",
+    textDecorationThickness: "1px",
+    textUnderlineOffset: "0.22em",
+    transition: "text-decoration-color 120ms ease, color 120ms ease",
+  },
   ".cm-note-link-chip": {
     cursor: "pointer",
     display: "inline-block",
     maxWidth: "min(100%, 22em)",
     overflow: "hidden",
-    textDecoration: "underline",
     textOverflow: "ellipsis",
     verticalAlign: "bottom",
     whiteSpace: "nowrap",
   },
-  ".cm-note-link-chip:hover": { color: "var(--heading)" },
+  ".cm-note-link-chip:hover": {
+    color: "var(--heading)",
+    textDecorationColor: "currentColor",
+  },
   ".cm-note-link-icon": {
-    borderRadius: "2px",
+    borderRadius: "3px",
     color: "var(--muted-foreground)",
     display: "inline-block",
     fill: "currentColor",
@@ -880,7 +913,10 @@ const noteTheme = EditorView.theme({
     verticalAlign: "-0.15em",
     width: "1em",
   },
-  ".cm-note-strike": { textDecoration: "line-through" },
+  ".cm-note-strike": {
+    color: "var(--muted-foreground)",
+    textDecoration: "line-through",
+  },
   // Hangs in the margin left of the note, between the rail and the text
   ".cm-note-fold": {
     alignItems: "center",
@@ -907,7 +943,7 @@ const noteTheme = EditorView.theme({
   ".cm-note-fold-placeholder": {
     color: "var(--muted-foreground)",
     cursor: "pointer",
-    fontFamily: "var(--font-geist-sans), ui-sans-serif, sans-serif",
+    fontFamily: SANS_FONT,
     fontSize: "var(--note-font-size)",
     fontWeight: "400",
     marginLeft: "0.4em",
