@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/demo.gif" alt="Commits, pull requests and a Claude Code agent waiting for you, all under today's note in Stream" />
+  <img src=".github/demo.gif" width="720" alt="Commits, pull requests and a Claude Code agent waiting for you, all under today's note in Stream" />
 </p>
 
 ## What it does
