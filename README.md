@@ -14,7 +14,9 @@
   <a href="https://www.differentiated.io/stream">Website</a>
 </p>
 
-https://github.com/user-attachments/assets/9f320143-e342-481f-a886-acdeadb86e85
+<p align="center">
+  <img src=".github/demo.gif" width="720" alt="Commits, pull requests and a Claude Code agent waiting for you, all under today's note in Stream" />
+</p>
 
 ## What it does
 
