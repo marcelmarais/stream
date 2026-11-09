@@ -55,6 +55,37 @@ describe("installTauriMock", () => {
     ).toEqual(["2026-01-02.md"]);
   });
 
+  it("tells fs watchers about notes changed on disk", async () => {
+    installTauriMock();
+    const internals = window.__TAURI_INTERNALS__;
+    const received = [];
+    const channel = { id: internals.transformCallback((m) => received.push(m)) };
+    const rid = await invoke("plugin:fs|watch", {
+      paths: [DEFAULT_FOLDER],
+      options: { recursive: true, delayMs: 200 },
+      onEvent: channel,
+    });
+    const path = window.__STREAM_PREVIEW__.notePath(0);
+
+    window.__STREAM_PREVIEW__.changeOnDisk(path, "From git");
+    await invoke("plugin:resources|close", { rid });
+    window.__STREAM_PREVIEW__.changeOnDisk(path, "After closing");
+
+    expect(received).toEqual([
+      {
+        index: 0,
+        message: {
+          type: { modify: { kind: "data", mode: "content" } },
+          paths: [path],
+          attrs: {},
+        },
+      },
+    ]);
+    expect(
+      await invoke("read_markdown_files_content", { filePaths: [path] }),
+    ).toEqual({ [path]: "After closing" });
+  });
+
   it("has no saved folder when folder is null", async () => {
     installTauriMock({ folder: null });
     const rid = await invoke("plugin:store|load", { path: "settings.json" });

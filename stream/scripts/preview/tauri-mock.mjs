@@ -402,6 +402,11 @@ export function installTauriMock(options = {}) {
   const storeByRid = new Map();
   let nextId = 1;
 
+  // Channels and listeners hand Tauri a callback id; keep the callbacks so the
+  // mock can talk back, as the fs watcher does
+  const callbacks = new Map();
+  const watchers = new Map();
+
   const openStore = ({ path }) => {
     const rid = nextId++;
     stores[path] ??= {};
@@ -537,6 +542,21 @@ export function installTauriMock(options = {}) {
       files.delete(path);
       return null;
     },
+    "plugin:fs|watch": ({ paths, onEvent }) => {
+      const rid = nextId++;
+      // A channel numbers its messages from 0 and drops any out of turn
+      watchers.set(rid, { paths, channel: onEvent?.id ?? onEvent, index: 0 });
+      return rid;
+    },
+    "plugin:fs|unwatch": ({ rid }) => {
+      watchers.delete(rid);
+      return null;
+    },
+    "plugin:resources|close": ({ rid }) => {
+      watchers.delete(rid);
+      storeByRid.delete(rid);
+      return null;
+    },
     "plugin:fs|stat": ({ path }) => {
       if (!files.has(path)) throw missing(path);
       return {
@@ -585,7 +605,34 @@ export function installTauriMock(options = {}) {
     "plugin:window|start_dragging": () => null,
   };
 
-  window.__STREAM_PREVIEW__ = { handled: Object.keys(handlers), unhandled: [] };
+  /** Changes a note the way git or another app would, and tells watchers. */
+  const changeOnDisk = (path, text) => {
+    if (text === null) {
+      files.delete(path);
+    } else {
+      files.set(path, text);
+    }
+    const type =
+      text === null
+        ? { remove: { kind: "file" } }
+        : { modify: { kind: "data", mode: "content" } };
+    for (const watcher of watchers.values()) {
+      if (watcher.paths.some((watched) => path.startsWith(watched))) {
+        callbacks.get(watcher.channel)?.({
+          index: watcher.index++,
+          message: { type, paths: [path], attrs: {} },
+        });
+      }
+    }
+  };
+
+  window.__STREAM_PREVIEW__ = {
+    handled: Object.keys(handlers),
+    unhandled: [],
+    notePath: (days = 0) => `${notesFolder}/${dateKey(daysAgo(days))}.md`,
+    readNote: (path) => files.get(path),
+    changeOnDisk,
+  };
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
   window.__TAURI_INTERNALS__ = {
     metadata: {
@@ -593,8 +640,14 @@ export function installTauriMock(options = {}) {
       currentWebview: { windowLabel: "main", label: "main" },
     },
     plugins: {},
-    transformCallback: () => nextId++,
-    unregisterCallback: () => {},
+    transformCallback: (callback) => {
+      const id = nextId++;
+      callbacks.set(id, callback);
+      return id;
+    },
+    unregisterCallback: (id) => {
+      callbacks.delete(id);
+    },
     convertFileSrc: (path) => path,
     invoke: async (command, args = {}, invokeOptions) => {
       const handler = handlers[command];

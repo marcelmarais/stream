@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { debounce } from "lodash-es";
 import { useEffect, useMemo } from "react";
 import {
@@ -7,10 +12,9 @@ import {
   ensureTodayMarkdownFile,
   fillFileLocation,
   readAllMarkdownFilesMetadata,
-  readMarkdownFilesContentByPaths,
   setFileLocationMetadata,
-  writeMarkdownFileContent,
 } from "@/ipc/markdown-reader";
+import { forget, type NoteCache, readNotes, writeNote } from "@/lib/note-disk";
 import { noteSaved } from "@/lib/notes-sync";
 
 export const markdownKeys = {
@@ -22,6 +26,18 @@ export const markdownKeys = {
   contents: (filePaths: string[]) =>
     [...markdownKeys.all, "contents", filePaths.join(",")] as const,
 };
+
+export function noteCache(
+  queryClient: QueryClient,
+  filePath: string,
+): NoteCache {
+  const queryKey = markdownKeys.content(filePath);
+
+  return {
+    get: () => queryClient.getQueryData<string | null>(queryKey),
+    set: (text) => queryClient.setQueryData(queryKey, text),
+  };
+}
 
 export function useMarkdownMetadata(folderPath: string) {
   return useQuery({
@@ -40,11 +56,12 @@ export function useMarkdownFileContent(filePath: string | null) {
     queryKey: markdownKeys.content(filePath || ""),
     queryFn: async () => {
       if (!filePath) return null;
-      const contentMap = await readMarkdownFilesContentByPaths([filePath]);
+      const contentMap = await readNotes([filePath]);
       return contentMap.get(filePath) ?? "";
     },
     enabled: !!filePath,
-    staleTime: 60000,
+    // useNoteWatcher keeps it fresh. A refetch would replace unsaved typing.
+    staleTime: Number.POSITIVE_INFINITY,
     gcTime: 300000,
   });
 }
@@ -54,7 +71,7 @@ export function useMarkdownFilesContent(filePaths: string[]) {
     queryKey: markdownKeys.contents(filePaths),
     queryFn: async () => {
       if (filePaths.length === 0) return new Map<string, string>();
-      return readMarkdownFilesContentByPaths(filePaths);
+      return readNotes(filePaths);
     },
     enabled: filePaths.length > 0,
   });
@@ -71,7 +88,7 @@ export function useSaveMarkdownFile() {
       filePath: string;
       content: string;
     }) => {
-      await writeMarkdownFileContent(filePath, content);
+      await writeNote(filePath, content, noteCache(queryClient, filePath));
     },
     onMutate: async ({ filePath, content }) => {
       await queryClient.cancelQueries({
@@ -109,9 +126,10 @@ export function useDebouncedSave(filePath: string, delay = 500) {
     [filePath, delay, mutate],
   );
 
+  // Closing focus mode right after typing must still save it
   useEffect(() => {
     return () => {
-      debouncedSave.cancel();
+      debouncedSave.flush();
     };
   }, [debouncedSave]);
 
@@ -135,9 +153,7 @@ export function useCreateFileForDate() {
       });
 
       if (result.filePath) {
-        const contentMap = await readMarkdownFilesContentByPaths([
-          result.filePath,
-        ]);
+        const contentMap = await readNotes([result.filePath]);
         const content = contentMap.get(result.filePath) ?? "";
         queryClient.setQueryData(
           markdownKeys.content(result.filePath),
@@ -160,9 +176,7 @@ export function useCreateTodayFile() {
       });
 
       if (result.filePath) {
-        const contentMap = await readMarkdownFilesContentByPaths([
-          result.filePath,
-        ]);
+        const contentMap = await readNotes([result.filePath]);
         const content = contentMap.get(result.filePath) ?? "";
         queryClient.setQueryData(
           markdownKeys.content(result.filePath),
@@ -212,7 +226,7 @@ export function usePrefetchFileContents() {
 
     const contentMap = await queryClient.fetchQuery({
       queryKey: markdownKeys.contents(filesToLoad),
-      queryFn: () => readMarkdownFilesContentByPaths(filesToLoad),
+      queryFn: () => readNotes(filesToLoad),
     });
 
     for (const [path, content] of contentMap.entries()) {
@@ -309,6 +323,7 @@ export function useDeleteMarkdownFile(folderPath: string) {
   return useMutation({
     mutationFn: async (filePath: string) => {
       await deleteMarkdownFile(filePath);
+      forget(filePath);
       return filePath;
     },
     onSuccess: (filePath) => {

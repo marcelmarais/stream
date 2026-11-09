@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { refreshGitData } from "@/hooks/use-git-queries";
+import { markdownKeys } from "@/hooks/use-markdown-queries";
 import { useWindowFocus } from "@/hooks/use-window-focus";
 import {
   getNotesSyncStatus,
@@ -54,6 +55,10 @@ export function useSyncNotes(folderPath: string) {
         queryKey: notesSyncKeys.status(folderPath),
       });
       refreshGitData(queryClient, folderPath);
+      // A pull can bring new days. useNoteWatcher updates the open ones.
+      queryClient.invalidateQueries({
+        queryKey: markdownKeys.metadata(folderPath),
+      });
     },
   });
 }

@@ -11,7 +11,6 @@ import { type EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, keymap, tooltips } from "@codemirror/view";
 import { HEADING_NODE } from "@/components/heading-fold";
 import { AGENT_NAMES } from "@/ipc/agents";
-import { readMarkdownFilesContentByPaths } from "@/ipc/markdown-reader";
 import { listSkills, type Skill, startSkillThread } from "@/ipc/skills";
 import { useStatusStore } from "@/stores/status-store";
 import { useUserStore } from "@/stores/user-store";
@@ -21,13 +20,10 @@ const WHOLE_SKILL_QUERY = /^\/[\p{L}\p{N}_-]*$/u;
 
 const CODE_NODE = /^(FencedCode|CodeBlock|InlineCode)$/;
 
-const NOTE_CHECK_MS = 1000;
-
 interface SkillMenuOptions {
   filePath: string;
   folderPath: string;
   onSave: (value: string) => void | Promise<void>;
-  onDiskChange: (value: string) => void;
 }
 
 /** A path or a date has text right before its slash, and code stays literal. */
@@ -75,45 +71,16 @@ function headingAbove(state: EditorState, position: number) {
 }
 
 /**
- * Watches the note while an agent works on it. Otherwise the editor would keep
- * the old text, and the next save would overwrite the agent's edits. Stream's
- * own saves come through here too, and the editor ignores those. Returns a
- * function that stops watching after one last look.
- */
-function followNote(
-  filePath: string,
-  saved: string,
-  onDiskChange: (value: string) => void,
-) {
-  let known = saved;
-
-  const check = async () => {
-    const contents = await readMarkdownFilesContentByPaths([filePath]);
-    const onDisk = contents.get(filePath);
-
-    if (onDisk !== undefined && onDisk !== known) {
-      known = onDisk;
-      onDiskChange(onDisk);
-    }
-  };
-
-  const timer = setInterval(check, NOTE_CHECK_MS);
-
-  return async () => {
-    clearInterval(timer);
-    await check();
-  };
-}
-
-/**
- * The note is saved first, so the agent reads what's on screen. The thread runs
- * out of sight, so the footer is the only sign that anything is happening.
+ * The note is saved first, so the agent reads what's on screen. Its edits come
+ * back through useNoteWatcher, merged with whatever is typed meanwhile. The
+ * thread runs out of sight, so the footer is the only sign that anything is
+ * happening.
  */
 async function runSkill(
   view: EditorView,
   skill: Skill,
   position: number,
-  { filePath, folderPath, onSave, onDiskChange }: SkillMenuOptions,
+  { filePath, folderPath, onSave }: SkillMenuOptions,
 ) {
   const { state } = view;
   const doc = state.doc.toString();
@@ -125,23 +92,17 @@ async function runSkill(
 
   try {
     await onSave(doc);
-    const stopFollowing = followNote(filePath, doc, onDiskChange);
-
-    try {
-      await startSkillThread({
-        agent: skillAgent,
-        model: skillModels[skillAgent].trim() || null,
-        skillName: skill.name,
-        folderPath,
-        skillPath: skill.path,
-        notePath: filePath,
-        line: line.number,
-        heading: headingAbove(state, position),
-        text: line.text.trim() || null,
-      });
-    } finally {
-      await stopFollowing();
-    }
+    await startSkillThread({
+      agent: skillAgent,
+      model: skillModels[skillAgent].trim() || null,
+      skillName: skill.name,
+      folderPath,
+      skillPath: skill.path,
+      notePath: filePath,
+      line: line.number,
+      heading: headingAbove(state, position),
+      text: line.text.trim() || null,
+    });
 
     finishSkill(runId, `Finished /${skill.name}`);
   } catch (error) {

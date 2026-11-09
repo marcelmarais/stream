@@ -33,6 +33,7 @@ import {
   useMarkdownMetadata,
   usePrefetchFileContents,
 } from "@/hooks/use-markdown-queries";
+import { useNoteWatcher } from "@/hooks/use-note-watcher";
 import { useAutoSync } from "@/hooks/use-notes-sync";
 import { useSkills } from "@/hooks/use-skills";
 import type { MarkdownFileMetadata } from "@/ipc/markdown-reader";
@@ -92,6 +93,7 @@ function TimelineView({ folderPath }: { folderPath: string }) {
   useConnectedRepos(folderPath);
   usePullRequestPolling(folderPath);
   useAutoSync(folderPath);
+  useNoteWatcher(folderPath);
   useSkills(folderPath);
   const [showLoading, setShowLoading] = useState(true);
   const [focusedFile, setFocusedFile] = useState<MarkdownFileMetadata | null>(
@@ -114,6 +116,17 @@ function TimelineView({ folderPath }: { folderPath: string }) {
   const prefetchCommitsForDates = usePrefetchCommitsForDates();
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+
+  // A pull or another app deleted the note open in focus mode
+  useEffect(() => {
+    if (
+      focusedFile &&
+      !isLoadingMetadata &&
+      !allFilesMetadata.some((file) => file.filePath === focusedFile.filePath)
+    ) {
+      setFocusedFile(null);
+    }
+  }, [allFilesMetadata, focusedFile, isLoadingMetadata]);
 
   const handleScrollToDate = useCallback(
     (date: Date) => {

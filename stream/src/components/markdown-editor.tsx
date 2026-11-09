@@ -10,7 +10,12 @@ import {
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { foldedRanges } from "@codemirror/language";
 import { diff } from "@codemirror/merge";
-import { Annotation, Compartment, EditorState } from "@codemirror/state";
+import {
+  Annotation,
+  Compartment,
+  EditorState,
+  Transaction,
+} from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 import {
@@ -19,6 +24,7 @@ import {
 } from "@/components/heading-fold";
 import { livePreview } from "@/components/live-preview";
 import { skillMenu } from "@/components/skill-menu";
+import { followNoteOnDisk, rebaseChanges } from "@/lib/note-disk";
 import { cn } from "@/lib/utils";
 import { useCollapsedHeadingsStore } from "@/stores/collapsed-headings-store";
 import { useStatusStore } from "@/stores/status-store";
@@ -154,7 +160,6 @@ export function MarkdownEditor({
             filePath: initialRef.current.filePath,
             folderPath: initialRef.current.folderPath,
             onSave: (doc) => callbacksRef.current.onSave(doc),
-            onDiskChange: (doc) => callbacksRef.current.onDiskChange(doc),
           }),
           livePreview(),
           editableRef.current.of(
@@ -202,7 +207,36 @@ export function MarkdownEditor({
 
     viewRef.current = view;
 
+    // Applied here rather than through `value`, so a keystroke can't land
+    // between reading the note and merging it. Undo skips the change.
+    const stopFollowingDisk = followNoteOnDisk(
+      initialRef.current.filePath,
+      ({ base, remote }) => {
+        const changes = rebaseChanges(base, view.state.doc.toString(), remote);
+
+        if (!changes.empty) {
+          view.dispatch({
+            changes,
+            annotations: [
+              externalChange.of(true),
+              Transaction.addToHistory.of(false),
+            ],
+          });
+        }
+
+        const doc = view.state.doc.toString();
+
+        // Typing that wasn't saved yet survived the merge, so save the result
+        if (doc !== remote && view.state.facet(EditorView.editable)) {
+          callbacksRef.current.onChange(doc);
+        } else {
+          callbacksRef.current.onDiskChange(doc);
+        }
+      },
+    );
+
     return () => {
+      stopFollowingDisk();
       viewRef.current = null;
       view.destroy();
     };

@@ -132,6 +132,24 @@
         }
       ]
     },
+    {
+      "identifier": "fs:allow-watch",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/Users/**"
+        },
+        {
+          "path": "/home/**"
+        }
+      ]
+    },
+    "fs:allow-unwatch",
     "fs:allow-exists",
     "store:default",
     "updater:default",

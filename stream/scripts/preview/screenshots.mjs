@@ -153,6 +153,43 @@ const SCENES = {
       await page.waitForTimeout(600);
     },
   },
+  "disk-change": {
+    about: "A pull changes today's note mid-typing, and both are kept",
+    run: async (page) => {
+      await page
+        .locator(".cm-line", { hasText: "Book the train" })
+        .first()
+        .click();
+      await page.keyboard.press("End");
+      await page.keyboard.type(", window seat");
+      // Lands before the typing is saved, as a pull would
+      await page.evaluate(() => {
+        const preview = window.__STREAM_PREVIEW__;
+        const path = preview.notePath(0);
+        preview.changeOnDisk(
+          path,
+          preview
+            .readNote(path)
+            .replace(
+              "## Focus\n\n",
+              "## Focus\n\n- [ ] Call Sam back about the offsite\n",
+            ),
+        );
+      });
+      await page.waitForTimeout(1200);
+
+      const onDisk = await page.evaluate(() =>
+        window.__STREAM_PREVIEW__.readNote(
+          window.__STREAM_PREVIEW__.notePath(0),
+        ),
+      );
+      for (const kept of ["Call Sam back", "14th, window seat"]) {
+        if (!onDisk.includes(kept)) {
+          throw new Error(`The merged note lost "${kept}":\n${onDisk}`);
+        }
+      }
+    },
+  },
   "note-menu": {
     about: "Right-clicking a day's title",
     run: async (page) => {
