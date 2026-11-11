@@ -202,12 +202,13 @@ describe("other people's pull requests", () => {
     expectChecks(row);
   });
 
-  it("stay mine if I committed to the branch", () => {
+  it("stay theirs even if I committed to the branch", () => {
     const mine = commit("tip", 1000);
     const colleagues = { ...mine, is_mine: false };
 
-    expect(rowFor([mine], [theirs]).isMine).toBe(true);
+    expect(rowFor([mine], [theirs]).isMine).toBe(false);
     expect(rowFor([colleagues], [theirs]).isMine).toBe(false);
+    expect(rowFor([colleagues], [pullRequest()]).isMine).toBe(true);
   });
 
   it("never create a row of their own", () => {
@@ -253,6 +254,138 @@ describe("other people's pull requests", () => {
 
     expect(row.title).toBe("main");
     expect(row.pullRequest).toBeUndefined();
+  });
+});
+
+describe("the order of rows", () => {
+  let number = 0;
+  const mine = (branch: string, time: number) =>
+    commit(`${branch}-${time}`, time, [], branch);
+  const theirs = (branch: string, time: number) => ({
+    ...mine(branch, time),
+    is_mine: false,
+  });
+  const pr = (branch: string, overrides: Partial<PullRequest> = {}) => {
+    number += 1;
+    return pullRequest({ branch, number, head_sha: branch, ...overrides });
+  };
+  const orderOf = (commits: GitCommit[], pullRequests: PullRequest[]) =>
+    buildRows(commits, pullRequests, [], undefined, TODAY, TODAY).map(
+      ({ id }) => id,
+    );
+
+  it("puts my pull requests first, then colleagues', then what's done", () => {
+    const commits = [
+      theirs("their-branch", 9000),
+      theirs("their-draft", 8000),
+      theirs("their-open", 7000),
+      mine("my-branch", 6000),
+      mine("my-merged", 5000),
+      mine("my-draft", 4000),
+      mine("my-open", 3000),
+      theirs("their-merged", 2000),
+      mine("main", 1000),
+    ];
+    const pullRequests = [
+      pr("their-merged", { is_mine: false, state: "merged" }),
+      pr("their-draft", { is_mine: false, state: "draft" }),
+      pr("my-merged", { state: "merged" }),
+      pr("their-open", { is_mine: false }),
+      pr("my-draft", { state: "draft" }),
+      pr("my-open"),
+    ];
+
+    expect(orderOf(commits, pullRequests)).toEqual([
+      "main",
+      "my-open",
+      "my-draft",
+      "my-branch",
+      "their-open",
+      "their-draft",
+      "my-merged",
+      "their-branch",
+      "their-merged",
+    ]);
+  });
+
+  it("puts the newest commit first within a group", () => {
+    const commits = [
+      theirs("their-old", 1000),
+      mine("my-old", 2000),
+      theirs("their-new", 3000),
+      mine("my-new", 4000),
+    ];
+    const pullRequests = [
+      pr("my-old"),
+      pr("their-old", { is_mine: false }),
+      pr("their-new", { is_mine: false }),
+      pr("my-new"),
+    ];
+
+    expect(orderOf(commits, pullRequests)).toEqual([
+      "main",
+      "my-new",
+      "my-old",
+      "their-new",
+      "their-old",
+    ]);
+  });
+
+  it("goes by the pull request's last commit when the day has none", () => {
+    const at = (time: number) => new Date(time).toISOString();
+    const pullRequests = [
+      pr("older", { last_commit_at: at(1000) }),
+      pr("newer", { last_commit_at: at(2000) }),
+    ];
+
+    expect(orderOf([], pullRequests)).toEqual(["main", "newer", "older"]);
+  });
+
+  it("leads each group with what needs me", () => {
+    const commits = [
+      mine("passing", 4000),
+      mine("failing", 3000),
+      theirs("their-failing", 2000),
+      theirs("their-requested", 1000),
+    ];
+    const pullRequests = [
+      pr("passing"),
+      pr("failing", { checks: "fail" }),
+      pr("their-failing", { is_mine: false, checks: "fail" }),
+      pr("their-requested", { is_mine: false, review: "requested" }),
+    ];
+
+    expect(orderOf(commits, pullRequests)).toEqual([
+      "main",
+      "failing",
+      "passing",
+      "their-requested",
+      "their-failing",
+    ]);
+  });
+
+  it("keeps a failing draft of mine below my open pull requests", () => {
+    const commits = [mine("draft", 2000), mine("open", 1000)];
+    const pullRequests = [
+      pr("draft", { state: "draft", checks: "fail" }),
+      pr("open"),
+    ];
+
+    expect(orderOf(commits, pullRequests)).toEqual(["main", "open", "draft"]);
+  });
+
+  it("counts a branch with no pull request as mine once I commit to it", () => {
+    const commits = [
+      theirs("shared", 3000),
+      mine("shared", 2000),
+      theirs("their-open", 1000),
+    ];
+
+    expect(orderOf(commits, [pr("their-open", { is_mine: false })])).toEqual([
+      "main",
+      "shared",
+      "their-open",
+    ]);
   });
 });
 

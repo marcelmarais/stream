@@ -21,6 +21,7 @@ export const DEFAULT_FOLDER = "/Users/demo/notes";
  * @property {string} [github] A GitHubStatus state, e.g. "connected" or "gh_missing".
  * @property {string[]} [githubAccounts] The accounts gh is signed in to, the active one first.
  * @property {boolean} [agents] False hides the running agents.
+ * @property {boolean} [colleagues] Fills the stream repo with other people's pull requests and branches.
  * @property {string | null} [update] A version to offer as an update.
  */
 
@@ -32,6 +33,7 @@ export function installTauriMock(options = {}) {
     github = "connected",
     githubAccounts = ["demo"],
     agents: showAgents = true,
+    colleagues = false,
     update = null,
   } = options;
   const notesFolder = folder ?? "/Users/demo/notes";
@@ -176,11 +178,12 @@ export function installTauriMock(options = {}) {
       .flatMap((path) => {
         const match = NOTE_NAME.exec(path);
         if (!match) return [];
-        const day = new Date(
+        // Midnight UTC, as parse_date_from_filename in markdown.rs has it
+        const day = Date.UTC(
           Number(match[1]),
           Number(match[2]) - 1,
           Number(match[3]),
-        ).getTime();
+        );
         return [
           {
             file_path: path,
@@ -200,20 +203,20 @@ export function installTauriMock(options = {}) {
   // ---- Git, GitHub and agents ----------------------------------------------
 
   let commitNumber = 0;
-  const commit = (repo, timestamp, message, branches) => {
+  const commit = (repo, timestamp, message, branches, author = "Demo") => {
     commitNumber += 1;
     return {
       id: `c0ffee${String(commitNumber).padStart(4, "0")}`,
       message,
-      author_name: "Demo",
-      author_email: "demo@example.com",
+      author_name: author,
+      author_email: `${author.toLowerCase()}@example.com`,
       timestamp,
       date: dateKey(new Date(timestamp)),
       repo_path: repo,
       branches,
       parents: [],
       url: `https://github.com/demo/${repo.split("/").pop()}/commit/${commitNumber}`,
-      is_mine: true,
+      is_mine: author === "Demo",
     };
   };
 
@@ -259,6 +262,34 @@ export function installTauriMock(options = {}) {
     commit(repos.stream, at(2, 15, 30), "Plan the quarter", ["main"]),
     commit(repos.stream, at(3, 12, 10), "Bump dependencies", ["main"]),
   ];
+  if (colleagues) {
+    commits.push(
+      commit(
+        repos.stream,
+        minutesAgo(3),
+        "Try SQLite for the index",
+        ["spike-sqlite"],
+        "Tomas",
+      ),
+      commit(
+        repos.stream,
+        minutesAgo(5),
+        "Lay out a day on one page",
+        ["export-pdf"],
+        "Priya",
+      ),
+      commit(repos.stream, minutesAgo(20), "Move between days with j and k", [
+        "calendar-keys",
+      ]),
+      commit(
+        repos.stream,
+        minutesAgo(30),
+        "Bump tauri and its plugins",
+        ["tauri-2-9"],
+        "Tomas",
+      ),
+    );
+  }
   const headOf = (message) => commits.find((c) => c.message === message).id;
 
   const check = (name, status) => ({
@@ -267,8 +298,52 @@ export function installTauriMock(options = {}) {
     url: "https://github.com/demo/stream/actions",
   });
 
+  const pullRequest = (number, title, branch, details) => ({
+    repo_path: repos.stream,
+    number,
+    title,
+    url: `https://github.com/demo/stream/pull/${number}`,
+    state: "open",
+    branch,
+    additions: 64,
+    deletions: 9,
+    comments: 0,
+    checks: "pass",
+    check_runs: [check("check", "pass")],
+    review: null,
+    reviews: [],
+    head_sha: commits.find((c) => c.branches.includes(branch))?.id ?? branch,
+    last_commit_at: null,
+    merged_at: null,
+    is_mine: false,
+    ...details,
+  });
+
+  // Listed the way GitHub might return them, which isn't the order they show in
+  const colleaguesPullRequests = [
+    pullRequest(215, "Upgrade to Tauri 2.9", "tauri-2-9", {
+      state: "draft",
+      last_commit_at: new Date(minutesAgo(30)).toISOString(),
+    }),
+    pullRequest(212, "Show the branch's last commit time", "commit-time", {
+      state: "merged",
+      last_commit_at: new Date(minutesAgo(210)).toISOString(),
+      merged_at: new Date(minutesAgo(200)).toISOString(),
+      is_mine: true,
+    }),
+    pullRequest(216, "Export a day as a PDF", "export-pdf", {
+      last_commit_at: new Date(minutesAgo(5)).toISOString(),
+    }),
+    pullRequest(213, "Fold headings in long notes", "heading-fold", {
+      state: "draft",
+      last_commit_at: new Date(at(1, 17, 30)).toISOString(),
+      is_mine: true,
+    }),
+  ];
+
   const snapshot = {
     pull_requests: [
+      ...(colleagues ? colleaguesPullRequests : []),
       {
         repo_path: repos.stream,
         number: 214,

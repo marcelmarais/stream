@@ -61,7 +61,12 @@ const NO_BRANCH = "no branch";
 const DEFAULT_MAIN_BRANCH = "main";
 const NO_AGENTS: RunningAgent[] = [];
 // Larger than any rank, so other people's work sorts below all of mine
-const OTHER_PEOPLES_RANK = 6;
+// Top to bottom under main: what I have in flight, colleagues' pull requests,
+// what I've landed, then whatever else colleagues pushed
+const ROW_ORDER: Record<"mine" | "theirs", Record<RowState, number>> = {
+  mine: { main: 0, open: 1, draft: 2, branch: 3, merged: 6 },
+  theirs: { main: 0, open: 4, draft: 5, branch: 7, merged: 8 },
+};
 // Relative times only change by the minute, so this keeps them close enough
 const TIME_TICK_MS = 30000;
 const CHANGES_REQUESTED = "CHANGES_REQUESTED";
@@ -346,29 +351,43 @@ function getBranchState(branch: string, commits: GitCommit[]): RowState {
   return isMerged ? "merged" : "branch";
 }
 
-// It's mine if I wrote the pull request or committed to the branch. Either way,
-// an agent on this Mac means I'm working on it now.
+// A pull request belongs to whoever opened it, whoever has committed to it
+// since. A branch without one is mine if I committed to it, or have an agent
+// on it now.
 function isMyWork(
   commits: GitCommit[],
   agents: RunningAgent[],
   pullRequest: PullRequest | undefined,
 ): boolean {
-  return (
-    agents.length > 0 ||
-    Boolean(pullRequest?.is_mine) ||
-    commits.some(({ is_mine }) => is_mine)
-  );
+  return pullRequest
+    ? pullRequest.is_mine
+    : agents.length > 0 || commits.some(({ is_mine }) => is_mine);
 }
 
-function getRowRank({ state, agents, pullRequest, isMine }: WorkRow): number {
-  if (state === "main") {
-    return 0;
+// A colleague's failing checks are theirs to fix. Their pull request only
+// needs me when it's waiting on my review.
+function needsMe({ agents, pullRequest, isMine }: WorkRow): boolean {
+  if (agents.length > 0) {
+    return true;
   }
-  const rank =
-    agents.length > 0 || (pullRequest && needsAttention(pullRequest))
-      ? 1
-      : ["open", "draft", "branch", "merged"].indexOf(state) + 2;
-  return isMine ? rank : rank + OTHER_PEOPLES_RANK;
+  if (!pullRequest) {
+    return false;
+  }
+  return isMine
+    ? needsAttention(pullRequest)
+    : pullRequest.review === "requested";
+}
+
+// Within a group, what needs me leads, then the newest commit
+function compareRows(a: WorkRow, b: WorkRow): number {
+  const order = (row: WorkRow) =>
+    ROW_ORDER[row.isMine ? "mine" : "theirs"][row.state];
+
+  return (
+    order(a) - order(b) ||
+    Number(needsMe(b)) - Number(needsMe(a)) ||
+    (b.lastCommitTime ?? 0) - (a.lastCommitTime ?? 0)
+  );
 }
 
 // Open pull requests are live state, so they sit on today even with no commits.
@@ -510,7 +529,7 @@ export function buildRows(
     }
   }
 
-  return [...rows.values()].sort((a, b) => getRowRank(a) - getRowRank(b));
+  return [...rows.values()].sort(compareRows);
 }
 
 export function groupWork(

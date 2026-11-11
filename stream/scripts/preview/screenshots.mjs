@@ -79,6 +79,19 @@ const SCENES = {
       await page.waitForTimeout(300);
     },
   },
+  "git-panel-busy": {
+    about: "Today's stream repo with colleagues' pull requests and branches",
+    mock: { colleagues: true },
+    run: async (page) => {
+      const tab = page.getByRole("tab", { name: /stream/ }).first();
+      await tab.click();
+      await tab.evaluate((element) =>
+        element.scrollIntoView({ block: "center" }),
+      );
+      await page.mouse.move(5, 5);
+      await page.waitForTimeout(300);
+    },
+  },
   focus: {
     about: "Focus mode, with the docked panel open on the website repo",
     run: async (page) => {

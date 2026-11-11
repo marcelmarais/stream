@@ -56,9 +56,10 @@ When you change the UI:
   rather than writing a one-off Playwright script. Scenes take mock options:
   `folder: null` (first launch), `notes: false` (empty folder),
   `github: "gh_missing"` (or any other GitHub status),
-  `githubAccounts: ["demo", "demo-work"]`, `update: "0.3.0"` and
-  `agents: false`. A scene's `saved` sets preferences from the user store, such
-  as `saved: { githubAccount: "demo-work" }`.
+  `githubAccounts: ["demo", "demo-work"]`, `update: "0.3.0"`,
+  `agents: false` and `colleagues: true` (other people's pull requests and
+  branches in the stream repo). A scene's `saved` sets preferences from the
+  user store, such as `saved: { githubAccount: "demo-work" }`.
 - When the app calls a new Tauri command or plugin, add a handler to
   `tauri-mock.mjs`. `pnpm test` fails if a command registered in
   `src-tauri/src/lib.rs` has no handler, and a screenshot run lists any call
