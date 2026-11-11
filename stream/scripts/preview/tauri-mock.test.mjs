@@ -59,7 +59,9 @@ describe("installTauriMock", () => {
     installTauriMock();
     const internals = window.__TAURI_INTERNALS__;
     const received = [];
-    const channel = { id: internals.transformCallback((m) => received.push(m)) };
+    const channel = {
+      id: internals.transformCallback((m) => received.push(m)),
+    };
     const rid = await invoke("plugin:fs|watch", {
       paths: [DEFAULT_FOLDER],
       options: { recursive: true, delayMs: 200 },
