@@ -36,7 +36,7 @@
 2. Pick a folder for your notes.
 3. Open **settings** and connect your repos.
 
-Pull requests and checks come through the [GitHub CLI](https://cli.github.com), so install it and run `gh auth login` to see them. Settings shows whether the connection is working. If gh is signed in to more than one account, Settings also lets you choose which one Stream uses, whichever is active in gh.
+Pull requests and checks come through the [GitHub CLI](https://cli.github.com), so install it and run `gh auth login` to see them. Settings shows whether the connection is working. If gh is signed in to more than one account, Settings also lets you choose which one Stream uses for your repositories and which one syncs your notes, whichever is active in gh.
 
 ## Shortcuts
 

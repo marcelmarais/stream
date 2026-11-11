@@ -471,7 +471,7 @@ describe("the fetch-failed note", () => {
     const client = new QueryClient();
     client.setQueryData(gitKeys.repos(FOLDER), REPOS);
     client.setQueryData(
-      repoFetchQuery(FOLDER, REPOS, null).queryKey,
+      repoFetchQuery(FOLDER, REPOS, { repos: null, notes: null }).queryKey,
       results as [],
     );
 

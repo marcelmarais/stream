@@ -157,6 +157,32 @@ const SCENES = {
       await scrollToGitHub(page);
     },
   },
+  "sync-accounts": {
+    about: "Settings with two GitHub accounts, choosing which one syncs notes",
+    viewport: { width: 600, height: 1000 },
+    mock: { githubAccounts: ["demo", "demo-work"] },
+    run: async (page) => {
+      await openSettings(page);
+      await page
+        .getByRole("combobox", { name: "Account for syncing notes" })
+        .click();
+      await page.waitForTimeout(300);
+    },
+  },
+  "sync-account-chosen": {
+    about: "Settings with one account for the notes, another for the repos",
+    viewport: { width: 600, height: 1200 },
+    mock: { githubAccounts: ["demo", "demo-work"] },
+    saved: { githubAccount: "demo-work", notesSyncAccount: "demo" },
+    run: openSettings,
+  },
+  "sync-account-missing": {
+    about: "Settings when the notes' account has been signed out of gh",
+    viewport: { width: 600, height: 1000 },
+    mock: { githubAccounts: ["demo", "demo-work"] },
+    saved: { notesSyncAccount: "demo-old" },
+    run: openSettings,
+  },
   calendar: {
     about: "The calendar popover",
     run: async (page) => {

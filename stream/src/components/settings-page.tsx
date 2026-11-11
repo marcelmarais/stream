@@ -50,8 +50,8 @@ const AGENT_KINDS: AgentKind[] = ["claude", "codex"];
 
 const GH_INSTALL_URL = "https://cli.github.com";
 
-// The select's value for following gh. A login can't contain a colon.
-const ACTIVE_ACCOUNT = ":active";
+// The select's value for not choosing an account. A login can't contain a colon.
+const NO_ACCOUNT = ":none";
 
 interface GitHubProblem {
   title: string;
@@ -282,19 +282,68 @@ function GitHubProblemRow({
   );
 }
 
+/** The accounts gh is signed in to, and whether the chosen one is still there */
+function useAccountChoice(chosen: string | null) {
+  const { accounts, isLoaded } = useGitHubAccounts();
+  const logins = accounts.map(({ login }) => login);
+  const isMissing = isLoaded && chosen !== null && !logins.includes(chosen);
+
+  if (isMissing) {
+    logins.push(chosen);
+  }
+
+  return {
+    logins,
+    isMissing,
+    // With one account there's nothing to choose
+    canChoose: logins.length > 1 || chosen !== null,
+  };
+}
+
+function AccountSelect({
+  label,
+  fallback,
+  logins,
+  account,
+  onChange,
+}: {
+  label: string;
+  fallback: string; // What to call not choosing an account
+  logins: string[];
+  account: string | null;
+  onChange: (login: string | null) => void;
+}) {
+  return (
+    <Select
+      value={account ?? NO_ACCOUNT}
+      onValueChange={(login) =>
+        login && onChange(login === NO_ACCOUNT ? null : login)
+      }
+    >
+      <SelectTrigger size="sm" aria-label={label}>
+        <SelectValue>
+          {(login: string) => (login === NO_ACCOUNT ? fallback : login)}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent alignItemWithTrigger={false} align="end">
+        <SelectItem value={NO_ACCOUNT}>{fallback}</SelectItem>
+        {logins.map((login) => (
+          <SelectItem key={login} value={login}>
+            {login}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function GitHubAccountRow() {
   const githubAccount = useUserStore((state) => state.githubAccount);
   const setGitHubAccount = useUserStore((state) => state.setGitHubAccount);
-  const accounts = useGitHubAccounts();
+  const { logins, canChoose } = useAccountChoice(githubAccount);
 
-  // With one account there's nothing to choose
-  if (accounts.length < 2 && githubAccount === null) {
+  if (!canChoose) {
     return null;
-  }
-
-  const logins = accounts.map(({ login }) => login);
-  if (githubAccount !== null && !logins.includes(githubAccount)) {
-    logins.push(githubAccount);
   }
 
   return (
@@ -304,31 +353,16 @@ function GitHubAccountRow() {
         <span className={HINT}>
           {githubAccount === null
             ? "Follows whichever account is active in gh."
-            : "Used for everything on GitHub, whichever account is active in gh."}
+            : "Used for your repositories and skills, whichever is active in gh."}
         </span>
       </div>
-      <Select
-        value={githubAccount ?? ACTIVE_ACCOUNT}
-        onValueChange={(login) =>
-          login && setGitHubAccount(login === ACTIVE_ACCOUNT ? null : login)
-        }
-      >
-        <SelectTrigger size="sm" aria-label="GitHub account">
-          <SelectValue>
-            {(login: string) =>
-              login === ACTIVE_ACCOUNT ? "Active in gh" : login
-            }
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false} align="end">
-          <SelectItem value={ACTIVE_ACCOUNT}>Active in gh</SelectItem>
-          {logins.map((login) => (
-            <SelectItem key={login} value={login}>
-              {login}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <AccountSelect
+        label="GitHub account"
+        fallback="Active in gh"
+        logins={logins}
+        account={githubAccount}
+        onChange={setGitHubAccount}
+      />
     </div>
   );
 }
@@ -440,6 +474,42 @@ function NotesSyncRow({ folderPath }: { folderPath: string }) {
           className="mt-0.5"
         />
       )}
+    </div>
+  );
+}
+
+function NotesSyncAccountRow({ folderPath }: { folderPath: string }) {
+  const account = useUserStore((state) => state.notesSyncAccount);
+  const setAccount = useUserStore((state) => state.setNotesSyncAccount);
+  const { data: status } = useNotesSyncStatus(folderPath);
+  const { logins, isMissing, canChoose } = useAccountChoice(account);
+
+  if (!status?.repo_root || !canChoose) {
+    return null;
+  }
+
+  let hint = "Pushes and pulls with git's own sign-in.";
+  if (isMissing) {
+    hint = `gh isn't signed in to ${account}, so sync uses git's own sign-in.`;
+  } else if (account !== null) {
+    hint = "Pushes and pulls on github.com as this account.";
+  }
+
+  return (
+    <div className={cn(ROW, "justify-between gap-6")}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className={LABEL}>Sync account</span>
+        <span className={cn(HINT, isMissing && "text-destructive")}>
+          {hint}
+        </span>
+      </div>
+      <AccountSelect
+        label="Account for syncing notes"
+        fallback="Git's own"
+        logins={logins}
+        account={account}
+        onChange={setAccount}
+      />
     </div>
   );
 }
@@ -639,6 +709,7 @@ export function SettingsPage({ folderPath }: { folderPath: string }) {
             </Button>
           </div>
           <NotesSyncRow folderPath={folderPath} />
+          <NotesSyncAccountRow folderPath={folderPath} />
         </SettingsSection>
 
         <SettingsSection

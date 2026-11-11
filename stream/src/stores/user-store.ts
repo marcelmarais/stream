@@ -19,6 +19,7 @@ interface UserState {
   skillAgent: AgentKind;
   skillModels: Record<AgentKind, string>; // Empty uses the agent's own default
   githubAccount: string | null; // Null follows whichever account is active in gh
+  notesSyncAccount: string | null; // Null leaves the notes' pushes and pulls to git's own sign-in
 
   // Actions
   setFolderPath: (path: string | null) => void;
@@ -29,6 +30,7 @@ interface UserState {
   setSkillAgent: (agent: AgentKind) => void;
   setSkillModel: (agent: AgentKind, model: string) => void;
   setGitHubAccount: (login: string | null) => void;
+  setNotesSyncAccount: (login: string | null) => void;
   reset: () => void;
 }
 
@@ -41,6 +43,7 @@ const initialState = {
   skillAgent: "claude" as AgentKind,
   skillModels: { claude: "", codex: "" },
   githubAccount: null as string | null,
+  notesSyncAccount: null as string | null,
 };
 
 export const useUserStore = create<UserState>()(
@@ -67,6 +70,8 @@ export const useUserStore = create<UserState>()(
 
       setGitHubAccount: (login) => set({ githubAccount: login }),
 
+      setNotesSyncAccount: (login) => set({ notesSyncAccount: login }),
+
       reset: () => set(initialState),
     }),
     {
@@ -78,6 +83,7 @@ export const useUserStore = create<UserState>()(
         skillAgent: state.skillAgent,
         skillModels: state.skillModels,
         githubAccount: state.githubAccount,
+        notesSyncAccount: state.notesSyncAccount,
       }),
     },
   ),

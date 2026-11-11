@@ -109,20 +109,61 @@ export function refreshGitData(queryClient: QueryClient, folderPath: string) {
   });
 }
 
+/** The GitHub accounts chosen in settings. Null leaves it to gh or git. */
+export interface FetchAccounts {
+  repos: string | null;
+  notes: string | null;
+}
+
+function fetchReposAs(
+  repoPaths: string[],
+  githubAccount: string | null,
+): Promise<FetchResult[]> {
+  return invoke("fetch_repos", { repoPaths, githubAccount });
+}
+
+/**
+ * The repo that holds the notes is fetched as the account that syncs them,
+ * which may be the only one of the two that can read it
+ */
+async function fetchRepos(
+  folderPath: string,
+  repos: string[],
+  accounts: FetchAccounts,
+): Promise<FetchResult[]> {
+  const holdsNotes = (repo: string) =>
+    folderPath === repo || folderPath.startsWith(`${repo}/`);
+  const notesRepos =
+    accounts.repos === accounts.notes ? [] : repos.filter(holdsNotes);
+
+  if (notesRepos.length === 0) {
+    return fetchReposAs(repos, accounts.repos);
+  }
+
+  const otherRepos = repos.filter((repo) => !holdsNotes(repo));
+  const results = await Promise.all([
+    otherRepos.length > 0 ? fetchReposAs(otherRepos, accounts.repos) : [],
+    fetchReposAs(notesRepos, accounts.notes),
+  ]);
+  return results.flat();
+}
+
 // A query rather than a mutation, so there's one run at a time however it was
 // started, and every panel can read how the latest one went.
 export function repoFetchQuery(
   folderPath: string,
   repos: string[],
-  githubAccount: string | null,
+  accounts: FetchAccounts,
 ) {
   return queryOptions({
-    queryKey: [...gitKeys.fetch(folderPath), repos, githubAccount] as const,
+    queryKey: [
+      ...gitKeys.fetch(folderPath),
+      repos,
+      accounts.repos,
+      accounts.notes,
+    ] as const,
     queryFn: async ({ client }) => {
-      const results: FetchResult[] = await invoke("fetch_repos", {
-        repoPaths: repos,
-        githubAccount,
-      });
+      const results = await fetchRepos(folderPath, repos, accounts);
       refreshGitData(client, folderPath);
       return results;
     },
@@ -307,7 +348,7 @@ export function useRemoveRepo(folderPath: string) {
 export function useFetchRepos(folderPath: string) {
   const queryClient = useQueryClient();
   const { data: repos = [] } = useConnectedRepos(folderPath);
-  const githubAccount = useGitHubAccount();
+  const accounts = useFetchAccounts();
 
   return useMutation({
     mutationFn: async () => {
@@ -315,7 +356,7 @@ export function useFetchRepos(folderPath: string) {
         return [];
       }
       return queryClient.fetchQuery({
-        ...repoFetchQuery(folderPath, repos, githubAccount),
+        ...repoFetchQuery(folderPath, repos, accounts),
         staleTime: 0,
       });
     },
@@ -334,10 +375,10 @@ function useBackgroundFetch(
   repos: string[],
   isWindowFocused: boolean,
 ) {
-  const githubAccount = useGitHubAccount();
+  const accounts = useFetchAccounts();
 
   useQuery({
-    ...repoFetchQuery(folderPath, repos, githubAccount),
+    ...repoFetchQuery(folderPath, repos, accounts),
     enabled: repos.length > 0,
     refetchInterval: isWindowFocused ? FETCH_POLL_MS : false,
   });
@@ -348,9 +389,9 @@ function useBackgroundFetch(
  */
 export function useFetchFailure(folderPath: string): string | null {
   const { data: repos = [] } = useConnectedRepos(folderPath);
-  const githubAccount = useGitHubAccount();
+  const accounts = useFetchAccounts();
   const { data, error } = useQuery({
-    ...repoFetchQuery(folderPath, repos, githubAccount),
+    ...repoFetchQuery(folderPath, repos, accounts),
     enabled: false,
   });
 
@@ -467,10 +508,17 @@ function useGitHubAccount() {
   return useUserStore((state) => state.githubAccount);
 }
 
+function useFetchAccounts(): FetchAccounts {
+  const repos = useGitHubAccount();
+  const notes = useUserStore((state) => state.notesSyncAccount);
+
+  return { repos, notes };
+}
+
 /**
  * Hook to list the accounts gh is signed in to, for as long as it's mounted
  */
-export function useGitHubAccounts(): GitHubAccount[] {
+export function useGitHubAccounts() {
   const { data } = useQuery({
     queryKey: gitKeys.githubAccounts(),
     queryFn: listGitHubAccounts,
@@ -478,7 +526,7 @@ export function useGitHubAccounts(): GitHubAccount[] {
     retry: false,
   });
 
-  return data ?? NO_GITHUB_ACCOUNTS;
+  return { accounts: data ?? NO_GITHUB_ACCOUNTS, isLoaded: data !== undefined };
 }
 
 /**

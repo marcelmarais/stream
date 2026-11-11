@@ -19,6 +19,7 @@ vi.hoisted(() => {
 
 const FOLDER = "/notes";
 const REPOS = ["/repos/stream"];
+const NO_ACCOUNTS = { repos: null, notes: null };
 const FETCHED: FetchResult[] = [
   { repo_path: "/repos/stream", success: true, message: "Fetched" },
 ];
@@ -44,7 +45,10 @@ describe("repoFetchQuery", () => {
     const running = deferred<FetchResult[]>();
     vi.mocked(invoke).mockReturnValue(running.promise);
     const client = new QueryClient();
-    const query = { ...repoFetchQuery(FOLDER, REPOS, null), staleTime: 0 };
+    const query = {
+      ...repoFetchQuery(FOLDER, REPOS, NO_ACCOUNTS),
+      staleTime: 0,
+    };
 
     const first = client.fetchQuery(query);
     const second = client.fetchQuery(query);
@@ -58,7 +62,10 @@ describe("repoFetchQuery", () => {
   it("fetches again once the last one has finished", async () => {
     vi.mocked(invoke).mockResolvedValue(FETCHED);
     const client = new QueryClient();
-    const query = { ...repoFetchQuery(FOLDER, REPOS, null), staleTime: 0 };
+    const query = {
+      ...repoFetchQuery(FOLDER, REPOS, NO_ACCOUNTS),
+      staleTime: 0,
+    };
 
     await client.fetchQuery(query);
     await client.fetchQuery(query);
@@ -70,13 +77,62 @@ describe("repoFetchQuery", () => {
     vi.mocked(invoke).mockResolvedValue(FETCHED);
     const client = new QueryClient();
 
-    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, null));
-    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, "marcel-work"));
+    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, NO_ACCOUNTS));
+    await client.fetchQuery(
+      repoFetchQuery(FOLDER, REPOS, { repos: "marcel-work", notes: null }),
+    );
 
     expect(invoke).toHaveBeenCalledTimes(2);
     expect(invoke).toHaveBeenLastCalledWith("fetch_repos", {
       repoPaths: REPOS,
       githubAccount: "marcel-work",
+    });
+  });
+
+  it("fetches the repo holding the notes as the account that syncs them", async () => {
+    vi.mocked(invoke).mockImplementation(async (_command, args) =>
+      (args as { repoPaths: string[] }).repoPaths.map((repo_path) => ({
+        repo_path,
+        success: true,
+        message: "Fetched",
+      })),
+    );
+    const client = new QueryClient();
+    const repos = ["/repos/stream", "/brain", "/brain-archive"];
+    const accounts = { repos: "marcel-work", notes: "marcel" };
+
+    const results = await client.fetchQuery(
+      repoFetchQuery("/brain/Daily Notes", repos, accounts),
+    );
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke).toHaveBeenCalledWith("fetch_repos", {
+      repoPaths: ["/repos/stream", "/brain-archive"],
+      githubAccount: "marcel-work",
+    });
+    expect(invoke).toHaveBeenCalledWith("fetch_repos", {
+      repoPaths: ["/brain"],
+      githubAccount: "marcel",
+    });
+    expect(results.map(({ repo_path }) => repo_path).sort()).toEqual(
+      [...repos].sort(),
+    );
+  });
+
+  it("fetches everything at once when the notes sync as the same account", async () => {
+    vi.mocked(invoke).mockResolvedValue(FETCHED);
+    const client = new QueryClient();
+    const repos = ["/repos/stream", "/brain"];
+    const accounts = { repos: "marcel", notes: "marcel" };
+
+    await client.fetchQuery(
+      repoFetchQuery("/brain/Daily Notes", repos, accounts),
+    );
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("fetch_repos", {
+      repoPaths: repos,
+      githubAccount: "marcel",
     });
   });
 
@@ -90,7 +146,7 @@ describe("repoFetchQuery", () => {
     client.setQueryData(pullRequests, {});
     client.setQueryData(otherFolder, {});
 
-    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, null));
+    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, NO_ACCOUNTS));
 
     const isInvalidated = (queryKey: readonly unknown[]) =>
       client.getQueryState(queryKey)?.isInvalidated;
@@ -115,7 +171,7 @@ describe("fetching when the window regains focus", () => {
 
   it("waits until the last fetch is over two minutes old", async () => {
     const client = new QueryClient();
-    const query = repoFetchQuery(FOLDER, REPOS, null);
+    const query = repoFetchQuery(FOLDER, REPOS, NO_ACCOUNTS);
     const background = new QueryObserver(client, query);
     // Every panel reads the same query, and mustn't change when it goes stale
     const panel = new QueryObserver(client, { ...query, enabled: false });
