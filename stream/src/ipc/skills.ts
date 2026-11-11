@@ -25,6 +25,7 @@ export interface SkillRun {
   line: number;
   heading: string | null;
   text: string | null;
+  githubAccount: string | null; // The agent's gh runs as this account
 }
 
 /**

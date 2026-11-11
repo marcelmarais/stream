@@ -27,6 +27,9 @@ const SHELL_TIMEOUT: Duration = Duration::from_secs(5);
 /// `gh` exits with this when it has no account to use.
 const GH_EXIT_LOGGED_OUT: i32 = 4;
 
+/// Stream only reads github.com remotes, so only this host's accounts matter.
+const GITHUB_HOST: &str = "github.com";
+
 /// One request covers every repo, so a refresh costs one call however many
 /// repos are connected.
 const PULL_REQUESTS_FRAGMENT: &str = r#"
@@ -137,6 +140,13 @@ pub struct UnreadableRepo {
     pub message: String,
 }
 
+/// An account gh is signed in to on github.com
+#[derive(Debug, Serialize, PartialEq)]
+pub struct GitHubAccount {
+    pub login: String,
+    pub active: bool, // The one gh uses when Stream hasn't been given one
+}
+
 /// The result of asking GitHub, through gh, what this Mac can see
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -149,6 +159,11 @@ pub enum GitHubStatus {
     },
     GhMissing,
     LoggedOut,
+    /// The account Stream was told to use isn't one gh has any more
+    AccountMissing {
+        login: String,
+        detail: String,
+    },
     TokenRejected {
         detail: String,
     },
@@ -264,6 +279,84 @@ struct GitHubRepo {
     path: String,
     owner: String,
     name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuthStatus {
+    hosts: HashMap<String, Vec<AccountNode>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountNode {
+    login: String,
+    #[serde(default)]
+    active: bool,
+}
+
+/// The account Stream was told to use, as the token gh holds for it. Each
+/// command is handed the token, which leaves gh's own active account alone: a
+/// terminal can be on another one, and switching there changes nothing here.
+#[derive(Clone)]
+pub(crate) struct GitHubAuth {
+    gh: PathBuf,
+    token: String,
+}
+
+impl GitHubAuth {
+    /// Errors with what gh said, which is that it has no such account.
+    async fn for_account(gh: &Path, login: &str) -> Result<Self, String> {
+        let mut command = Command::new(gh);
+        command
+            .args(["auth", "token", "--hostname", GITHUB_HOST, "--user", login])
+            .stdin(Stdio::null())
+            .kill_on_drop(true);
+
+        let output = tokio::time::timeout(GH_TIMEOUT, command.output())
+            .await
+            .map_err(|_| "Timed out waiting for gh".to_string())?
+            .map_err(|e| format!("Failed to run gh: {}", e))?;
+        let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        if !output.status.success() || token.is_empty() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+
+        Ok(Self {
+            gh: gh.to_path_buf(),
+            token,
+        })
+    }
+
+    /// For git, where a missing account is no reason to fail: None leaves git
+    /// to its own credentials, and the GitHub status says what's wrong.
+    pub(crate) async fn find(account: Option<&str>) -> Option<Self> {
+        let gh = find_executable("gh").await?;
+        Self::for_account(&gh, account?).await.ok()
+    }
+
+    fn sign_in_gh(&self, command: &mut Command) {
+        command.env("GH_TOKEN", &self.token);
+    }
+
+    /// What gh reads from GH_TOKEN, for commands that run gh on their own
+    pub(crate) fn token(&self) -> &str {
+        &self.token
+    }
+
+    /// Makes git answer github.com's password prompt with this account,
+    /// whatever credential helpers are configured. Call it before adding the
+    /// subcommand. SSH remotes never ask, so they keep using their key.
+    pub(crate) fn sign_in_git(&self, command: &mut Command) {
+        let gh = self.gh.to_string_lossy().replace('\'', r"'\''");
+        command
+            // An empty helper drops the configured ones, the keychain included
+            .args(["-c", &format!("credential.https://{GITHUB_HOST}.helper=")])
+            .args([
+                "-c",
+                &format!("credential.https://{GITHUB_HOST}.helper=!'{gh}' auth git-credential"),
+            ])
+            .env("GH_TOKEN", &self.token);
+    }
 }
 
 /// What `gh api --include` printed: the status line and headers, then the body
@@ -689,8 +782,45 @@ fn map_github_status(
     }
 }
 
-fn graphql_command(gh: PathBuf, repos: &[GitHubRepo]) -> Command {
+fn parse_accounts(stdout: &[u8]) -> Vec<GitHubAccount> {
+    serde_json::from_slice::<AuthStatus>(stdout)
+        .ok()
+        .and_then(|mut status| status.hosts.remove(GITHUB_HOST))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|account| GitHubAccount {
+            login: account.login,
+            active: account.active,
+        })
+        .collect()
+}
+
+/// Every account gh is signed in to. Empty when gh is missing, signed out or
+/// too old to list them as JSON, and get_github_status says which.
+#[tauri::command]
+pub(crate) async fn list_github_accounts() -> Vec<GitHubAccount> {
+    let Some(gh) = find_executable("gh").await else {
+        return Vec::new();
+    };
+
     let mut command = Command::new(gh);
+    command
+        .args(["auth", "status", "--json", "hosts"])
+        .env("GH_NO_UPDATE_NOTIFIER", "1")
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+
+    match tokio::time::timeout(GH_TIMEOUT, command.output()).await {
+        Ok(Ok(output)) => parse_accounts(&output.stdout),
+        _ => Vec::new(),
+    }
+}
+
+fn graphql_command(gh: PathBuf, auth: Option<&GitHubAuth>, repos: &[GitHubRepo]) -> Command {
+    let mut command = Command::new(gh);
+    if let Some(auth) = auth {
+        auth.sign_in_gh(&mut command);
+    }
     command
         .args(["api", "graphql", "-f"])
         .arg(format!("query={}", build_query(repos.len())))
@@ -711,15 +841,26 @@ fn graphql_command(gh: PathBuf, repos: &[GitHubRepo]) -> Command {
 }
 
 /// Runs the same query as the pull request refresh, so a working status means
-/// that refresh works too.
+/// that refresh works too. Without an account, gh uses its active one.
 #[tauri::command]
-pub(crate) async fn get_github_status(repo_paths: Vec<String>) -> GitHubStatus {
+pub(crate) async fn get_github_status(
+    repo_paths: Vec<String>,
+    github_account: Option<String>,
+) -> GitHubStatus {
     let Some(gh) = find_executable("gh").await else {
         return GitHubStatus::GhMissing;
     };
 
+    let auth = match github_account {
+        Some(login) => match GitHubAuth::for_account(&gh, &login).await {
+            Ok(auth) => Some(auth),
+            Err(detail) => return GitHubStatus::AccountMissing { login, detail },
+        },
+        None => None,
+    };
+
     let repos = github_repos(&repo_paths);
-    let mut command = graphql_command(gh, &repos);
+    let mut command = graphql_command(gh, auth.as_ref(), &repos);
     command.arg("--include");
 
     match tokio::time::timeout(GH_TIMEOUT, command.output()).await {
@@ -741,6 +882,7 @@ pub(crate) async fn get_github_status(repo_paths: Vec<String>) -> GitHubStatus {
 #[tauri::command]
 pub(crate) async fn get_pull_requests(
     repo_paths: Vec<String>,
+    github_account: Option<String>,
 ) -> Result<PullRequestSnapshot, String> {
     let repos = github_repos(&repo_paths);
     if repos.is_empty() {
@@ -755,10 +897,18 @@ pub(crate) async fn get_pull_requests(
         .await
         .ok_or_else(|| "GitHub CLI (gh) is not installed".to_string())?;
 
-    let output = tokio::time::timeout(GH_TIMEOUT, graphql_command(gh, &repos).output())
-        .await
-        .map_err(|_| "Timed out waiting for gh".to_string())?
-        .map_err(|e| format!("Failed to run gh: {}", e))?;
+    let auth = match github_account {
+        Some(login) => Some(GitHubAuth::for_account(&gh, &login).await?),
+        None => None,
+    };
+
+    let output = tokio::time::timeout(
+        GH_TIMEOUT,
+        graphql_command(gh, auth.as_ref(), &repos).output(),
+    )
+    .await
+    .map_err(|_| "Timed out waiting for gh".to_string())?
+    .map_err(|e| format!("Failed to run gh: {}", e))?;
 
     // gh exits non-zero on partial errors, such as one missing repo, but still
     // prints the data for the others.
@@ -1124,6 +1274,97 @@ mod tests {
             .unwrap(),
             json!({ "state": "unreachable", "detail": "offline" })
         );
+        assert_eq!(
+            serde_json::to_value(GitHubStatus::AccountMissing {
+                login: "marcel-work".to_string(),
+                detail: "no oauth token found".to_string(),
+            })
+            .unwrap(),
+            json!({
+                "state": "account_missing",
+                "login": "marcel-work",
+                "detail": "no oauth token found",
+            })
+        );
+    }
+
+    #[test]
+    fn lists_every_github_com_account_and_which_is_active() {
+        let stdout = json!({
+            "hosts": {
+                "github.com": [
+                    { "state": "success", "active": true, "login": "marcelmarais" },
+                    { "state": "error", "active": false, "login": "marcel-work" },
+                ],
+                "github.example.com": [
+                    { "state": "success", "active": true, "login": "enterprise" },
+                ],
+            }
+        })
+        .to_string();
+
+        assert_eq!(
+            parse_accounts(stdout.as_bytes()),
+            vec![
+                GitHubAccount {
+                    login: "marcelmarais".to_string(),
+                    active: true,
+                },
+                GitHubAccount {
+                    login: "marcel-work".to_string(),
+                    active: false,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn no_accounts_when_gh_is_signed_out_or_too_old_for_json() {
+        assert!(parse_accounts(br#"{"hosts":{}}"#).is_empty());
+        assert!(parse_accounts(b"unknown flag: --json").is_empty());
+    }
+
+    fn auth() -> GitHubAuth {
+        GitHubAuth {
+            gh: PathBuf::from("/opt/it's here/gh"),
+            token: "secret".to_string(),
+        }
+    }
+
+    fn env_of<'a>(command: &'a Command, name: &str) -> Option<&'a std::ffi::OsStr> {
+        command
+            .as_std()
+            .get_envs()
+            .find_map(|(key, value)| (key == name).then_some(value)?)
+    }
+
+    #[test]
+    fn a_chosen_account_reaches_gh_as_its_token() {
+        let chosen = graphql_command(PathBuf::from("gh"), Some(&auth()), &[]);
+        let active = graphql_command(PathBuf::from("gh"), None, &[]);
+
+        assert_eq!(env_of(&chosen, "GH_TOKEN"), Some("secret".as_ref()));
+        assert_eq!(env_of(&active, "GH_TOKEN"), None);
+    }
+
+    #[test]
+    fn a_chosen_account_replaces_gits_credential_helpers_for_github() {
+        let mut command = Command::new("git");
+        auth().sign_in_git(&mut command);
+        command.arg("fetch");
+
+        let args: Vec<_> = command.as_std().get_args().collect();
+        assert_eq!(
+            args,
+            [
+                "-c",
+                "credential.https://github.com.helper=",
+                "-c",
+                r"credential.https://github.com.helper=!'/opt/it'\''s here/gh' auth git-credential",
+                "fetch",
+            ]
+        );
+        assert_eq!(env_of(&command, "GH_TOKEN"), Some("secret".as_ref()));
     }
 
     #[test]
@@ -1401,15 +1642,29 @@ mod tests {
     }
 
     /// Runs the real query, so GitHub gets to reject it. Run with
-    /// `REPOS=/path:/path cargo test read_real_repos -- --ignored --nocapture`
+    /// `REPOS=/path:/path cargo test read_real_repos -- --ignored --nocapture`,
+    /// adding `GITHUB_ACCOUNT=login` to read them as that account
     #[test]
     #[ignore]
     fn read_real_repos() {
         let repos = std::env::var("REPOS").unwrap();
         let repos = repos.split(':').map(str::to_string).collect();
 
-        let snapshot = tauri::async_runtime::block_on(get_pull_requests(repos)).unwrap();
+        let account = std::env::var("GITHUB_ACCOUNT").ok();
+
+        let snapshot = tauri::async_runtime::block_on(get_pull_requests(repos, account)).unwrap();
 
         println!("{}", serde_json::to_string(&snapshot).unwrap());
+    }
+
+    /// Lists the accounts the real gh is signed in to. Run with
+    /// `cargo test list_real_accounts -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn list_real_accounts() {
+        let accounts = tauri::async_runtime::block_on(list_github_accounts());
+
+        println!("{accounts:?}");
+        assert!(!accounts.is_empty());
     }
 }

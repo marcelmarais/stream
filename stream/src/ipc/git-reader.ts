@@ -74,6 +74,11 @@ export interface UnreadableRepo {
   message: string;
 }
 
+export interface GitHubAccount {
+  login: string;
+  active: boolean; // The one gh uses when Stream hasn't been given one
+}
+
 export type GitHubStatus =
   | {
       state: "connected";
@@ -84,6 +89,7 @@ export type GitHubStatus =
     }
   | { state: "gh_missing" }
   | { state: "logged_out" }
+  | { state: "account_missing"; login: string; detail: string }
   | { state: "token_rejected"; detail: string }
   | { state: "rate_limited"; detail: string }
   | { state: "unreachable"; detail: string }
@@ -150,13 +156,14 @@ export async function getGitCommitsForRepos(
 
 /**
  * Get pull requests for repositories hosted on GitHub, including other people's
- * so their branches can be labelled. Goes through the gh CLI, so it uses
- * whatever account gh is signed in to.
+ * so their branches can be labelled. Goes through the gh CLI, as the given
+ * account or, without one, whichever is active in gh.
  */
 export async function getPullRequests(
   repoPaths: string[],
+  githubAccount: string | null,
 ): Promise<PullRequestSnapshot> {
-  return invoke("get_pull_requests", { repoPaths });
+  return invoke("get_pull_requests", { repoPaths, githubAccount });
 }
 
 /**
@@ -180,8 +187,16 @@ export async function getBranchTips(repoPaths: string[]): Promise<string[]> {
  */
 export async function getGitHubStatus(
   repoPaths: string[],
+  githubAccount: string | null,
 ): Promise<GitHubStatus> {
-  return invoke("get_github_status", { repoPaths });
+  return invoke("get_github_status", { repoPaths, githubAccount });
+}
+
+/**
+ * List the accounts gh is signed in to on github.com. Empty when gh can't say.
+ */
+export async function listGitHubAccounts(): Promise<GitHubAccount[]> {
+  return invoke("list_github_accounts");
 }
 
 /**

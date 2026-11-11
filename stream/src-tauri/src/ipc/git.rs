@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-use crate::ipc::github::find_executable;
+use crate::ipc::github::{find_executable, GitHubAuth};
 
 /// Maximum number of commits to return per repository to prevent memory issues
 const MAX_COMMITS_PER_REPO: usize = 200;
@@ -57,8 +57,33 @@ pub struct FetchResult {
     pub message: String,
 }
 
+/// The git executable and, once Stream has been told which GitHub account to
+/// use, that account's sign-in for github.com
+#[derive(Clone)]
+pub(crate) struct Git {
+    path: PathBuf,
+    github: Option<GitHubAuth>,
+}
+
+impl Git {
+    pub(crate) fn new(path: PathBuf) -> Self {
+        Self { path, github: None }
+    }
+
+    /// For commands that talk to a remote. The rest never sign in.
+    pub(crate) async fn signed_in(path: PathBuf, github_account: Option<&str>) -> Self {
+        Self {
+            path,
+            github: GitHubAuth::find(github_account).await,
+        }
+    }
+}
+
 #[tauri::command]
-pub(crate) async fn fetch_repos(repo_paths: Vec<String>) -> Result<Vec<FetchResult>, String> {
+pub(crate) async fn fetch_repos(
+    repo_paths: Vec<String>,
+    github_account: Option<String>,
+) -> Result<Vec<FetchResult>, String> {
     let Some(git) = find_executable("git").await else {
         return Ok(repo_paths
             .into_iter()
@@ -69,6 +94,7 @@ pub(crate) async fn fetch_repos(repo_paths: Vec<String>) -> Result<Vec<FetchResu
             })
             .collect());
     };
+    let git = Git::signed_in(git, github_account.as_deref()).await;
 
     let fetches: Vec<_> = repo_paths
         .into_iter()
@@ -417,12 +443,15 @@ fn is_main_branch(branch_name: &str) -> bool {
 /// credential helpers and SSH config. Errors only when git couldn't run or
 /// timed out; a non-zero exit is the caller's to read.
 pub(crate) async fn git_output(
-    git: &Path,
+    git: &Git,
     cwd: &Path,
     args: &[&str],
     timeout: Duration,
 ) -> Result<std::process::Output, String> {
-    let mut command = Command::new(git);
+    let mut command = Command::new(&git.path);
+    if let Some(github) = &git.github {
+        github.sign_in_git(&mut command);
+    }
     command
         .args(args)
         .current_dir(cwd)
@@ -439,7 +468,7 @@ pub(crate) async fn git_output(
 
 /// Like git_output, but a non-zero exit is an error carrying what git said.
 pub(crate) async fn run_git(
-    git: &Path,
+    git: &Git,
     cwd: &Path,
     args: &[&str],
     timeout: Duration,
@@ -469,7 +498,7 @@ const LOCK_RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(500), Duration::
 
 /// Like run_git, but waits out another process's lock before giving up.
 pub(crate) async fn run_git_retrying(
-    git: &Path,
+    git: &Git,
     cwd: &Path,
     args: &[&str],
     timeout: Duration,
@@ -505,7 +534,7 @@ pub(crate) async fn lock_repo(repo_path: &Path) -> tokio::sync::OwnedMutexGuard<
     lock.lock_owned().await
 }
 
-async fn fetch_repo(git: &Path, repo_path: &str, timeout: Duration) -> Result<String, String> {
+async fn fetch_repo(git: &Git, repo_path: &str, timeout: Duration) -> Result<String, String> {
     let _guard = lock_repo(Path::new(repo_path)).await;
     run_git_retrying(git, Path::new(repo_path), &FETCH_ARGS, timeout)
         .await
@@ -849,8 +878,8 @@ mod tests {
         assert!(parents_of(first).is_empty());
     }
 
-    fn git() -> PathBuf {
-        tauri::async_runtime::block_on(find_executable("git")).unwrap()
+    fn git() -> Git {
+        Git::new(tauri::async_runtime::block_on(find_executable("git")).unwrap())
     }
 
     fn fetch(path: &Path, timeout: Duration) -> Result<String, String> {
@@ -938,7 +967,7 @@ mod tests {
         .unwrap();
 
         let result = tauri::async_runtime::block_on(fetch_repo(
-            &slow_git,
+            &Git::new(slow_git),
             clone.path.to_str().unwrap(),
             Duration::from_millis(50),
         ));
@@ -970,14 +999,17 @@ mod tests {
     }
 
     /// Fetches real repos, private ones included, as the app does. Run with
-    /// `REPOS=/path:/path cargo test fetch_real_repos -- --ignored --nocapture`
+    /// `REPOS=/path:/path cargo test fetch_real_repos -- --ignored --nocapture`,
+    /// adding `GITHUB_ACCOUNT=login` to sign in to GitHub as that account
     #[test]
     #[ignore]
     fn fetch_real_repos() {
         let repos = std::env::var("REPOS").unwrap();
         let repos = repos.split(':').map(str::to_string).collect();
 
-        let results = tauri::async_runtime::block_on(fetch_repos(repos)).unwrap();
+        let account = std::env::var("GITHUB_ACCOUNT").ok();
+
+        let results = tauri::async_runtime::block_on(fetch_repos(repos, account)).unwrap();
 
         println!("{results:#?}");
         assert!(results.iter().all(|result| result.success));

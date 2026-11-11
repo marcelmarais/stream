@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ipc::git::{git_output, lock_repo, run_git, run_git_retrying};
+use crate::ipc::git::{git_output, lock_repo, run_git, run_git_retrying, Git};
 use crate::ipc::github::find_executable;
 
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -33,13 +33,16 @@ pub struct NotesSyncResult {
 
 #[tauri::command]
 pub(crate) async fn get_notes_sync_status(folder_path: String) -> Result<NotesSyncStatus, String> {
-    let git = find_git().await?;
+    let git = Git::new(find_git().await?);
     read_status(&git, Path::new(&folder_path)).await
 }
 
 #[tauri::command]
-pub(crate) async fn sync_notes(folder_path: String) -> Result<NotesSyncResult, String> {
-    let git = find_git().await?;
+pub(crate) async fn sync_notes(
+    folder_path: String,
+    github_account: Option<String>,
+) -> Result<NotesSyncResult, String> {
+    let git = Git::signed_in(find_git().await?, github_account.as_deref()).await;
     sync(&git, Path::new(&folder_path)).await
 }
 
@@ -51,7 +54,7 @@ async fn find_git() -> Result<PathBuf, String> {
 
 /// Paths below are relative to the notes folder, which every command runs in,
 /// so "." means "only the notes".
-async fn read_status(git: &Path, folder: &Path) -> Result<NotesSyncStatus, String> {
+async fn read_status(git: &Git, folder: &Path) -> Result<NotesSyncStatus, String> {
     let Some((repo_root, git_dir)) = find_repo(git, folder).await else {
         return Ok(NotesSyncStatus::default());
     };
@@ -78,7 +81,7 @@ async fn read_status(git: &Path, folder: &Path) -> Result<NotesSyncStatus, Strin
     Ok(status)
 }
 
-async fn find_repo(git: &Path, folder: &Path) -> Option<(String, PathBuf)> {
+async fn find_repo(git: &Git, folder: &Path) -> Option<(String, PathBuf)> {
     let output = run_git(
         git,
         folder,
@@ -123,7 +126,7 @@ fn parse_status(porcelain: &str) -> NotesSyncStatus {
     status
 }
 
-async fn sync(git: &Path, folder: &Path) -> Result<NotesSyncResult, String> {
+async fn sync(git: &Git, folder: &Path) -> Result<NotesSyncResult, String> {
     let Some((repo_root, git_dir)) = find_repo(git, folder).await else {
         return Err("The notes folder isn't in a git repository".to_string());
     };
@@ -169,7 +172,7 @@ async fn sync(git: &Path, folder: &Path) -> Result<NotesSyncResult, String> {
 
 /// Commits everything under the notes folder, and nothing else even if other
 /// files are already staged. Returns whether there was anything to commit.
-async fn commit_notes(git: &Path, folder: &Path) -> Result<bool, String> {
+async fn commit_notes(git: &Git, folder: &Path) -> Result<bool, String> {
     run_git_retrying(git, folder, &["add", "--all", "--", "."], LOCAL_TIMEOUT).await?;
 
     let staged = git_output(
@@ -196,7 +199,7 @@ async fn commit_notes(git: &Path, folder: &Path) -> Result<bool, String> {
 
 /// Rebases onto the upstream. A conflict is aborted rather than left for the
 /// user to find half-done; the notes commit stays safe locally.
-async fn pull(git: &Path, folder: &Path, upstream: &str) -> Result<(), String> {
+async fn pull(git: &Git, folder: &Path, upstream: &str) -> Result<(), String> {
     let pulled = run_git_retrying(
         git,
         folder,
@@ -319,11 +322,11 @@ mod tests {
     }
 
     fn status(folder: &Path) -> NotesSyncStatus {
-        block_on(read_status(&git_path(), folder)).unwrap()
+        block_on(read_status(&Git::new(git_path()), folder)).unwrap()
     }
 
     fn sync_now(folder: &Path) -> Result<NotesSyncResult, String> {
-        block_on(sync(&git_path(), folder))
+        block_on(sync(&Git::new(git_path()), folder))
     }
 
     #[test]
@@ -533,9 +536,10 @@ mod tests {
 
         let sync = hold_repo_lock(&clone, held);
         let started = std::time::Instant::now();
-        let fetched = block_on(crate::ipc::git::fetch_repos(vec![clone
-            .to_string_lossy()
-            .into_owned()]))
+        let fetched = block_on(crate::ipc::git::fetch_repos(
+            vec![clone.to_string_lossy().into_owned()],
+            None,
+        ))
         .unwrap();
         let took = started.elapsed();
         sync.join().unwrap();

@@ -49,7 +49,8 @@ export function useSyncNotes(folderPath: string) {
 
   return useMutation<NotesSyncResult, string>({
     mutationKey: notesSyncKeys.sync(folderPath),
-    mutationFn: () => syncNotes(folderPath),
+    mutationFn: () =>
+      syncNotes(folderPath, useUserStore.getState().githubAccount),
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: notesSyncKeys.status(folderPath),

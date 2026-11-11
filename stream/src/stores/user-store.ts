@@ -18,6 +18,7 @@ interface UserState {
   autoSync: boolean; // Commit, pull and push the notes on their own
   skillAgent: AgentKind;
   skillModels: Record<AgentKind, string>; // Empty uses the agent's own default
+  githubAccount: string | null; // Null follows whichever account is active in gh
 
   // Actions
   setFolderPath: (path: string | null) => void;
@@ -27,6 +28,7 @@ interface UserState {
   setAutoSync: (enabled: boolean) => void;
   setSkillAgent: (agent: AgentKind) => void;
   setSkillModel: (agent: AgentKind, model: string) => void;
+  setGitHubAccount: (login: string | null) => void;
   reset: () => void;
 }
 
@@ -38,6 +40,7 @@ const initialState = {
   autoSync: true,
   skillAgent: "claude" as AgentKind,
   skillModels: { claude: "", codex: "" },
+  githubAccount: null as string | null,
 };
 
 export const useUserStore = create<UserState>()(
@@ -62,6 +65,8 @@ export const useUserStore = create<UserState>()(
           skillModels: { ...state.skillModels, [agent]: model },
         })),
 
+      setGitHubAccount: (login) => set({ githubAccount: login }),
+
       reset: () => set(initialState),
     }),
     {
@@ -72,6 +77,7 @@ export const useUserStore = create<UserState>()(
         autoSync: state.autoSync,
         skillAgent: state.skillAgent,
         skillModels: state.skillModels,
+        githubAccount: state.githubAccount,
       }),
     },
   ),

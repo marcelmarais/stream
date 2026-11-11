@@ -17,6 +17,7 @@ import {
   createDateRange,
   type DefaultBranch,
   discoverGitRepos,
+  type GitHubAccount,
   type GitHubStatus,
   getBranchTips,
   getGitCommitsForRepos,
@@ -24,6 +25,7 @@ import {
   getPullRequests,
   groupCommitsByDate,
   isMineOrRequested,
+  listGitHubAccounts,
   type PullRequest,
   type PullRequestSnapshot,
 } from "@/ipc/git-reader";
@@ -51,6 +53,7 @@ const FETCH_POLL_MS = 5 * 60 * 1000;
 const FETCH_STALE_MS = 2 * 60 * 1000;
 const BRANCH_TIP_POLL_MS = 10000;
 
+const NO_GITHUB_ACCOUNTS: GitHubAccount[] = [];
 const NO_PULL_REQUESTS: PullRequest[] = [];
 const NO_DEFAULT_BRANCHES: DefaultBranch[] = [];
 
@@ -73,16 +76,27 @@ export const gitKeys = {
     [...gitKeys.all, "pull-requests", folderPath] as const,
   githubStatus: (folderPath: string) =>
     [...gitKeys.all, "github-status", folderPath] as const,
+  githubAccounts: () => [...gitKeys.all, "github-accounts"] as const,
   agents: (repos: string[]) => [...gitKeys.all, "agents", repos] as const,
   fetch: (folderPath: string) => [...gitKeys.all, "fetch", folderPath] as const,
   branchTips: (repos: string[]) =>
     [...gitKeys.all, "branch-tips", repos] as const,
 };
 
-function pullRequestQuery(folderPath: string, repos: string[]) {
+// The account is in every key that reaches GitHub, so choosing another one
+// reads everything again as that account.
+function pullRequestQuery(
+  folderPath: string,
+  repos: string[],
+  githubAccount: string | null,
+) {
   return queryOptions({
-    queryKey: [...gitKeys.pullRequests(folderPath), repos] as const,
-    queryFn: () => getPullRequests(repos),
+    queryKey: [
+      ...gitKeys.pullRequests(folderPath),
+      repos,
+      githubAccount,
+    ] as const,
+    queryFn: () => getPullRequests(repos, githubAccount),
     staleTime: PULL_REQUEST_STALE_MS,
     retry: false,
   });
@@ -97,12 +111,17 @@ export function refreshGitData(queryClient: QueryClient, folderPath: string) {
 
 // A query rather than a mutation, so there's one run at a time however it was
 // started, and every panel can read how the latest one went.
-export function repoFetchQuery(folderPath: string, repos: string[]) {
+export function repoFetchQuery(
+  folderPath: string,
+  repos: string[],
+  githubAccount: string | null,
+) {
   return queryOptions({
-    queryKey: [...gitKeys.fetch(folderPath), repos] as const,
+    queryKey: [...gitKeys.fetch(folderPath), repos, githubAccount] as const,
     queryFn: async ({ client }) => {
       const results: FetchResult[] = await invoke("fetch_repos", {
         repoPaths: repos,
+        githubAccount,
       });
       refreshGitData(client, folderPath);
       return results;
@@ -288,6 +307,7 @@ export function useRemoveRepo(folderPath: string) {
 export function useFetchRepos(folderPath: string) {
   const queryClient = useQueryClient();
   const { data: repos = [] } = useConnectedRepos(folderPath);
+  const githubAccount = useGitHubAccount();
 
   return useMutation({
     mutationFn: async () => {
@@ -295,7 +315,7 @@ export function useFetchRepos(folderPath: string) {
         return [];
       }
       return queryClient.fetchQuery({
-        ...repoFetchQuery(folderPath, repos),
+        ...repoFetchQuery(folderPath, repos, githubAccount),
         staleTime: 0,
       });
     },
@@ -314,8 +334,10 @@ function useBackgroundFetch(
   repos: string[],
   isWindowFocused: boolean,
 ) {
+  const githubAccount = useGitHubAccount();
+
   useQuery({
-    ...repoFetchQuery(folderPath, repos),
+    ...repoFetchQuery(folderPath, repos, githubAccount),
     enabled: repos.length > 0,
     refetchInterval: isWindowFocused ? FETCH_POLL_MS : false,
   });
@@ -326,8 +348,9 @@ function useBackgroundFetch(
  */
 export function useFetchFailure(folderPath: string): string | null {
   const { data: repos = [] } = useConnectedRepos(folderPath);
+  const githubAccount = useGitHubAccount();
   const { data, error } = useQuery({
-    ...repoFetchQuery(folderPath, repos),
+    ...repoFetchQuery(folderPath, repos, githubAccount),
     enabled: false,
   });
 
@@ -370,6 +393,7 @@ function useBranchTipRefresh(
 export function usePullRequestPolling(folderPath: string) {
   const queryClient = useQueryClient();
   const { data: repos = [] } = useConnectedRepos(folderPath);
+  const githubAccount = useGitHubAccount();
   const isWindowFocused = useWindowFocus((isFocused) => {
     if (!isFocused) {
       return;
@@ -387,10 +411,14 @@ export function usePullRequestPolling(folderPath: string) {
       queryKey: gitKeys.githubStatus(folderPath),
       type: "active",
     });
+    queryClient.refetchQueries({
+      queryKey: gitKeys.githubAccounts(),
+      type: "active",
+    });
   });
 
   useQuery({
-    ...pullRequestQuery(folderPath, repos),
+    ...pullRequestQuery(folderPath, repos, githubAccount),
     enabled: repos.length > 0,
     refetchInterval: (query) =>
       getPullRequestPollInterval(
@@ -409,8 +437,9 @@ export function usePullRequestPolling(folderPath: string) {
  */
 export function usePullRequests(folderPath: string): PullRequest[] {
   const { data: repos = [] } = useConnectedRepos(folderPath);
+  const githubAccount = useGitHubAccount();
   const { data } = useQuery({
-    ...pullRequestQuery(folderPath, repos),
+    ...pullRequestQuery(folderPath, repos, githubAccount),
     enabled: false,
   });
 
@@ -422,12 +451,34 @@ export function usePullRequests(folderPath: string): PullRequest[] {
  */
 export function useDefaultBranches(folderPath: string): DefaultBranch[] {
   const { data: repos = [] } = useConnectedRepos(folderPath);
+  const githubAccount = useGitHubAccount();
   const { data } = useQuery({
-    ...pullRequestQuery(folderPath, repos),
+    ...pullRequestQuery(folderPath, repos, githubAccount),
     enabled: false,
   });
 
   return data?.default_branches ?? NO_DEFAULT_BRANCHES;
+}
+
+/**
+ * The GitHub account chosen in settings, or null to follow gh's active one
+ */
+function useGitHubAccount() {
+  return useUserStore((state) => state.githubAccount);
+}
+
+/**
+ * Hook to list the accounts gh is signed in to, for as long as it's mounted
+ */
+export function useGitHubAccounts(): GitHubAccount[] {
+  const { data } = useQuery({
+    queryKey: gitKeys.githubAccounts(),
+    queryFn: listGitHubAccounts,
+    staleTime: 0,
+    retry: false,
+  });
+
+  return data ?? NO_GITHUB_ACCOUNTS;
 }
 
 /**
@@ -437,10 +488,15 @@ export function useDefaultBranches(folderPath: string): DefaultBranch[] {
 export function useGitHubStatus(folderPath: string) {
   const queryClient = useQueryClient();
   const { data: repos } = useConnectedRepos(folderPath);
+  const githubAccount = useGitHubAccount();
 
   const { data, error, isFetching, refetch } = useQuery({
-    queryKey: [...gitKeys.githubStatus(folderPath), repos] as const,
-    queryFn: () => getGitHubStatus(repos ?? []),
+    queryKey: [
+      ...gitKeys.githubStatus(folderPath),
+      repos,
+      githubAccount,
+    ] as const,
+    queryFn: () => getGitHubStatus(repos ?? [], githubAccount),
     enabled: repos !== undefined,
     staleTime: 0,
     retry: false,
@@ -452,6 +508,7 @@ export function useGitHubStatus(folderPath: string) {
 
   const recheck = () => {
     refetch();
+    queryClient.invalidateQueries({ queryKey: gitKeys.githubAccounts() });
     queryClient.invalidateQueries({
       queryKey: gitKeys.pullRequests(folderPath),
     });

@@ -24,6 +24,9 @@ export function getNotesSyncStatus(
 }
 
 /** Commits the notes, pulls with rebase, then pushes. */
-export function syncNotes(folderPath: string): Promise<NotesSyncResult> {
-  return invoke("sync_notes", { folderPath });
+export function syncNotes(
+  folderPath: string,
+  githubAccount: string | null,
+): Promise<NotesSyncResult> {
+  return invoke("sync_notes", { folderPath, githubAccount });
 }

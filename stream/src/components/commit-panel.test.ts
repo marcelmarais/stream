@@ -470,7 +470,10 @@ describe("the fetch-failed note", () => {
   function renderPanel(results: unknown) {
     const client = new QueryClient();
     client.setQueryData(gitKeys.repos(FOLDER), REPOS);
-    client.setQueryData(repoFetchQuery(FOLDER, REPOS).queryKey, results as []);
+    client.setQueryData(
+      repoFetchQuery(FOLDER, REPOS, null).queryKey,
+      results as [],
+    );
 
     return renderToStaticMarkup(
       createElement(

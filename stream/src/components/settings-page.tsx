@@ -32,6 +32,7 @@ import { useCopied } from "@/hooks/use-copied";
 import {
   useConnectedRepos,
   useFetchRepos,
+  useGitHubAccounts,
   useGitHubStatus,
   useRunningAgents,
 } from "@/hooks/use-git-queries";
@@ -48,6 +49,9 @@ import { useUserStore } from "@/stores/user-store";
 const AGENT_KINDS: AgentKind[] = ["claude", "codex"];
 
 const GH_INSTALL_URL = "https://cli.github.com";
+
+// The select's value for following gh. A login can't contain a colon.
+const ACTIVE_ACCOUNT = ":active";
 
 interface GitHubProblem {
   title: string;
@@ -73,6 +77,14 @@ function getGitHubProblem(
         title: "Not signed in",
         hint: "gh has no GitHub account on this Mac. Sign in, then recheck.",
         command: "gh auth login",
+        needsYou: true,
+      };
+    case "account_missing":
+      return {
+        title: `${status.login} isn't signed in`,
+        hint: "gh no longer has this account on this Mac. Sign in again, or choose another account.",
+        command: "gh auth login",
+        detail: status.detail,
         needsYou: true,
       };
     case "token_rejected":
@@ -270,6 +282,57 @@ function GitHubProblemRow({
   );
 }
 
+function GitHubAccountRow() {
+  const githubAccount = useUserStore((state) => state.githubAccount);
+  const setGitHubAccount = useUserStore((state) => state.setGitHubAccount);
+  const accounts = useGitHubAccounts();
+
+  // With one account there's nothing to choose
+  if (accounts.length < 2 && githubAccount === null) {
+    return null;
+  }
+
+  const logins = accounts.map(({ login }) => login);
+  if (githubAccount !== null && !logins.includes(githubAccount)) {
+    logins.push(githubAccount);
+  }
+
+  return (
+    <div className={cn(ROW, "justify-between gap-6")}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className={LABEL}>Account</span>
+        <span className={HINT}>
+          {githubAccount === null
+            ? "Follows whichever account is active in gh."
+            : "Used for everything on GitHub, whichever account is active in gh."}
+        </span>
+      </div>
+      <Select
+        value={githubAccount ?? ACTIVE_ACCOUNT}
+        onValueChange={(login) =>
+          login && setGitHubAccount(login === ACTIVE_ACCOUNT ? null : login)
+        }
+      >
+        <SelectTrigger size="sm" aria-label="GitHub account">
+          <SelectValue>
+            {(login: string) =>
+              login === ACTIVE_ACCOUNT ? "Active in gh" : login
+            }
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false} align="end">
+          <SelectItem value={ACTIVE_ACCOUNT}>Active in gh</SelectItem>
+          {logins.map((login) => (
+            <SelectItem key={login} value={login}>
+              {login}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function GitHubSection({ folderPath }: { folderPath: string }) {
   const { status, isChecking, recheck } = useGitHubStatus(folderPath);
   const { data: connectedRepos = [] } = useConnectedRepos(folderPath);
@@ -282,8 +345,9 @@ function GitHubSection({ folderPath }: { folderPath: string }) {
           {isChecking ? "checking…" : "recheck"}
         </SectionAction>
       }
-      description="Pull requests and checks come through the GitHub CLI on this Mac, using whichever account gh is signed in to."
+      description="Pull requests and checks come through the GitHub CLI on this Mac, using an account gh is signed in to."
     >
+      <GitHubAccountRow />
       {!status && (
         <div className={cn(ROW, "text-muted-foreground")}>
           <CircleNotchIcon

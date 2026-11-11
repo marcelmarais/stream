@@ -5,7 +5,7 @@ pub use ipc::{FetchResult, GitCommit, MarkdownFileMetadata, RepoCommits};
 
 use crate::ipc::agents::{list_running_agents, open_agent_chat};
 use crate::ipc::git::{fetch_repos, get_branch_tips, get_git_commits_for_repos};
-use crate::ipc::github::{get_github_status, get_pull_requests};
+use crate::ipc::github::{get_github_status, get_pull_requests, list_github_accounts};
 use crate::ipc::location::detect_location;
 use crate::ipc::markdown::{
     read_markdown_files_content, read_markdown_files_metadata, set_file_location_metadata,
@@ -31,6 +31,7 @@ pub fn run() {
             get_branch_tips,
             get_pull_requests,
             get_github_status,
+            list_github_accounts,
             discover_git_repos,
             get_notes_sync_status,
             sync_notes,

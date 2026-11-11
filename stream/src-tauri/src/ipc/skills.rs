@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 use crate::ipc::agents::AgentKind;
+use crate::ipc::github::GitHubAuth;
 
 const SKILLS_DIR: &str = "Skills";
 const SKILL_FILE: &str = "SKILL.md";
@@ -50,6 +51,7 @@ pub struct SkillRun {
     line: usize,
     heading: Option<String>,
     text: Option<String>,
+    github_account: Option<String>,
 }
 
 /// List the skills in the notes folder, creating `Skills` if it isn't there yet
@@ -66,19 +68,25 @@ pub(crate) async fn list_skills(folder_path: String) -> Result<Vec<Skill>, Strin
 #[tauri::command]
 pub(crate) async fn start_skill_thread(app: tauri::AppHandle, run: SkillRun) -> Result<(), String> {
     let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    let github = GitHubAuth::find(run.github_account.as_deref()).await;
 
-    tauri::async_runtime::spawn_blocking(move || run_cli(&find_cli(run.agent, &home), &run))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let github_token = github.as_ref().map(GitHubAuth::token);
+        run_cli(&find_cli(run.agent, &home), &run, github_token)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Goes through the user's shell because an app launched from Finder has a bare
-/// PATH, and the agent's own commands need tools like gh
-fn run_cli(cli: &str, run: &SkillRun) -> Result<(), String> {
+/// PATH, and the agent's own commands need tools like gh. With a token, the
+/// agent's gh is signed in as the account Stream was told to use.
+fn run_cli(cli: &str, run: &SkillRun, github_token: Option<&str>) -> Result<(), String> {
     let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
     let status = Command::new(shell)
         .args(["-ilc", r#"exec "$0" "$@""#, cli])
         .args(cli_args(run))
+        .envs(github_token.map(|token| ("GH_TOKEN", token)))
         .current_dir(&run.folder_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -273,6 +281,7 @@ mod tests {
             line: 14,
             heading: heading.map(str::to_string),
             text: text.map(str::to_string),
+            github_account: None,
         }
     }
 
@@ -492,8 +501,24 @@ mod tests {
         let mut run = run(None, None);
         run.folder_path = folder.0.to_string_lossy().into_owned();
 
-        assert_eq!(run_cli(cli.to_str().unwrap(), &run), Ok(()));
+        assert_eq!(run_cli(cli.to_str().unwrap(), &run, None), Ok(()));
         assert!(folder.0.join("ran-here").is_file());
+    }
+
+    #[test]
+    fn hands_the_cli_the_chosen_github_account() {
+        let folder = TempFolder::new();
+        let cli = folder.0.join("record-token");
+        fs::write(&cli, "#!/bin/sh\nprintf %s \"$GH_TOKEN\" > token\n").unwrap();
+        fs::set_permissions(&cli, fs::Permissions::from_mode(0o700)).unwrap();
+        let mut run = run(None, None);
+        run.folder_path = folder.0.to_string_lossy().into_owned();
+
+        assert_eq!(run_cli(cli.to_str().unwrap(), &run, Some("secret")), Ok(()));
+        assert_eq!(
+            fs::read_to_string(folder.0.join("token")).unwrap(),
+            "secret"
+        );
     }
 
     #[test]
@@ -501,7 +526,7 @@ mod tests {
         let mut run = run(None, None);
         run.folder_path = "/".to_string();
 
-        assert!(run_cli("/usr/bin/false", &run).is_err());
+        assert!(run_cli("/usr/bin/false", &run, None).is_err());
     }
 
     #[test]
@@ -509,7 +534,7 @@ mod tests {
         let mut run = run(None, None);
         run.folder_path = "/".to_string();
 
-        assert!(run_cli("/no/such/cli", &run).is_err());
+        assert!(run_cli("/no/such/cli", &run, None).is_err());
     }
 
     /// Starts a real background thread. Run with
@@ -535,8 +560,9 @@ mod tests {
             line: 3,
             heading: Some("Don't lose \"this\"".to_string()),
             text: Some("Spaces, & symbols + 100% of a $line".to_string()),
+            github_account: None,
         };
 
-        run_cli(&find_cli(agent, &home), &run).unwrap();
+        run_cli(&find_cli(agent, &home), &run, None).unwrap();
     }
 }

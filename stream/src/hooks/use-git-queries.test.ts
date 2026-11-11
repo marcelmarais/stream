@@ -44,7 +44,7 @@ describe("repoFetchQuery", () => {
     const running = deferred<FetchResult[]>();
     vi.mocked(invoke).mockReturnValue(running.promise);
     const client = new QueryClient();
-    const query = { ...repoFetchQuery(FOLDER, REPOS), staleTime: 0 };
+    const query = { ...repoFetchQuery(FOLDER, REPOS, null), staleTime: 0 };
 
     const first = client.fetchQuery(query);
     const second = client.fetchQuery(query);
@@ -58,12 +58,26 @@ describe("repoFetchQuery", () => {
   it("fetches again once the last one has finished", async () => {
     vi.mocked(invoke).mockResolvedValue(FETCHED);
     const client = new QueryClient();
-    const query = { ...repoFetchQuery(FOLDER, REPOS), staleTime: 0 };
+    const query = { ...repoFetchQuery(FOLDER, REPOS, null), staleTime: 0 };
 
     await client.fetchQuery(query);
     await client.fetchQuery(query);
 
     expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("fetches as the chosen GitHub account, and again after choosing another", async () => {
+    vi.mocked(invoke).mockResolvedValue(FETCHED);
+    const client = new QueryClient();
+
+    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, null));
+    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, "marcel-work"));
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke).toHaveBeenLastCalledWith("fetch_repos", {
+      repoPaths: REPOS,
+      githubAccount: "marcel-work",
+    });
   });
 
   it("refreshes commits and pull requests afterwards", async () => {
@@ -76,7 +90,7 @@ describe("repoFetchQuery", () => {
     client.setQueryData(pullRequests, {});
     client.setQueryData(otherFolder, {});
 
-    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS));
+    await client.fetchQuery(repoFetchQuery(FOLDER, REPOS, null));
 
     const isInvalidated = (queryKey: readonly unknown[]) =>
       client.getQueryState(queryKey)?.isInvalidated;
@@ -101,7 +115,7 @@ describe("fetching when the window regains focus", () => {
 
   it("waits until the last fetch is over two minutes old", async () => {
     const client = new QueryClient();
-    const query = repoFetchQuery(FOLDER, REPOS);
+    const query = repoFetchQuery(FOLDER, REPOS, null);
     const background = new QueryObserver(client, query);
     // Every panel reads the same query, and mustn't change when it goes stale
     const panel = new QueryObserver(client, { ...query, enabled: false });

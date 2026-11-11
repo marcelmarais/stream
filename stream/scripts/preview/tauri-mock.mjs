@@ -19,6 +19,7 @@ export const DEFAULT_FOLDER = "/Users/demo/notes";
  * @property {string | null} [folder] The saved notes folder. Null shows the welcome screen.
  * @property {boolean} [notes] False starts with an empty folder.
  * @property {string} [github] A GitHubStatus state, e.g. "connected" or "gh_missing".
+ * @property {string[]} [githubAccounts] The accounts gh is signed in to, the active one first.
  * @property {boolean} [agents] False hides the running agents.
  * @property {string | null} [update] A version to offer as an update.
  */
@@ -29,6 +30,7 @@ export function installTauriMock(options = {}) {
     folder = "/Users/demo/notes",
     notes = true,
     github = "connected",
+    githubAccounts = ["demo"],
     agents: showAgents = true,
     update = null,
   } = options;
@@ -391,6 +393,23 @@ export function installTauriMock(options = {}) {
     failed: { state: "failed", detail: "gh: unknown error" },
   };
 
+  // A chosen account is who gh answers as, unless gh no longer has it
+  const getGitHubStatus = (githubAccount) => {
+    const status = GITHUB_STATES[github] ?? GITHUB_STATES.connected;
+
+    if (!githubAccount || status.state !== "connected") {
+      return status;
+    }
+
+    return githubAccounts.includes(githubAccount)
+      ? { ...status, login: githubAccount }
+      : {
+          state: "account_missing",
+          login: githubAccount,
+          detail: `no oauth token found for github.com account ${githubAccount}`,
+        };
+  };
+
   // ---- Stores (tauri-plugin-store) ------------------------------------------
 
   const stores = {
@@ -437,7 +456,14 @@ export function installTauriMock(options = {}) {
       repoPaths.map((repo_path) => ({ repo_path, success: true, message: "" })),
     get_branch_tips: () => commits.map((c) => c.id),
     get_pull_requests: () => snapshot,
-    get_github_status: () => GITHUB_STATES[github] ?? GITHUB_STATES.connected,
+    get_github_status: ({ githubAccount }) => getGitHubStatus(githubAccount),
+    list_github_accounts: () =>
+      ["gh_missing", "logged_out"].includes(github)
+        ? []
+        : githubAccounts.map((login, index) => ({
+            login,
+            active: index === 0,
+          })),
     discover_git_repos: () => [
       {
         path: repos.stream,

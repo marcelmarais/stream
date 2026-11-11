@@ -31,7 +31,8 @@ const SANDBOX_CHROMIUM = "/opt/pw-browsers/chromium";
 
 /**
  * Each scene opens `url` (the timeline by default) with the given mock options,
- * waits for `ready`, then runs `run` before the screenshot is taken.
+ * waits for `ready`, then runs `run` before the screenshot is taken. `saved`
+ * holds preferences from the user store, as if set on an earlier launch.
  */
 const SCENES = {
   timeline: {
@@ -120,14 +121,40 @@ const SCENES = {
     mock: { github: "gh_missing" },
     run: async (page) => {
       await openSettings(page);
-      await page
-        .getByRole("heading", { name: "GitHub" })
-        .evaluate((heading) => {
-          // Clear of the titlebar's fade
-          const main = heading.closest("main");
-          main.scrollTop = heading.offsetTop - main.offsetTop - 32;
-        });
+      await scrollToGitHub(page);
+    },
+  },
+  "github-accounts": {
+    about: "Settings with two GitHub accounts, choosing which one to use",
+    viewport: { width: 600, height: 1000 },
+    mock: { githubAccounts: ["demo", "demo-work"] },
+    run: async (page) => {
+      await openSettings(page);
+      await scrollToGitHub(page);
+      await page.getByRole("combobox", { name: "GitHub account" }).click();
       await page.waitForTimeout(300);
+    },
+  },
+  "github-account-chosen": {
+    about: "Settings with the second GitHub account chosen",
+    viewport: { width: 600, height: 1000 },
+    mock: { githubAccounts: ["demo", "demo-work"] },
+    run: async (page) => {
+      await openSettings(page);
+      await scrollToGitHub(page);
+      await page.getByRole("combobox", { name: "GitHub account" }).click();
+      await page.getByRole("option", { name: "demo-work" }).click();
+      await page.waitForTimeout(300);
+    },
+  },
+  "github-account-missing": {
+    about: "Settings when the chosen GitHub account has been signed out of gh",
+    viewport: { width: 600, height: 1000 },
+    mock: { githubAccounts: ["demo", "demo-work"] },
+    saved: { githubAccount: "demo-old" },
+    run: async (page) => {
+      await openSettings(page);
+      await scrollToGitHub(page);
     },
   },
   calendar: {
@@ -230,6 +257,15 @@ async function openSettings(page) {
   await page.getByRole("button", { name: "settings" }).click();
   await page.getByRole("heading", { name: "Settings" }).waitFor();
   await page.waitForTimeout(600);
+}
+
+async function scrollToGitHub(page) {
+  await page.getByRole("heading", { name: "GitHub" }).evaluate((heading) => {
+    // Clear of the titlebar's fade
+    const main = heading.closest("main");
+    main.scrollTop = heading.offsetTop - main.offsetTop - 32;
+  });
+  await page.waitForTimeout(300);
 }
 
 function parseOptions() {
@@ -344,6 +380,11 @@ async function openPage(browser, scene, scale, problems) {
     reducedMotion: "reduce",
   });
   await context.addInitScript(installTauriMock, scene.mock ?? {});
+  if (scene.saved) {
+    await context.addInitScript((state) => {
+      localStorage.setItem("user-state", JSON.stringify({ state, version: 0 }));
+    }, scene.saved);
+  }
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
 

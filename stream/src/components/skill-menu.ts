@@ -85,7 +85,7 @@ async function runSkill(
   const { state } = view;
   const doc = state.doc.toString();
   const line = state.doc.lineAt(position);
-  const { skillAgent, skillModels } = useUserStore.getState();
+  const { skillAgent, skillModels, githubAccount } = useUserStore.getState();
   const agentName = AGENT_NAMES[skillAgent];
   const { startSkill, finishSkill, failSkill } = useStatusStore.getState();
   const runId = startSkill(`Running /${skill.name} in ${agentName}`);
@@ -102,6 +102,7 @@ async function runSkill(
       line: line.number,
       heading: headingAbove(state, position),
       text: line.text.trim() || null,
+      githubAccount,
     });
 
     finishSkill(runId, `Finished /${skill.name}`);
